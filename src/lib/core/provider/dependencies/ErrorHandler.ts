@@ -1,7 +1,7 @@
 import { BaseRequest, type RequestErrors } from '$lib/core/request/index.js';
 import { HttpServiceError } from '$lib/core/httpService/index.js';
 
-export type AppErrorType = 'http' | 'request' | 'app';
+export type AppErrorType = 'http' | 'request' | 'app' | 'abort';
 
 export interface AppError<T = unknown, D = never> {
 	type: AppErrorType;
@@ -42,7 +42,7 @@ export const parseBaseError = <D = never>(error: Error): AppError<never, D> => {
 };
 
 export const createErrorParser = <Custom = unknown>(
-	custom?: <T = unknown>(
+	customHandler?: <T = unknown>(
 		error: ErrorType<T>,
 		utils: {
 			parseBaseError: typeof parseBaseError;
@@ -50,10 +50,10 @@ export const createErrorParser = <Custom = unknown>(
 			parseHttpError: typeof parseHttpError;
 		}
 	) => AppError<T, Custom>
-): ((error: ErrorType) => AppError<unknown, Custom>) => {
+): (<T>(error: ErrorType<T>) => AppError<T, Custom>) => {
 	return <T = unknown>(error: ErrorType<T>) => {
-		if (custom) {
-			return custom(error, {
+		if (customHandler) {
+			return customHandler<T>(error, {
 				parseBaseError,
 				parseRequestError,
 				parseHttpError

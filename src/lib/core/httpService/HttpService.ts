@@ -51,12 +51,6 @@ export interface IHttpServiceOptions extends Options {
 	responseFormat?: 'json' | 'blob' | 'text';
 }
 
-export interface HttpServiceAuthSettings {
-	type: 'Bearer' | 'OAuth';
-	token?: string;
-	cookie?: string;
-}
-
 export const httpServiceEventBus = new EventBus<'HttpServiceError'>({
 	HttpServiceError: []
 });

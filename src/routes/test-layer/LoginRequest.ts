@@ -2,7 +2,7 @@ import { BaseRequest } from '$lib/core/request/index.js';
 import { Rules } from '$lib/core/request/rules/index.js';
 import { validationMessagesRu } from '$lib/core/request/rules/messages/index.js';
 
-const rules = new Rules(validationMessagesRu);
+const rules = new Rules({ ...validationMessagesRu });
 
 export interface ILoginRequest {
 	email: string;

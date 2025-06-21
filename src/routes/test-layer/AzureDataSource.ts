@@ -18,7 +18,7 @@ export class AzureNetRestDatasource extends BaseDatasource implements IDatasourc
 				requestHandler: (options) => {
 					const token = !browser ? RequestContext.current()?.event?.cookies?.get('token') : Cookies.get('token');
 					if (token) {
-						options.headers = { ...options.headers, Authorization: `Bearer ` };
+						options.headers = { ...options.headers, Authorization: `Bearer ${token}` };
 					}
 				}
 			})

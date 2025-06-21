@@ -4,6 +4,7 @@
 	import { Rules } from '$lib/core/request/rules/index.js';
 	import { validationMessagesI18n } from '$lib/core/request/rules/messages/index.js';
 	import { TranslationProvider } from '../../translation/index.js';
+	import { compose, preventDefault, stopPropagation } from '$lib/core/eventModifiers/index.js';
 
 	type ITestRequest = {
 		name: string;
@@ -47,9 +48,7 @@
 
 	let errors = $state<RequestErrors<ITestRequest>>({});
 
-	const onSubmit = (e: Event) => {
-		e.preventDefault();
-		e.stopPropagation();
+	const onSubmit = () => {
 		const req = new TestRequest(form);
 		try {
 			console.log(req.json());
@@ -66,7 +65,7 @@
 
 {$locale}
 {@html ObjectUtil.renderAsString(errors)}
-<form onsubmit={(e) => onSubmit(e)}>
+<form onsubmit={compose(preventDefault, stopPropagation)(onSubmit)}>
 	<input type="text" bind:value={form.name} placeholder="name" />
 	{$t(errors?.name)}
 	<input type="text" placeholder="id" bind:value={form.user.id} />
