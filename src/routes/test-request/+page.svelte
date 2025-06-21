@@ -4,7 +4,7 @@
 	import { Rules } from '$lib/core/request/rules/index.js';
 	import { validationMessagesI18n } from '$lib/core/request/rules/messages/index.js';
 	import { TranslationProvider } from '../../translation/index.js';
-	import { compose, preventDefault, stopPropagation } from '$lib/core/eventModifiers/index.js';
+	import { compose, preventDefault, stopPropagation } from '$lib/lib/index.js';
 
 	type ITestRequest = {
 		name: string;
