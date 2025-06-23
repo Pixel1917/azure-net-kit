@@ -1,9 +1,19 @@
 import { RequestContext } from '../../edges/context/index.js';
 import { browser } from '$app/environment';
+import { error, fail, redirect } from '@sveltejs/kit';
+
+type Deps = {
+	context: Required<ReturnType<typeof RequestContext.current>>;
+	utils: {
+		fail: typeof fail;
+		redirect: typeof redirect;
+		error: typeof error;
+	};
+};
 
 export const createActionsProvider = <T, I extends Record<string, unknown> = Record<string, unknown>>(
 	name: string,
-	factory: (args: I & { context: Required<typeof RequestContext> }) => T,
+	factory: (args: I & Deps) => T,
 	inject?: I
 ): (() => T) => {
 	const cacheKey = name;
@@ -21,7 +31,7 @@ export const createActionsProvider = <T, I extends Record<string, unknown> = Rec
 			return contextMap.get(cacheKey) as T;
 		}
 
-		const instance = factory({ ...inject, context: RequestContext } as I & { context: Required<typeof RequestContext> });
+		const instance = factory({ ...inject, context, utils: { fail, redirect, error } } as I & Deps);
 		if (cacheKey) {
 			contextMap.set(cacheKey, instance);
 		}
@@ -30,7 +40,7 @@ export const createActionsProvider = <T, I extends Record<string, unknown> = Rec
 };
 
 export const createActionsProviderFactory = <I extends Record<string, unknown>>(inject: I) => {
-	return function createInjectedProvider<T>(name: string, factory: (args: I & { context: Required<typeof RequestContext> }) => T): () => T {
+	return function createInjectedProvider<T>(name: string, factory: (args: I & Deps) => T): () => T {
 		return createActionsProvider(name, factory, inject);
 	};
 };
