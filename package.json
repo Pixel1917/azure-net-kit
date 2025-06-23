@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "0.1.4",
+	"version": "0.2.4",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
@@ -46,6 +46,10 @@
 		"./request/messages": {
 			"types": "./dist/core/request/rules/messages/index.d.ts",
 			"svelte": "./dist/core/request/rules/messages/index.js"
+		},
+		"./provider": {
+			"types": "./dist/core/provider/index.d.ts",
+			"svelte": "./dist/core/provider/index.js"
 		},
 		"./provider/deps": {
 			"types": "./dist/core/provider/dependencies/index.d.ts",
