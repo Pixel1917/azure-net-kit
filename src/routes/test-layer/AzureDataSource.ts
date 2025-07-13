@@ -1,8 +1,9 @@
-import { BaseDatasource, type IDatasource } from '$lib/core/datasource/index.js';
+import { BaseHttpDatasource, type IHttpDatasource } from '$lib/core/datasource/index.js';
 import { HttpService, HttpServiceError, HttpServiceResponse } from '$lib/core/httpService/index.js';
 import { browser } from '$app/environment';
 import { RequestContext } from 'edges-svelte/context';
 import { Cookies } from 'azure-net-tools';
+import { QueryBuilder } from '$lib/index.js';
 
 export interface IBackendApiDataSourceResponse<T = unknown> {
 	data: T;
@@ -10,10 +11,10 @@ export interface IBackendApiDataSourceResponse<T = unknown> {
 	message: string;
 }
 
-export class AzureNetRestDatasource extends BaseDatasource implements IDatasource {
+export class AzureNetRestDatasource extends BaseHttpDatasource implements IHttpDatasource {
 	constructor() {
-		super(
-			new HttpService({
+		super({
+			http: new HttpService({
 				baseUrl: `https://api-laravel.azure-net.ru/back`,
 				requestHandler: (options) => {
 					const token = !browser ? RequestContext.current()?.event?.cookies?.get('token') : Cookies.get('token');
@@ -22,13 +23,13 @@ export class AzureNetRestDatasource extends BaseDatasource implements IDatasourc
 					}
 				}
 			})
-		);
+		});
 	}
 
 	override async createRequest<T, D = Record<keyof T, string>>(
-		callback: (params: { http: HttpService }) => Promise<HttpServiceResponse<IBackendApiDataSourceResponse<T>>>
+		callback: (params: { http: HttpService; query: QueryBuilder }) => Promise<HttpServiceResponse<IBackendApiDataSourceResponse<T>>>
 	) {
-		return await callback({ http: this.httpClient })
+		return await callback({ http: this.httpClient, query: this.query })
 			.then((response) => {
 				return new HttpServiceResponse<T>({
 					...response,

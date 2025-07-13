@@ -6,7 +6,7 @@ export interface IHttpServiceResponse<T = unknown> {
 	status: number;
 	success: boolean;
 	data: T;
-	message?: string;
+	message: string;
 }
 
 export interface IHttpServiceError<T = unknown> extends IHttpServiceResponse<T> {
@@ -18,7 +18,7 @@ export class HttpServiceResponse<T> implements IHttpServiceResponse<T> {
 	status: number;
 	success: boolean;
 	data: T;
-	message?: string;
+	message: string;
 
 	constructor({ headers, status, success, data, message }: IHttpServiceResponse<T>) {
 		this.headers = headers;
@@ -34,7 +34,7 @@ export class HttpServiceError<T> implements IHttpServiceError<T> {
 	status: number;
 	success: boolean;
 	data: T;
-	message?: string;
+	message: string;
 	original?: Error;
 
 	constructor({ headers, status, success, data, message, original }: IHttpServiceError<T>) {
@@ -161,7 +161,8 @@ export class HttpService {
 			status: err?.response?.status ?? 500,
 			headers,
 			success: false,
-			original: err
+			original: err,
+			message: 'Request failed'
 		});
 		httpServiceEventBus.publish('HttpServiceError', error);
 		return this.errorHandler ? this.errorHandler(error) : error;
