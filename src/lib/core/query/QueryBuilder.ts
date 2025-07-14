@@ -21,7 +21,7 @@ export class QueryBuilder implements IQueryBuilder {
 	}
 
 	build(
-		params: Record<string, unknown>,
+		params: Record<string, unknown> = {},
 		opts?: {
 			delimiter?: boolean;
 			arrayFormat?: ArrayFormat;
