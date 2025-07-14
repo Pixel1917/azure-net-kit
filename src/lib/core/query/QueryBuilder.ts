@@ -33,7 +33,7 @@ export class QueryBuilder implements IQueryBuilder {
 
 		const parts = this.serialize(params, arrayFormat, objectFormat);
 		const delimiter = opts?.delimiter ?? true;
-		return delimiter ? `?${parts.join('&')}` : parts.join('&');
+		return delimiter && parts.length ? `?${parts.join('&')}` : parts.join('&');
 	}
 
 	private serialize(obj: Record<string, unknown>, arrayFormat: ArrayFormat, objectFormat: ObjectFormat, prefix = ''): string[] {
