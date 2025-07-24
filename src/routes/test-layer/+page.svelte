@@ -9,9 +9,7 @@
 	const onsubmit = (e: Event) => {
 		e.preventDefault();
 		e.stopPropagation();
-		authService.login(form).then((res) => {
-			console.log(res);
-		});
+		authService.login(form);
 	};
 </script>
 

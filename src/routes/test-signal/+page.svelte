@@ -1,33 +1,46 @@
 <script lang="ts">
-	import { createAsyncSignal } from '$lib/svelte/index.js';
+	import { createActiveForm, createAsyncSignal } from '$lib/svelte/index.js';
 	import { HttpService, HttpServiceResponse } from '$lib/index.js';
 	import { ObjectUtil } from 'azure-net-tools';
+	import { createProvider } from 'edges-svelte';
 
 	const httpService = new HttpService({ baseUrl: 'https://admin.drevproektstroi.ru' });
 
-	let url = $state('/api/pages/home');
-	const signal = createAsyncSignal(() => httpService.get<{ id: number; name: string }>(url), {
-		watch: [() => url],
-		immediate: false,
-		initialData: new HttpServiceResponse<{ id: number; name: string }>({
-			success: true,
-			status: 200,
-			headers: {},
-			message: 'done',
-			data: { id: 1, name: 'Главная' }
-		})
-	});
-	const signal2 = createAsyncSignal(() => httpService.get<{ id: number; name: string }>('/api/pages/materialy'));
+	// let url = $state('/api/pages/home');
+	// const signal = createAsyncSignal(() => httpService.get<{ id: number; name: string }>(url), {
+	// 	watch: [() => url],
+	// 	immediate: false,
+	// 	initialData: new HttpServiceResponse<{ id: number; name: string }>({
+	// 		success: true,
+	// 		status: 200,
+	// 		headers: {},
+	// 		message: 'done',
+	// 		data: { id: 1, name: 'Главная' }
+	// 	})
+	// });
+	const { data, status, pending, refresh } = createAsyncSignal(() => httpService.get<{ id: number; name: string }>('/api/pages/materialy'));
+
+	// const SomeProvider = createProvider('SomeProvider', () => {
+	// 	const someAction = async (id: number, data: {id: number}) => await httpService.post(`some-url/${id}`, {json: data});
+	// 	return {someAction};
+	// });
+	//
+	// const {someAction} = SomeProvider();
+	// const id = 15;
+	// const initial = {id: 22};
+	//
+	// const form = createActiveForm({onSubmit: (data) => {someAction(id, data).then(() => signal.refresh())}, initialData: initial})
 </script>
 
 <p>
-	{signal2.pending}
-	{@html ObjectUtil.renderAsString(signal2.data)}
+	{pending.value}
+	<button onclick={() => refresh()}>change</button>
+	{status.value}
+	{@html ObjectUtil.renderAsString(data.value)}
 </p>
 <hr />
-{signal.pending}
-{@html ObjectUtil.renderAsString(signal.data?.data?.name)}
-
-<button onclick={() => signal.execute()}>execute</button>
-<button onclick={() => signal.refresh()}>refresh</button>
-<button onclick={() => (url = '/api/pages/catalog')}>changeUrl</button>
+<!--{signal.pending}-->
+<!--{@html ObjectUtil.renderAsString(signal.data?.data?.name)}-->
+<!--<button onclick={() => signal.execute()}>execute</button>-->
+<!--<button onclick={() => signal.refresh()}>refresh</button>-->
+<!--<button onclick={() => (url = '/api/pages/catalog')}>changeUrl</button>-->
