@@ -4,7 +4,6 @@ import { LoginRequest } from './LoginRequest.js';
 import { BaseResponse } from '$lib/core/response/index.js';
 import { HttpServiceResponse } from '$lib/core/httpService/index.js';
 import type { ILoginRequest, ILoginResponse } from './Abstracts.js';
-import { CreateEvent } from '$lib/core/eventBus/EventBus.js';
 import { applicationEventBus } from './EventBus.js';
 
 class LoginResponse extends BaseResponse<ILoginResponse, string> {
@@ -20,7 +19,13 @@ export class AuthService extends BaseService {
 
 	async login(data: Partial<ILoginRequest> | FormData) {
 		const request = new LoginRequest(data);
-		return await this.transformResponse(this.authRepository.login(request.json()), { responseModel: LoginResponse });
+		return await this.transformResponse(
+			this.authRepository.login(request.json()).then((res) => {
+				applicationEventBus.CreateEvent('LoggedIn', res.data.token);
+				return res;
+			}),
+			{ responseModel: LoginResponse }
+		);
 	}
 
 	async current() {

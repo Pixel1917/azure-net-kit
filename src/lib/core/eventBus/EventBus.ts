@@ -36,18 +36,21 @@ export class EventBus<TEventMap extends object> {
 	private isProcessing = false;
 	private eventHistory: IEvent[] = [];
 	private priorities = new Map<keyof TEventMap, number>();
+	private readonly debug: boolean = false;
 	private readonly maxHistorySize: number = 1000;
 	private readonly layer: EventBusLayers;
 
 	constructor(
 		private options: {
-			layer: EventBusLayers;
+			layer?: EventBusLayers;
 			enableHistory?: boolean;
 			maxHistorySize?: number;
 			enableAsyncProcessing?: boolean;
-		} = { layer: EventBusLayers.PRESENTATION }
+			debug?: boolean;
+		} = { layer: EventBusLayers.PRESENTATION, debug: false }
 	) {
-		this.layer = options.layer;
+		this.layer = options.layer ?? EventBusLayers.PRESENTATION;
+		this.debug = options.debug ?? false;
 		if (options.maxHistorySize) {
 			this.maxHistorySize = options.maxHistorySize;
 		}
@@ -141,7 +144,7 @@ export class EventBus<TEventMap extends object> {
 
 		const handlers = this.getHandlersForEvent(event);
 
-		if (handlers.size === 0 && this.wildcardHandlers.size === 0) {
+		if (!this.debug && handlers.size === 0 && this.wildcardHandlers.size === 0) {
 			return;
 		}
 
@@ -261,23 +264,9 @@ export class EventBus<TEventMap extends object> {
 	}
 }
 
-export function CreateEvent<T extends object>(eventBus: EventBus<T>, eventType: keyof T) {
-	return function (target: unknown, propertyKey: string, descriptor: PropertyDescriptor) {
-		const originalMethod = descriptor.value;
-
-		descriptor.value = async function (...args: unknown[]) {
-			const result = await originalMethod.apply(this, args);
-			eventBus.publish(eventType, result);
-
-			return result;
-		};
-
-		return descriptor;
-	};
-}
-
 export const loggingMiddleware = async (event: IEvent, next: () => Promise<void>) => {
 	console.log(`[${event.eventLayer.toUpperCase()}Event] ${event.eventType} at ${event.occurredAt.toISOString()}`);
+	console.log(`[${event.eventLayer.toUpperCase()}Event] data:`, event);
 	const start = performance.now();
 	await next();
 	const duration = performance.now() - start;
@@ -291,17 +280,36 @@ export const createEventBus = <TEventMap extends object>(
 		asyncProcessing?: boolean;
 		historySize?: number;
 		middlewares?: (<T = unknown>(event: IEvent<T>, next: () => Promise<void>) => Promise<void>)[];
+		debug?: boolean;
 	}
 ) => {
-	const { history = true, asyncProcessing = true, historySize = 1000, middlewares = [] } = opts;
+	const { history = true, asyncProcessing = true, historySize = 1000, middlewares = [], debug = false } = opts;
 	const eventBus = new EventBus<TEventMap>({
 		layer,
 		enableHistory: history,
 		enableAsyncProcessing: asyncProcessing,
-		maxHistorySize: historySize
+		maxHistorySize: historySize,
+		debug
 	});
 	middlewares.forEach((value) => {
 		eventBus.use(value);
 	});
-	return eventBus;
+
+	const CreateEvent = <K extends keyof TEventMap>(eventName: K, data: TEventMap[K]) => {
+		eventBus.publish(eventName, data);
+	};
+
+	const CreateBatch = <K extends keyof TEventMap>(events: Array<{ type: K; payload: TEventMap[K]; metadata?: Partial<IEventMetadata> }>) => {
+		eventBus.publishBatch(events);
+	};
+
+	const CreateSubscriber = <K extends keyof TEventMap>(eventType: K, handler: DomainEventHandler<TEventMap[K]>, options?: { priority?: number }) => {
+		return eventBus.subscribe(eventType, handler, options);
+	};
+
+	const createSubscribers = <K extends keyof TEventMap>(eventTypes: K[], handler: DomainEventHandler<TEventMap[K]>) => {
+		return eventBus.subscribeMany(eventTypes, handler);
+	};
+
+	return { eventBus, CreateEvent, CreateBatch, CreateSubscriber, createSubscribers };
 };

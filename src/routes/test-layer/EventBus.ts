@@ -8,5 +8,6 @@ export const applicationEventBus = createEventBus<IApplicationEvents>(EventBusLa
 	history: true,
 	asyncProcessing: true,
 	historySize: 100,
-	middlewares: [loggingMiddleware]
+	middlewares: [loggingMiddleware],
+	debug: true
 });
