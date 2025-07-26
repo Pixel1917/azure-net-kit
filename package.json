@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "0.5.1",
+	"version": "0.5.2",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
@@ -15,6 +15,7 @@
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright test",
 		"semantic-release": "env-cmd semantic-release",
+		"precommit": "pnpm lint && pnpm check",
 		"commit": "pnpm format && git add . && git-cz && git push",
 		"release": "pnpm commit && pnpm semantic-release"
 	},

@@ -1,6 +1,6 @@
 import { HttpServiceResponse } from '$lib/core/httpService/index.js';
 
-export class BaseService {
+export class UseCasesHandler {
 	protected async transformResponse<TData extends object, TResult = TData, TKey extends keyof TData | undefined = undefined>(
 		requestPromise: Promise<HttpServiceResponse<TData>>,
 		options?: {
