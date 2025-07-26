@@ -10,39 +10,16 @@ export interface AsyncSignalOptions<TData> {
 	initialData?: TData | null;
 }
 
-export type Ref<T> = { value: T };
-
 export interface AsyncSignalSvelte<TData, TError = Error> {
-	data: Ref<TData | null>;
-	error: Ref<TError | null>;
-	status: Ref<AsyncStatus>;
-	pending: Ref<boolean>;
+	data: TData | null;
+	error: TError | null;
+	status: AsyncStatus;
+	pending: boolean;
 	execute: () => Promise<void>;
 	refresh: () => Promise<void>;
 	reset: () => void;
 	abort: () => void;
 }
-
-const createState = <T>(val: T) => {
-	let state = $state<T>(val);
-	return {
-		get value() {
-			return state;
-		},
-		set value(val: T) {
-			state = val;
-		}
-	};
-};
-
-const createDerived = <T>(val: T) => {
-	const state = $derived.by<T>(() => val);
-	return {
-		get value() {
-			return state;
-		}
-	};
-};
 
 export const createAsyncSignal = <TData, TError = Error>(
 	handler: (signal?: AbortSignal) => Promise<TData>,
@@ -50,11 +27,11 @@ export const createAsyncSignal = <TData, TError = Error>(
 ): AsyncSignalSvelte<TData, TError> => {
 	const { server = false, immediate = true, watch = [], initialData = null } = options;
 
-	const data = createState<TData | null>(initialData);
-	const error = createState<TError | null>(null);
-	const status = createState<AsyncStatus>('idle');
+	let data = $state<TData | null>(initialData);
+	let error = $state<TError | null>(null);
+	let status = $state<AsyncStatus>('idle');
 
-	const pending = createDerived(status.value === 'pending');
+	const pending = $derived(status === 'pending');
 
 	let abortController: AbortController | null = null;
 
@@ -65,8 +42,8 @@ export const createAsyncSignal = <TData, TError = Error>(
 
 		abortController = new AbortController();
 
-		status.value = 'pending';
-		error.value = null;
+		status = 'pending';
+		error = null;
 
 		try {
 			const result = await handler(abortController.signal);
@@ -75,15 +52,15 @@ export const createAsyncSignal = <TData, TError = Error>(
 				return;
 			}
 
-			data.value = result;
-			status.value = 'success';
+			data = result;
+			status = 'success';
 		} catch (err) {
 			if (err instanceof Error && err.name === 'AbortError') {
 				return;
 			}
 
-			error.value = err as TError;
-			status.value = 'error';
+			error = err as TError;
+			status = 'error';
 		}
 	}
 
@@ -117,16 +94,24 @@ export const createAsyncSignal = <TData, TError = Error>(
 	}
 
 	return {
-		data,
-		error,
-		status,
-		pending,
+		get data() {
+			return data;
+		},
+		get error() {
+			return error;
+		},
+		get status() {
+			return status;
+		},
+		get pending() {
+			return pending;
+		},
 		execute,
 		refresh: execute,
 		reset: () => {
-			data.value = null;
-			error.value = null;
-			status.value = 'idle';
+			data = null;
+			error = null;
+			status = 'idle';
 			if (abortController) {
 				abortController.abort();
 				abortController = null;
