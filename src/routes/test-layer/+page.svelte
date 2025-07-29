@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { AuthService } from './AuthService.js';
 	import type { ILoginRequest } from './Abstracts.js';
+	import { ApplicationProvider } from './InfraProvider.js';
 
-	const authService = new AuthService();
+	const { authService } = ApplicationProvider();
 
 	const form = $state<Partial<ILoginRequest>>({});
 

@@ -13,7 +13,7 @@ class LoginResponse extends BaseResponse<ILoginResponse, string> {
 }
 
 export class AuthService extends UseCasesHandler {
-	constructor(private authRepository = new AuthRepository()) {
+	constructor(private authRepository: AuthRepository) {
 		super();
 	}
 

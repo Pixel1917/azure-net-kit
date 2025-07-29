@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Performance Benchmark</title>
+		<style>
+			body {
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+				max-width: 1200px;
+				margin: 0 auto;
+				padding: 20px;
+				background: #0a0a0a;
+				color: #e0e0e0;
+			}
+			.benchmark-container {
+				background: #1a1a1a;
+				border-radius: 12px;
+				padding: 24px;
+				margin-bottom: 24px;
+				border: 1px solid #333;
+			}
+			h1,
+			h2 {
+				color: #fff;
+				margin-bottom: 16px;
+			}
+			.results {
+				display: grid;
+				grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+				gap: 16px;
+				margin-top: 20px;
+			}
+			.result-card {
+				background: #242424;
+				padding: 16px;
+				border-radius: 8px;
+				border: 1px solid #333;
+			}
+			.result-card h3 {
+				color: #4fc3f7;
+				margin: 0 0 12px 0;
+				font-size: 18px;
+			}
+			.metric {
+				display: flex;
+				justify-content: space-between;
+				margin: 8px 0;
+				padding: 8px;
+				background: #1a1a1a;
+				border-radius: 4px;
+			}
+			.metric-label {
+				color: #888;
+			}
+			.metric-value {
+				font-weight: bold;
+				font-family: 'SF Mono', 'Monaco', monospace;
+			}
+			.better {
+				color: #4caf50;
+			}
+			.worse {
+				color: #f44336;
+			}
+			button {
+				background: #4fc3f7;
+				color: #000;
+				border: none;
+				padding: 12px 24px;
+				border-radius: 6px;
+				font-size: 16px;
+				font-weight: 600;
+				cursor: pointer;
+				transition: all 0.2s;
+			}
+			button:hover {
+				background: #29b6f6;
+				transform: translateY(-2px);
+			}
+			.chart-container {
+				margin-top: 24px;
+				padding: 20px;
+				background: #242424;
+				border-radius: 8px;
+			}
+			canvas {
+				max-width: 100%;
+				height: 400px;
+			}
+			.memory-info {
+				background: #2a2a2a;
+				padding: 16px;
+				border-radius: 8px;
+				margin-top: 16px;
+				font-family: monospace;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>LayerProvider vs Simple Patterns</h1>
+
+		<div class="benchmark-container">
+			<button onclick="runBenchmark()">Run Benchmark</button>
+		</div>
+
+		<div id="results" class="results"></div>
+		<div class="chart-container">
+			<canvas id="performanceChart"></canvas>
+		</div>
+		<div id="memoryInfo" class="memory-info"></div>
+
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+		<script>
+			// Простая реализация LayerProvider для теста
+			class SimpleLayerProvider {
+				constructor() {
+					this.cache = new Map();
+					this.factories = new Map();
+				}
+
+				register(name, factory) {
+					this.factories.set(name, factory);
+				}
+
+				get(name) {
+					if (this.cache.has(name)) {
+						return this.cache.get(name);
+					}
+					const factory = this.factories.get(name);
+					const instance = factory();
+					this.cache.set(name, instance);
+					return instance;
+				}
+			}
+
+			// Proxy-based implementation (упрощенная версия из кода)
+			function createProxyProvider(services) {
+				const cache = new Map();
+				return new Proxy(
+					{},
+					{
+						get(_, key) {
+							if (cache.has(key)) {
+								return cache.get(key);
+							}
+							if (!(key in services)) {
+								throw new Error(`Service '${key}' not found`);
+							}
+							const instance = services[key]();
+							cache.set(key, instance);
+							return instance;
+						}
+					}
+				);
+			}
+
+			// Test service
+			class TestService {
+				constructor(id) {
+					this.id = id;
+					this.data = new Array(100).fill(0).map(() => Math.random());
+				}
+
+				process() {
+					return this.data.reduce((a, b) => a + b, 0);
+				}
+			}
+
+			let chart;
+
+			async function runBenchmark() {
+				const iterations = 100000;
+				const results = {
+					simpleExport: { time: 0, memory: 0 },
+					newInstance: { time: 0, memory: 0 },
+					simpleProvider: { time: 0, memory: 0 },
+					proxyProvider: { time: 0, memory: 0 }
+				};
+
+				// 1. Simple Export Pattern
+				const exportedService = new TestService('exported');
+				const startExport = performance.now();
+				for (let i = 0; i < iterations; i++) {
+					exportedService.process();
+				}
+				results.simpleExport.time = performance.now() - startExport;
+
+				// 2. New Instance Pattern
+				const startNew = performance.now();
+				for (let i = 0; i < iterations; i++) {
+					const service = new TestService('new-' + i);
+					service.process();
+				}
+				results.newInstance.time = performance.now() - startNew;
+
+				// 3. Simple Provider Pattern
+				const simpleProvider = new SimpleLayerProvider();
+				simpleProvider.register('test', () => new TestService('simple'));
+				const startSimple = performance.now();
+				for (let i = 0; i < iterations; i++) {
+					simpleProvider.get('test').process();
+				}
+				results.simpleProvider.time = performance.now() - startSimple;
+
+				// 4. Proxy Provider Pattern
+				const proxyProvider = createProxyProvider({
+					test: () => new TestService('proxy')
+				});
+				const startProxy = performance.now();
+				for (let i = 0; i < iterations; i++) {
+					proxyProvider.test.process();
+				}
+				results.proxyProvider.time = performance.now() - startProxy;
+
+				// Memory usage estimation
+				if (performance.memory) {
+					results.simpleExport.memory = performance.memory.usedJSHeapSize;
+
+					// Force GC if available
+					if (window.gc) window.gc();
+
+					// Create many instances to measure memory
+					const memTestProviders = [];
+					for (let i = 0; i < 1000; i++) {
+						memTestProviders.push(
+							createProxyProvider({
+								service1: () => new TestService('m1'),
+								service2: () => new TestService('m2'),
+								service3: () => new TestService('m3')
+							})
+						);
+					}
+					results.proxyProvider.memory = performance.memory.usedJSHeapSize - results.simpleExport.memory;
+				}
+
+				displayResults(results);
+				updateChart(results);
+			}
+
+			function displayResults(results) {
+				const container = document.getElementById('results');
+				const baseline = results.simpleExport.time;
+
+				container.innerHTML = Object.entries(results)
+					.map(([name, data]) => {
+						const overhead = ((data.time / baseline - 1) * 100).toFixed(2);
+						const overheadClass = overhead > 0 ? 'worse' : 'better';
+
+						return `
+                    <div class="result-card">
+                        <h3>${formatName(name)}</h3>
+                        <div class="metric">
+                            <span class="metric-label">Time (ms):</span>
+                            <span class="metric-value">${data.time.toFixed(2)}</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Overhead:</span>
+                            <span class="metric-value ${overheadClass}">${overhead > 0 ? '+' : ''}${overhead}%</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Ops/sec:</span>
+                            <span class="metric-value">${((100000 / data.time) * 1000).toFixed(0)}</span>
+                        </div>
+                    </div>
+                `;
+					})
+					.join('');
+
+				// Memory info
+				const memoryInfo = document.getElementById('memoryInfo');
+				if (performance.memory) {
+					memoryInfo.innerHTML = `
+                    <h3>Memory Usage</h3>
+                    <p>Total Heap: ${(performance.memory.totalJSHeapSize / 1024 / 1024).toFixed(2)} MB</p>
+                    <p>Used Heap: ${(performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(2)} MB</p>
+                    <p>Proxy Overhead (estimated): ${(results.proxyProvider.memory / 1024).toFixed(2)} KB for 1000 providers</p>
+                `;
+				} else {
+					memoryInfo.innerHTML = '<p>Memory API not available. Run Chrome with --enable-precise-memory-info flag.</p>';
+				}
+			}
+
+			function formatName(name) {
+				const names = {
+					simpleExport: '📦 Simple Export',
+					newInstance: '🏗️ New Instance',
+					simpleProvider: '🔧 Simple Provider',
+					proxyProvider: '🎯 Proxy Provider'
+				};
+				return names[name] || name;
+			}
+
+			function updateChart(results) {
+				const ctx = document.getElementById('performanceChart').getContext('2d');
+
+				if (chart) {
+					chart.destroy();
+				}
+
+				chart = new Chart(ctx, {
+					type: 'bar',
+					data: {
+						labels: Object.keys(results).map(formatName),
+						datasets: [
+							{
+								label: 'Execution Time (ms)',
+								data: Object.values(results).map((r) => r.time),
+								backgroundColor: ['rgba(76, 175, 80, 0.8)', 'rgba(244, 67, 54, 0.8)', 'rgba(255, 193, 7, 0.8)', 'rgba(79, 195, 247, 0.8)'],
+								borderColor: ['rgba(76, 175, 80, 1)', 'rgba(244, 67, 54, 1)', 'rgba(255, 193, 7, 1)', 'rgba(79, 195, 247, 1)'],
+								borderWidth: 2
+							}
+						]
+					},
+					options: {
+						responsive: true,
+						maintainAspectRatio: false,
+						plugins: {
+							title: {
+								display: true,
+								text: 'Performance Comparison',
+								color: '#fff',
+								font: { size: 18 }
+							},
+							legend: {
+								labels: { color: '#fff' }
+							}
+						},
+						scales: {
+							y: {
+								beginAtZero: true,
+								grid: { color: '#333' },
+								ticks: { color: '#888' }
+							},
+							x: {
+								grid: { color: '#333' },
+								ticks: { color: '#888' }
+							}
+						}
+					}
+				});
+			}
+		</script>
+	</body>
+</html>

@@ -2,7 +2,9 @@ import { AzureNetRestDatasource } from './AzureDataSource.js';
 import type { ILoginRequest, ILoginResponse, IUser } from './Abstracts.js';
 
 export class AuthRepository {
-	constructor(private source = new AzureNetRestDatasource()) {}
+	constructor(private source: AzureNetRestDatasource) {
+		console.log(source);
+	}
 
 	public async login(data: ILoginRequest) {
 		return await this.source.createRequest<ILoginResponse>(({ http }) => {
