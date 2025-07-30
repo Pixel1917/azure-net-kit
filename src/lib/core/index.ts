@@ -4,5 +4,4 @@ export * from './httpService/index.js';
 export * from './datasource/index.js';
 export * from './request/index.js';
 export * from './query/index.js';
-export * from './container/index.js';
 export * from './boundaryProvider/index.js';

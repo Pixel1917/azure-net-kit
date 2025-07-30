@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "0.6.2",
+	"version": "0.6.5",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
