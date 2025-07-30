@@ -1,4 +1,4 @@
-import { BaseHttpDatasource, type IHttpDatasource } from '$lib/core/datasource/index.js';
+import { BaseHttpDatasource } from '$lib/core/datasource/index.js';
 import { HttpService, HttpServiceError, HttpServiceResponse } from '$lib/core/httpService/index.js';
 import { QueryBuilder } from '$lib/index.js';
 
@@ -8,7 +8,7 @@ export interface IBackendApiDataSourceResponse<T = unknown> {
 	message: string;
 }
 
-export class AzureNetRestDatasource extends BaseHttpDatasource implements IHttpDatasource {
+export class AzureNetRestDatasource extends BaseHttpDatasource {
 	override async createRequest<T, D = Record<keyof T, string>>(
 		callback: (params: { http: HttpService; query: QueryBuilder }) => Promise<HttpServiceResponse<IBackendApiDataSourceResponse<T>>>
 	) {

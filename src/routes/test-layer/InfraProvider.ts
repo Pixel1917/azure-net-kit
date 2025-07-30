@@ -26,19 +26,6 @@ export const InfrastructureProvider = createBoundaryProvider('InfrastructureProv
 export const RepositoryProvider = createBoundaryProvider(
 	'RepositoryProvider',
 	(deps) => ({
-		azureNetDatasource: () => {
-			return new AzureNetRestDatasource({
-				http: new HttpService({
-					baseUrl: `https://api-laravel.azure-net.ru/back`,
-					requestHandler: (options) => {
-						const token = !browser ? RequestContext.current()?.event?.cookies?.get('token') : Cookies.get('token');
-						if (token) {
-							options.headers = { ...options.headers, Authorization: `Bearer ${token}` };
-						}
-					}
-				})
-			});
-		},
 		authRepository: () => {
 			return new AuthRepository(deps.InfrastructureProvider.azureNetDatasource);
 		}
