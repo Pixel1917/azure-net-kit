@@ -1,1 +1,1 @@
-export * from './UseCasesHandler.js';
+export * from './ResourceService.js';

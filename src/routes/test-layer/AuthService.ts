@@ -1,4 +1,4 @@
-import { UseCasesHandler } from '$lib/core/application/index.js';
+import { ResourceService } from '$lib/core/application/index.js';
 import { AuthRepository } from './AuthRepository.js';
 import { LoginRequest } from './LoginRequest.js';
 import { BaseResponse } from '$lib/core/response/index.js';
@@ -12,7 +12,7 @@ class LoginResponse extends BaseResponse<ILoginResponse, string> {
 	}
 }
 
-export class AuthService extends UseCasesHandler {
+export class AuthService extends ResourceService {
 	constructor(private authRepository: AuthRepository) {
 		super();
 	}

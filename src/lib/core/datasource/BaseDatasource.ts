@@ -1,20 +1,23 @@
 import { HttpService, HttpServiceError, HttpServiceResponse } from '../httpService/HttpService.js';
 import { QueryBuilder } from '../query/index.js';
 
-type ApplyWrapper<TWrapper, T, TDataKey extends keyof TWrapper> =
-	TWrapper extends Record<TDataKey, unknown> ? Omit<TWrapper, TDataKey> & { [K in TDataKey]: T } : T;
-
-export interface IHttpDatasource<TWrapper = never, TDataKey extends keyof TWrapper = never> {
+export interface IDatasource {
+	/**
+	 * Executes a wrapped HTTP request and handles the response.
+	 *
+	 * @param callback - A function that receives the HttpService and returns a Promise of a response.
+	 * @returns A typed HTTP response wrapped in a Promise.
+	 */
 	createRequest<T>(
-		callback: <J = ApplyWrapper<TWrapper, T, TDataKey>>(params: { http: HttpService; query: QueryBuilder }) => Promise<HttpServiceResponse<J>>
-	): Promise<HttpServiceResponse<ApplyWrapper<TWrapper, T, TDataKey>>>;
+		callback: <J = T>(params: { http: HttpService; query: QueryBuilder }) => Promise<HttpServiceResponse<J>>
+	): Promise<HttpServiceResponse<T>>;
 
 	createRawRequest<T>(
 		callback: (params: { http: HttpService; query: QueryBuilder }) => Promise<HttpServiceResponse<T>>
 	): Promise<HttpServiceResponse<T>>;
 }
 
-export class BaseHttpDatasource<TWrapper = never, TDataKey extends keyof TWrapper = never> implements IHttpDatasource<TWrapper, TDataKey> {
+export class BaseHttpDatasource implements IDatasource {
 	protected readonly httpClient: HttpService;
 	protected readonly query: QueryBuilder;
 
@@ -24,10 +27,10 @@ export class BaseHttpDatasource<TWrapper = never, TDataKey extends keyof TWrappe
 	}
 
 	async createRequest<T>(
-		callback: <J = ApplyWrapper<TWrapper, T, TDataKey>>(params: { http: HttpService; query: QueryBuilder }) => Promise<HttpServiceResponse<J>>
-	): Promise<HttpServiceResponse<ApplyWrapper<TWrapper, T, TDataKey>>> {
+		callback: <J = T>(params: { http: HttpService; query: QueryBuilder }) => Promise<HttpServiceResponse<J>>
+	): Promise<HttpServiceResponse<T>> {
 		return await callback({ http: this.httpClient, query: this.query })
-			.then((response) => response as HttpServiceResponse<ApplyWrapper<TWrapper, T, TDataKey>>)
+			.then((response) => <HttpServiceResponse<T>>response)
 			.catch((err: HttpServiceError<unknown>) => {
 				throw err;
 			});
