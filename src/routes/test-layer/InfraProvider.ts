@@ -1,5 +1,5 @@
 import { createBoundaryProvider } from '$lib/core/boundaryProvider/index.js';
-import { HttpService } from '$lib/core/httpService/index.js';
+import { HttpService } from '$lib/core/infra/httpService/index.js';
 import { browser } from '$app/environment';
 import { RequestContext } from 'edges-svelte/context';
 import { Cookies } from 'azure-net-tools';

@@ -1,1 +1,1 @@
-export * from './ResourceService.js';
+export * from './ProxyResourceService.js';

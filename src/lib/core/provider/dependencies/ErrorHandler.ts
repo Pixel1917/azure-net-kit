@@ -1,5 +1,5 @@
-import { BaseRequest, type RequestErrors } from '$lib/core/request/index.js';
-import { HttpServiceError } from '$lib/core/httpService/index.js';
+import { BaseRequest, type RequestErrors } from '../../request/index.js';
+import { HttpServiceError } from '../../infra/httpService/index.js';
 
 export type AppErrorType = 'http' | 'request' | 'app' | 'abort';
 

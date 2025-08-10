@@ -1,4 +1,4 @@
-import type { ValidationMessage } from '$lib/core/request/index.js';
+import type { ValidationMessage } from '../../index.js';
 
 export type BaseValidationMessages = {
 	phone: () => ValidationMessage;

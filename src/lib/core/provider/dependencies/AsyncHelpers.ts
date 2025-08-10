@@ -1,4 +1,4 @@
-import { createErrorParser, type AppError, type ErrorType } from '$lib/core/provider/dependencies/ErrorHandler.js';
+import { createErrorParser, type AppError, type ErrorType } from './ErrorHandler.js';
 
 export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: ReturnType<typeof createErrorParser<Custom>> }) => {
 	type ActionResponse<T, D = unknown> = {

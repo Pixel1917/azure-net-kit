@@ -6,10 +6,12 @@
 
 	const form = $state<Partial<ILoginRequest>>({});
 
-	const onsubmit = (e: Event) => {
+	const onsubmit = async (e: Event) => {
 		e.preventDefault();
 		e.stopPropagation();
-		authService.login(form);
+		await authService.login(form).then((res) => {
+			console.log(res);
+		});
 	};
 </script>
 
