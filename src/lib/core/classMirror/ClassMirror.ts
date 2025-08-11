@@ -1,10 +1,6 @@
-export class ProxyResourceService<TRepo extends object> {
-	protected repository: TRepo;
-
-	constructor(repo: TRepo) {
-		this.repository = repo;
-
-		const proto = Object.getPrototypeOf(repo) as object;
+export class ClassMirror<Target extends object> {
+	constructor(target: Target) {
+		const proto = Object.getPrototypeOf(target) as object;
 
 		for (const name of Object.getOwnPropertyNames(proto)) {
 			if (name === 'constructor') continue;
@@ -14,7 +10,7 @@ export class ProxyResourceService<TRepo extends object> {
 			if (name in this) continue;
 
 			Object.defineProperty(this, name, {
-				value: descriptor.value.bind(repo),
+				value: descriptor.value.bind(target),
 				configurable: true,
 				writable: true
 			});

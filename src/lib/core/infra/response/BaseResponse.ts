@@ -19,6 +19,8 @@ type ResponseBuilderState<TData, TMeta = unknown> = {
 	meta: TMeta;
 };
 
+type ArrayElement<T> = T extends readonly (infer E)[] ? E : never;
+
 export class ResponseBuilder<TData = unknown, TMeta = object, TWrapper = TData> {
 	protected state: ResponseBuilderState<TData, TMeta>;
 
@@ -39,6 +41,21 @@ export class ResponseBuilder<TData = unknown, TMeta = object, TWrapper = TData> 
 		newResponse.state = {
 			...this.state,
 			data: resource.toPlainObject()
+		};
+		return newResponse;
+	}
+
+	toCollection<TResource>(
+		ResourceClass: new (data: ArrayElement<TData>) => { toPlainObject(): TResource }
+	): ResponseBuilder<TResource[], TMeta, TWrapper> {
+		if (!Array.isArray(this.state.data)) {
+			throw new Error('toCollection can only be used when data is an array');
+		}
+		const collection = (this.state.data as ArrayElement<TData>[]).map((dataElement) => new ResourceClass(dataElement).toPlainObject());
+		const newResponse = new ResponseBuilder<TResource[], TMeta, TWrapper>(this.response);
+		newResponse.state = {
+			...this.state,
+			data: collection
 		};
 		return newResponse;
 	}

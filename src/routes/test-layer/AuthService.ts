@@ -1,9 +1,9 @@
-import { ProxyResourceService } from '$lib/core/application/index.js';
+import { ClassMirror } from '$lib/core/classMirror/index.js';
 import { AuthRepository } from './AuthRepository.js';
 import { LoginRequest } from './LoginRequest.js';
 import type { ILoginRequest } from './Abstracts.js';
 
-export class AuthService extends ProxyResourceService<AuthRepository> {
+export class AuthService extends ClassMirror<AuthRepository> {
 	constructor(private authRepository: AuthRepository) {
 		super(authRepository);
 	}
