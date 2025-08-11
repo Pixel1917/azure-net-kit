@@ -1,37 +1,47 @@
 export type EventHandler<E = Event> = (event: E) => void;
 
-export const preventDefault =
-	<E extends Event = Event>(fn: EventHandler<E>): EventHandler<E> =>
-	(event) => {
-		event.preventDefault();
-		fn(event);
-	};
+interface EventModifier<E extends Event = Event> {
+	(fn: () => void): EventHandler<E>;
+	prevent: EventModifier<E>;
+	stop: EventModifier<E>;
+	immediate: EventModifier<E>;
+	once: EventModifier<E>;
+	preventDefault: EventModifier<E>;
+	stopPropagation: EventModifier<E>;
+	stopImmediatePropagation: EventModifier<E>;
+}
 
-export const stopPropagation =
-	<E extends Event = Event>(fn: EventHandler<E>): EventHandler<E> =>
-	(event) => {
-		event.stopPropagation();
-		fn(event);
-	};
+const createEventModifier = <E extends Event = Event>(modifiers = new Set<string>()): EventModifier<E> => {
+	return new Proxy(() => {}, {
+		get(_, prop: string) {
+			return createEventModifier<E>(new Set([...modifiers, prop]));
+		},
+		apply(_, __, [fn]: [() => void]): EventHandler<E> {
+			let executed = false;
 
-export const stopImmediatePropagation =
-	<E extends Event = Event>(fn: EventHandler<E>): EventHandler<E> =>
-	(event) => {
-		event.stopImmediatePropagation();
-		fn(event);
-	};
+			return (event: E) => {
+				if (modifiers.has('once') && executed) return;
 
-export const once = <E extends Event = Event>(fn: EventHandler<E>): EventHandler<E> => {
-	let called = false;
-	return (event) => {
-		if (!called) {
-			called = true;
-			fn(event);
+				if (modifiers.has('prevent') || modifiers.has('preventDefault')) {
+					event.preventDefault();
+				}
+				if (modifiers.has('stop') || modifiers.has('stopPropagation')) {
+					event.stopPropagation();
+				}
+				if (modifiers.has('immediate') || modifiers.has('stopImmediatePropagation')) {
+					event.stopImmediatePropagation();
+				}
+
+				if (modifiers.has('once')) executed = true;
+
+				fn();
+			};
 		}
-	};
+	}) as unknown as EventModifier<E>;
 };
 
-export const compose =
-	<E extends Event = Event>(...wrappers: Array<(fn: EventHandler<E>) => EventHandler<E>>) =>
-	(fn: EventHandler<E>) =>
-		wrappers.reduce((acc, wrap) => wrap(acc), fn);
+export const prevent = createEventModifier(new Set(['prevent']));
+export const stop = createEventModifier(new Set(['stop']));
+export const immediate = createEventModifier(new Set(['immediate']));
+export const once = createEventModifier(new Set(['once']));
+export const event = createEventModifier();

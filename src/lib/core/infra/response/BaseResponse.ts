@@ -35,7 +35,7 @@ export class ResponseBuilder<TData = unknown, TMeta = object, TWrapper = TData> 
 		return data as unknown as TData;
 	}
 
-	toResource<TResource>(ResourceClass: new (data: TData) => { toPlainObject(): TResource }): ResponseBuilder<TResource, TMeta, TWrapper> {
+	mapUsing<TResource>(ResourceClass: new (data: TData) => { toPlainObject(): TResource }): ResponseBuilder<TResource, TMeta, TWrapper> {
 		const resource = new ResourceClass(this.state.data);
 		const newResponse = new ResponseBuilder<TResource, TMeta, TWrapper>(this.response);
 		newResponse.state = {
@@ -45,7 +45,7 @@ export class ResponseBuilder<TData = unknown, TMeta = object, TWrapper = TData> 
 		return newResponse;
 	}
 
-	toCollection<TResource>(
+	mapCollectionUsing<TResource>(
 		ResourceClass: new (data: ArrayElement<TData>) => { toPlainObject(): TResource }
 	): ResponseBuilder<TResource[], TMeta, TWrapper> {
 		if (!Array.isArray(this.state.data)) {

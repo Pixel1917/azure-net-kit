@@ -1,15 +1,15 @@
-export type IResource<T> = {
+export type PlainObject<T> = {
 	[K in keyof T as K extends string ? (T[K] extends (...args: unknown[]) => unknown ? never : K) : never]: T[K];
 };
 
-export interface IBaseResource {
-	toPlainObject(): IResource<this>;
+export interface IDTOMapper<TOutput = never> {
+	toPlainObject(): [TOutput] extends [never] ? PlainObject<this> : TOutput;
 }
 
-export type Collection<T> = IResource<T>[];
+export type Collection<T> = T[];
 
-export class Resource implements IBaseResource {
-	toPlainObject(): IResource<this> {
-		return { ...this } as IResource<this>;
+export class DTOMapper<TOutput = never> implements IDTOMapper<TOutput> {
+	toPlainObject(): [TOutput] extends [never] ? PlainObject<this> : TOutput {
+		return { ...this } as unknown as [TOutput] extends [never] ? PlainObject<this> : TOutput;
 	}
 }
