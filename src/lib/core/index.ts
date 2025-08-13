@@ -4,8 +4,8 @@ export * from './infra/httpService/index.js';
 export * from './infra/datasource/index.js';
 export * from './infra/query/index.js';
 
-export * from './classMirror/index.js';
+export * from './delivery/index.js';
 
-export * from './request/index.js';
-
-export * from './boundaryProvider/index.js';
+export * from './shared/request/index.js';
+export * from './shared/classMirror/index.js';
+export * from './shared/boundaryProvider/index.js';

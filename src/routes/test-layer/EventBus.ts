@@ -1,4 +1,4 @@
-import { createEventBus, EventBusLayers, loggingMiddleware } from '$lib/core/eventBus/EventBus.js';
+import { createEventBus, EventBusLayers, loggingMiddleware } from '$lib/core/shared/eventBus/EventBus.js';
 
 export interface IApplicationEvents {
 	LoggedIn: string;

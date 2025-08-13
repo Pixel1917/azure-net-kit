@@ -1,1 +1,1 @@
-export { createProvider, createProviderFactory } from 'edges-svelte';
+export { createPresenter, createPresenterFactory, createStore, createStoreFactory } from 'edges-svelte';

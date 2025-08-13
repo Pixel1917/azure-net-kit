@@ -1,6 +1,6 @@
-import { BaseRequest } from '$lib/core/request/index.js';
-import { Rules } from '$lib/core/request/rules/index.js';
-import { validationMessagesRu } from '$lib/core/request/rules/messages/index.js';
+import { BaseRequest } from '$lib/core/shared/request/index.js';
+import { Rules } from '$lib/core/shared/request/rules/index.js';
+import { validationMessagesRu } from '$lib/core/shared/request/rules/messages/index.js';
 
 const rules = new Rules({ ...validationMessagesRu });
 

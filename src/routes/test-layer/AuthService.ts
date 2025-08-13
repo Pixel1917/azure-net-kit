@@ -1,4 +1,4 @@
-import { ClassMirror } from '$lib/core/classMirror/index.js';
+import { ClassMirror } from '$lib/core/shared/classMirror/index.js';
 import { AuthRepository } from './AuthRepository.js';
 import { LoginRequest } from './LoginRequest.js';
 import type { ILoginRequest } from './Abstracts.js';

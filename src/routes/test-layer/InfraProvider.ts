@@ -1,4 +1,4 @@
-import { createBoundaryProvider } from '$lib/core/boundaryProvider/index.js';
+import { createBoundaryProvider } from '$lib/core/shared/boundaryProvider/index.js';
 import { HttpService } from '$lib/core/infra/httpService/index.js';
 import { browser } from '$app/environment';
 import { RequestContext } from 'edges-svelte/context';

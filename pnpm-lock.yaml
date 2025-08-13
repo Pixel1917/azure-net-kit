@@ -12,11 +12,11 @@ importers:
         specifier: ^1.0.8
         version: 1.0.9
       edges-svelte:
-        specifier: ^1.0.4
-        version: 1.0.4(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)
+        specifier: ^1.1.0
+        version: 1.1.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)
       edges-svelte-translations:
-        specifier: ^0.1.2
-        version: 0.1.2(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(edges-svelte@1.0.4(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1))(svelte@5.33.1)
+        specifier: ^0.2.0
+        version: 0.2.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(edges-svelte@1.1.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1))(svelte@5.33.1)
       ky:
         specifier: ^1.8.1
         version: 1.8.1
@@ -1276,15 +1276,15 @@ packages:
   duplexer2@0.1.4:
     resolution: {integrity: sha512-asLFVfWWtJ90ZyOUHMqk7/S2w2guQKxUI2itj3d92ADHhxUSbCMGi1f1cBcJ7xM1To+pE/Khbwo1yuNbMEPKeA==}
 
-  edges-svelte-translations@0.1.2:
-    resolution: {integrity: sha512-znuBWbrkZdKOOcntNv132UhJ6Gk+J5TAkChzvgE4QU9x5XSESOyECzRQLgH6BP+4VB2pOK0RPuHr/ywmJF3mvg==}
+  edges-svelte-translations@0.2.0:
+    resolution: {integrity: sha512-BL0CURTWJSzW2vJVvY6Jc009Jdq/Pk1WsjYx2nyi7yq3d08srU/ds/JlNakKdSnWizhhrsCK0/1RE7Lin8uPTw==}
     peerDependencies:
       '@sveltejs/kit': ^2.16.0
-      edges-svelte: '>=1.0.3'
+      edges-svelte: '>=1.1.0'
       svelte: ^5.0.0
 
-  edges-svelte@1.0.4:
-    resolution: {integrity: sha512-0qkHglvgEEB3GeQgMcseaosncteRE3/n7iDcUUuQ6v3szwoN1a5jYVG9UW6I9tsPbHawgu+wVzdkzrjFx9LfGw==}
+  edges-svelte@1.1.0:
+    resolution: {integrity: sha512-qhNPx2AJlpGoVbVMvTcFfymfFjxAd1Kbv/2rB5tVvl64YxsP6d19se9pxN9e8GZakj0s3vTZesCXIUCJ3Zp/ZQ==}
     peerDependencies:
       '@sveltejs/kit': ^2.16.0
       svelte: ^5.0.0
@@ -4271,13 +4271,13 @@ snapshots:
     dependencies:
       readable-stream: 2.3.8
 
-  edges-svelte-translations@0.1.2(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(edges-svelte@1.0.4(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1))(svelte@5.33.1):
+  edges-svelte-translations@0.2.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(edges-svelte@1.1.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1))(svelte@5.33.1):
     dependencies:
       '@sveltejs/kit': 2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2))
-      edges-svelte: 1.0.4(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)
+      edges-svelte: 1.1.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)
       svelte: 5.33.1
 
-  edges-svelte@1.0.4(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1):
+  edges-svelte@1.1.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1):
     dependencies:
       '@sveltejs/kit': 2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2))
       devalue: 5.1.1

@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "0.8.1",
+	"version": "0.8.5",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
@@ -44,20 +44,12 @@
 			"svelte": "./dist/lib/index.js"
 		},
 		"./request/rules": {
-			"types": "./dist/core/request/rules/index.d.ts",
-			"svelte": "./dist/core/request/rules/index.js"
+			"types": "./dist/core/shared/request/rules/index.d.ts",
+			"svelte": "./dist/core/shared/request/rules/index.js"
 		},
 		"./request/messages": {
-			"types": "./dist/core/request/rules/messages/index.d.ts",
-			"svelte": "./dist/core/request/rules/messages/index.js"
-		},
-		"./provider": {
-			"types": "./dist/core/provider/index.d.ts",
-			"svelte": "./dist/core/provider/index.js"
-		},
-		"./provider/deps": {
-			"types": "./dist/core/provider/dependencies/index.d.ts",
-			"svelte": "./dist/core/provider/dependencies/index.js"
+			"types": "./dist/core/shared/request/rules/messages/index.d.ts",
+			"svelte": "./dist/core/shared/request/rules/messages/index.js"
 		},
 		"./edges": {
 			"types": "./dist/edges/index.d.ts",
@@ -136,8 +128,8 @@
 	"packageManager": "pnpm@9.13.2+sha512.88c9c3864450350e65a33587ab801acf946d7c814ed1134da4a924f6df5a2120fd36b46aab68f7cd1d413149112d53c7db3a4136624cfd00ff1846a0c6cef48a",
 	"dependencies": {
 		"azure-net-tools": "^1.0.8",
-		"edges-svelte": "^1.0.4",
-		"edges-svelte-translations": "^0.1.2",
+		"edges-svelte": "^1.1.0",
+		"edges-svelte-translations": "^0.2.0",
 		"ky": "^1.8.1",
 		"libphonenumber-js": "^1.12.9"
 	}

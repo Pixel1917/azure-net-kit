@@ -1,4 +1,4 @@
-import { RequestContext } from '../../edges/context/index.js';
+import { RequestContext } from '../../../edges/context/index.js';
 import { browser } from '$app/environment';
 
 type ServiceFactory<T> = () => T | Promise<T>;

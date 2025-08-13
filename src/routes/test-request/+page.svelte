@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { BaseRequest, type RequestErrors } from '$lib/core/request/index.js';
+	import { BaseRequest, type RequestErrors } from '$lib/core/shared/request/index.js';
 	import { ObjectUtil } from 'azure-net-tools';
-	import { Rules } from '$lib/core/request/rules/index.js';
-	import { validationMessagesI18n } from '$lib/core/request/rules/messages/index.js';
+	import { Rules } from '$lib/core/shared/request/rules/index.js';
+	import { validationMessagesI18n } from '$lib/core/shared/request/rules/messages/index.js';
 	import { TranslationProvider } from '../../translation/index.js';
 	import { event } from '$lib/lib/index.js';
 
