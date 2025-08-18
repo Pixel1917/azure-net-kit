@@ -1,16 +1,10 @@
-export enum EventBusLayers {
-	DOMAIN = 'domain',
-	APPLICATION = 'application',
-	PRESENTATION = 'presentation'
-}
-
 export interface IEvent<T = unknown> {
 	aggregateId: string;
 	eventType: string;
 	eventVersion: number;
 	occurredAt: Date;
 	metadata: IEventMetadata;
-	eventLayer: EventBusLayers;
+	busName?: string;
 	payload: T;
 }
 
@@ -38,18 +32,18 @@ export class EventBus<TEventMap extends object> {
 	private priorities = new Map<keyof TEventMap, number>();
 	private readonly debug: boolean = false;
 	private readonly maxHistorySize: number = 1000;
-	private readonly layer: EventBusLayers;
+	private readonly busName?: string;
 
 	constructor(
 		private options: {
-			layer?: EventBusLayers;
+			busName?: string;
 			enableHistory?: boolean;
 			maxHistorySize?: number;
 			enableAsyncProcessing?: boolean;
 			debug?: boolean;
-		} = { layer: EventBusLayers.PRESENTATION, debug: false }
+		} = { debug: false }
 	) {
-		this.layer = options.layer ?? EventBusLayers.PRESENTATION;
+		this.busName = options.busName ?? undefined;
 		this.debug = options.debug ?? false;
 		if (options.maxHistorySize) {
 			this.maxHistorySize = options.maxHistorySize;
@@ -66,7 +60,7 @@ export class EventBus<TEventMap extends object> {
 				correlationId: this.generateCorrelationId(),
 				...metadata
 			},
-			eventLayer: this.layer,
+			busName: this.busName,
 			payload
 		};
 
@@ -79,7 +73,7 @@ export class EventBus<TEventMap extends object> {
 			eventType: type as string,
 			eventVersion: 1,
 			occurredAt: new Date(),
-			eventLayer: this.layer,
+			busName: this.busName,
 			metadata: {
 				correlationId: this.generateCorrelationId(),
 				...metadata
@@ -265,27 +259,25 @@ export class EventBus<TEventMap extends object> {
 }
 
 export const loggingMiddleware = async (event: IEvent, next: () => Promise<void>) => {
-	console.log(`[${event.eventLayer.toUpperCase()}Event] ${event.eventType} at ${event.occurredAt.toISOString()}`);
-	console.log(`[${event.eventLayer.toUpperCase()}Event] data:`, event);
+	console.log(`[${event.busName ?? ''}Event] ${event.eventType} at ${event.occurredAt.toISOString()}`);
+	console.log(`[${event.busName ?? ''}Event] data:`, event);
 	const start = performance.now();
 	await next();
 	const duration = performance.now() - start;
-	console.log(`[${event.eventLayer.toUpperCase()}Event] ${event.eventType} processed in ${duration.toFixed(2)}ms`);
+	console.log(`[${event.busName ?? ''}Event] ${event.eventType} processed in ${duration.toFixed(2)}ms`);
 };
 
-export const createEventBus = <TEventMap extends object>(
-	layer: EventBusLayers,
-	opts: {
-		history?: boolean;
-		asyncProcessing?: boolean;
-		historySize?: number;
-		middlewares?: (<T = unknown>(event: IEvent<T>, next: () => Promise<void>) => Promise<void>)[];
-		debug?: boolean;
-	}
-) => {
+export const createEventBus = <TEventMap extends object>(opts: {
+	history?: boolean;
+	asyncProcessing?: boolean;
+	historySize?: number;
+	middlewares?: (<T = unknown>(event: IEvent<T>, next: () => Promise<void>) => Promise<void>)[];
+	debug?: boolean;
+	busName?: string;
+}) => {
 	const { history = true, asyncProcessing = true, historySize = 1000, middlewares = [], debug = false } = opts;
 	const eventBus = new EventBus<TEventMap>({
-		layer,
+		busName: opts.busName,
 		enableHistory: history,
 		enableAsyncProcessing: asyncProcessing,
 		maxHistorySize: historySize,
@@ -307,9 +299,9 @@ export const createEventBus = <TEventMap extends object>(
 		return eventBus.subscribe(eventType, handler, options);
 	};
 
-	const createSubscribers = <K extends keyof TEventMap>(eventTypes: K[], handler: DomainEventHandler<TEventMap[K]>) => {
+	const CreateSubscribers = <K extends keyof TEventMap>(eventTypes: K[], handler: DomainEventHandler<TEventMap[K]>) => {
 		return eventBus.subscribeMany(eventTypes, handler);
 	};
 
-	return { eventBus, CreateEvent, CreateBatch, CreateSubscriber, createSubscribers };
+	return { eventBus, CreateEvent, CreateBatch, CreateSubscriber, CreateSubscribers };
 };

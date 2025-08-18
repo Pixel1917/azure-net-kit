@@ -5,9 +5,7 @@ export class AuthRepository {
 	constructor(private source: AzureNetRestDatasource) {}
 
 	public async login(request: ILoginRequest) {
-		return this.source
-			.createRequest<ILoginResponse>(({ http }) => http.post('/auth/login', { json: request }))
-			.then((res) => res.extract('token').getData());
+		return this.source.createRequest<ILoginResponse>(({ http }) => http.post('/auth/login', { json: request })).then((res) => res.getData());
 	}
 
 	public async current() {

@@ -7,7 +7,7 @@ import { AzureNetRestDatasource } from './AzureDataSource.js';
 import { AuthRepository } from './AuthRepository.js';
 import { AuthService } from './AuthService.js';
 
-export const InfrastructureProvider = createBoundaryProvider('InfrastructureProvider', () => ({
+export const DatasourceProvider = createBoundaryProvider('InfrastructureProvider', () => ({
 	azureNetDatasource: () => {
 		return new AzureNetRestDatasource({
 			http: new HttpService({
@@ -25,12 +25,12 @@ export const InfrastructureProvider = createBoundaryProvider('InfrastructureProv
 
 export const RepositoryProvider = createBoundaryProvider(
 	'RepositoryProvider',
-	(deps) => ({
+	({ DatasourceProvider }) => ({
 		authRepository: () => {
-			return new AuthRepository(deps.InfrastructureProvider.azureNetDatasource);
+			return new AuthRepository(DatasourceProvider.azureNetDatasource);
 		}
 	}),
-	{ dependsOn: { InfrastructureProvider } }
+	{ dependsOn: { DatasourceProvider } }
 );
 
 export const ApplicationProvider = createBoundaryProvider(
@@ -40,5 +40,5 @@ export const ApplicationProvider = createBoundaryProvider(
 			return new AuthService(deps.RepositoryProvider.authRepository);
 		}
 	}),
-	{ dependsOn: { RepositoryProvider, InfrastructureProvider } }
+	{ dependsOn: { RepositoryProvider } }
 );

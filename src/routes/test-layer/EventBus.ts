@@ -1,10 +1,10 @@
-import { createEventBus, EventBusLayers, loggingMiddleware } from '$lib/core/shared/eventBus/EventBus.js';
+import { createEventBus, loggingMiddleware } from '$lib/core/shared/eventBus/EventBus.js';
 
 export interface IApplicationEvents {
 	LoggedIn: string;
 }
 
-export const applicationEventBus = createEventBus<IApplicationEvents>(EventBusLayers.APPLICATION, {
+export const applicationEventBus = createEventBus<IApplicationEvents>({
 	history: true,
 	asyncProcessing: true,
 	historySize: 100,

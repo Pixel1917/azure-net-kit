@@ -7,7 +7,7 @@ export interface IBackendApiDataSourceResponse<T = unknown> {
 }
 
 export class AzureNetApiResponse<TData = unknown, TMeta = unknown> extends ResponseBuilder<TData, TMeta, IBackendApiDataSourceResponse<TData>> {
-	protected unwrapData(data: IBackendApiDataSourceResponse<TData>): TData {
+	override unwrapData(data: IBackendApiDataSourceResponse<TData>): TData {
 		return data.data;
 	}
 
