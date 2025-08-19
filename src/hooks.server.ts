@@ -2,11 +2,13 @@ import { dev } from '$app/environment';
 import { edgesHandle } from '$lib/edges/server/index.js';
 import { type Handle } from '@sveltejs/kit';
 import { TranslationProvider } from './translation/index.js';
+import { serverMiddleware } from './middlewares/middlewareManager.js';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	return edgesHandle(
 		event,
 		async ({ edgesEvent, serialize }) => {
+			await serverMiddleware();
 			const { preloadTranslation, applyHtmlLocaleAttr } = TranslationProvider();
 			await preloadTranslation(edgesEvent);
 			return resolve(edgesEvent, {
