@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "0.8.7",
+	"version": "0.8.9",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
@@ -77,7 +77,8 @@
 		}
 	},
 	"peerDependencies": {
-		"svelte": "^5.0.0"
+		"svelte": ">=5.0.0",
+		"@sveltejs/kit": ">=2.16.0"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
