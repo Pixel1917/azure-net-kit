@@ -1,5 +1,5 @@
 import { BaseHttpDatasource, type CreateRequestCallbackType } from '$lib/core/infra/datasource/index.js';
-import { ResponseBuilder } from '$lib/index.js';
+import { ResponseBuilder } from '$lib/core/infra/response/index.js';
 
 export interface IBackendApiDataSourceResponse<T = unknown> {
 	data: T;

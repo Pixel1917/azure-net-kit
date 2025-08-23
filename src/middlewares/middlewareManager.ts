@@ -1,17 +1,16 @@
 import { createMiddlewareManager, type IMiddleware } from '$lib/index.js';
 
-const middlewareTest: IMiddleware = async ({ to, redirect, onClient, onServer }) => {
+const middlewareTest: IMiddleware = async ({ to, from, next, event, page, isServer }) => {
+	const data = isServer ? event?.locals : page.data;
 	if (to.pathname === '/test-middleware') {
-		onClient(async ({ context }) => {
-			console.log('im here');
-			console.log(context.route);
-		});
-		onServer(async ({ context }) => {
-			console.log('im here');
-			console.log(context?.locals);
-			await redirect('/');
-		});
+		if (from?.pathname === '/test-layer') {
+			return next('/');
+		}
 	}
+	if (data?.lang) {
+		console.log(data.lang);
+	}
+	return next();
 };
 
 export const { clientMiddleware, serverMiddleware } = createMiddlewareManager([middlewareTest]);

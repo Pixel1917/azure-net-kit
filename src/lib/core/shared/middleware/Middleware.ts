@@ -1,84 +1,80 @@
-import { type BeforeNavigate, error, isRedirect, type Page, redirect, type RequestEvent } from '@sveltejs/kit';
+import { type BeforeNavigate, error, type Page, redirect, type RequestEvent } from '@sveltejs/kit';
 import { RequestContext } from 'edges-svelte/context';
-import { browser } from '$app/environment';
 import { beforeNavigate, goto } from '$app/navigation';
 import { page } from '$app/state';
+import { EnvironmentUtil } from 'azure-net-tools';
+import { UniversalCookie } from '../cookie/index.js';
 
-export type IMiddleware = (middleWareData: {
+export type IMiddleware = (middlewareData: {
 	to: RequestEvent['url'] | Page['url'];
+	from?: RequestEvent['url'] | Page['url'];
 	error: typeof error;
-	redirect: (
-		location: string | URL,
-		status?: 300 | 301 | 302 | 303 | 304 | 305 | 306 | 307 | 308 | number,
-		navigation?: BeforeNavigate
-	) => Promise<void> | void;
-	onServer: (
-		callback: (serverMiddleware: { context: ReturnType<typeof RequestContext.current>['event'] }) => void | Promise<void> | never | undefined
-	) => void | Promise<void>;
-	onClient: (callback: (clientMiddleware: { context: Page }) => void | Promise<void> | never | undefined) => void | Promise<void>;
-}) => void | Promise<void> | never | undefined;
+	next: (location?: string | URL, status?: 300 | 301 | 302 | 303 | 304 | 305 | 306 | 307 | 308 | number) => void;
+	isServer: boolean;
+	cookies: UniversalCookie;
+	event?: RequestEvent;
+	page: Page;
+}) => Promise<void> | void;
 
-const universalRedirect = async (location: string | URL, status = 301, navigation?: BeforeNavigate) => {
-	if (browser && navigation) {
+const universalRedirect = (location: string | URL, status = 301, navigation?: BeforeNavigate) => {
+	if (EnvironmentUtil.isBrowser && navigation) {
 		navigation?.cancel();
-		return goto(location, { state: { status } });
+		return goto(location);
 	} else {
 		return redirect(status, location);
 	}
 };
 
 export const createMiddlewareManager = (middlewares: IMiddleware[]) => {
-	const onServer =
-		(context?: ReturnType<typeof RequestContext.current>['event']) =>
-		async (
-			callback: (serverMiddleware: { context: ReturnType<typeof RequestContext.current>['event'] }) => void | Promise<void> | never | undefined
-		) => {
-			if (!browser && context) {
-				return await callback({ context: context });
-			}
-			return Promise.resolve();
-		};
-
-	const onClient = (page: Page) => async (callback: (clientMiddleware: { context: Page }) => void | Promise<void> | never | undefined) => {
-		if (browser && page) {
-			return await callback({ context: page });
-		}
-		return Promise.resolve();
-	};
-
-	const executeMiddlewares = async (page?: Page, navigation?: BeforeNavigate) => {
+	const executeMiddlewares = async (navigation?: BeforeNavigate) => {
 		let event: RequestEvent | undefined;
-		if (!browser) {
+		let from: RequestEvent['url'] | Page['url'] | undefined = undefined;
+		if (EnvironmentUtil.isServer) {
 			event = RequestContext.current().event;
+			const referer = event?.request.headers.get('referer');
+			from = referer ? new URL(referer) : undefined;
+		} else {
+			from = navigation?.from?.url ?? undefined;
 		}
-		const to = (browser ? (navigation?.to?.url ?? page?.url) : event?.url) as URL;
+		const to = (EnvironmentUtil.isBrowser ? (navigation?.to?.url ?? page?.url) : event?.url) as URL;
 		for (const middleware of middlewares) {
-			const executeMiddleware = async () => {
-				return middleware({
-					onServer: onServer(event),
-					onClient: onClient(page as Page),
-					to,
-					error,
-					redirect: async (location, status) => await universalRedirect(location, status, navigation)
-				});
+			let shouldContinue = false;
+			const next = (location?: string | URL, status: number = 301) => {
+				shouldContinue = true;
+				if (location) {
+					return universalRedirect(location, status, navigation);
+				}
 			};
 
-			await executeMiddleware();
-		}
-	};
+			await middleware({
+				event,
+				page,
+				cookies: UniversalCookie,
+				isServer: EnvironmentUtil.isServer,
+				to,
+				from,
+				error,
+				next
+			});
 
-	const serverMiddleware = async () => {
-		try {
-			await executeMiddlewares();
-		} catch (e) {
-			if (isRedirect(e)) {
-				console.log(e);
+			if (!shouldContinue) {
+				if (EnvironmentUtil.isBrowser) {
+					navigation?.cancel();
+					if (from) {
+						void goto(from.pathname);
+						console.warn('Navigation blocked: middleware chain stopped (next() not called).');
+					}
+				} else {
+					error(403, 'Navigation blocked: middleware chain stopped (next() not called).');
+				}
 			}
 		}
 	};
+
+	const serverMiddleware = async () => await executeMiddlewares();
 	const clientMiddleware = () => {
 		beforeNavigate(async (navigation) => {
-			await executeMiddlewares(page, navigation);
+			await executeMiddlewares(navigation);
 		});
 	};
 

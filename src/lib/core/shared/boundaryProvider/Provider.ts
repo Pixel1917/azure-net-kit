@@ -1,5 +1,5 @@
 import { RequestContext } from '../../../edges/context/index.js';
-import { browser } from '$app/environment';
+import { EnvironmentUtil } from 'azure-net-tools';
 
 type ServiceFactory<T> = () => T | Promise<T>;
 type ServiceMap = Record<string, ServiceFactory<unknown>>;
@@ -28,7 +28,7 @@ const factoriesCache = new WeakMap<ProviderFactory<ServiceMap, Record<string, Pr
 const providerProxyCache = new Map<string, ResolvedServices<ServiceMap>>();
 
 const getProviderCache = (providerName: string): Map<string, unknown> => {
-	if (browser) {
+	if (EnvironmentUtil.isBrowser) {
 		if (!clientCache.has(providerName)) {
 			clientCache.set(providerName, new Map());
 		}
@@ -61,7 +61,7 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 	const { dependsOn = {} as D } = options ?? {};
 	type Deps = { [K in keyof D]: InferProviderType<D[K]> };
 	const providerFn = () => {
-		if (browser && providerProxyCache.has(name)) {
+		if (EnvironmentUtil.isBrowser && providerProxyCache.has(name)) {
 			return providerProxyCache.get(name) as ResolvedServices<T>;
 		}
 
@@ -99,7 +99,7 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 
 			factories = services(deps as Deps);
 
-			if (browser) {
+			if (EnvironmentUtil.isBrowser) {
 				factoriesCache.set(services as UntypedFactoryCache, factories);
 			}
 
@@ -141,7 +141,7 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 			}
 		});
 
-		if (browser) {
+		if (EnvironmentUtil.isBrowser) {
 			providerProxyCache.set(name, providerProxy);
 		}
 
@@ -167,7 +167,7 @@ export function cleanupProvider(name: string): void {
 		cache.clear();
 	};
 
-	if (browser) {
+	if (EnvironmentUtil.isBrowser) {
 		const cache = clientCache.get(name);
 		if (cache) {
 			void cleanupCache(cache);

@@ -35,9 +35,9 @@ export const RepositoryProvider = createBoundaryProvider(
 
 export const ApplicationProvider = createBoundaryProvider(
 	'ApplicationProvider',
-	(deps) => ({
+	({ RepositoryProvider }) => ({
 		authService: () => {
-			return new AuthService(deps.RepositoryProvider.authRepository);
+			return new AuthService(RepositoryProvider.authRepository);
 		}
 	}),
 	{ dependsOn: { RepositoryProvider } }

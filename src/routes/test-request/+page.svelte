@@ -4,7 +4,7 @@
 	import { Rules } from '$lib/core/shared/request/rules/index.js';
 	import { validationMessagesI18n } from '$lib/core/shared/request/rules/messages/index.js';
 	import { TranslationProvider } from '../../translation/index.js';
-	import { event } from '$lib/lib/index.js';
+	import { event } from '$lib/core/ui/index.js';
 
 	type ITestRequest = {
 		name: string;

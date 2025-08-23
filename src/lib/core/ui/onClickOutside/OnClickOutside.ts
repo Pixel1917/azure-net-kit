@@ -1,7 +1,7 @@
-import { browser } from '$app/environment';
+import { EnvironmentUtil } from 'azure-net-tools';
 
 export const onClickOutside = (node: HTMLElement, initiator?: HTMLElement) => {
-	if (!browser) return { destroy: () => {} };
+	if (EnvironmentUtil.isServer) return { destroy: () => {} };
 
 	const handleClick = (event: Event): void => {
 		if (event.target instanceof HTMLElement) {

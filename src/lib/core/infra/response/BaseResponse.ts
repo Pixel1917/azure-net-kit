@@ -1,4 +1,4 @@
-import { HttpServiceResponse } from '$lib/core/index.js';
+import type { HttpServiceResponse } from '../httpService/index.js';
 
 type DeepKeys<T> = T extends object
 	? {

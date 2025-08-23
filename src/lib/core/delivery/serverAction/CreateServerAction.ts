@@ -1,6 +1,6 @@
 import { RequestContext } from '../../../edges/context/index.js';
-import { browser } from '$app/environment';
 import { error, fail, redirect } from '@sveltejs/kit';
+import { EnvironmentUtil } from 'azure-net-tools';
 
 type Deps = {
 	context: Required<ReturnType<typeof RequestContext.current>['event']>;
@@ -13,7 +13,7 @@ type Deps = {
 
 export const createServerAction = <T>(factory: (args: Deps) => T): (() => T) => {
 	return (): T => {
-		if (browser) {
+		if (EnvironmentUtil.isBrowser) {
 			throw Error('Do not use actions on client side');
 		}
 		const context = RequestContext.current().event;

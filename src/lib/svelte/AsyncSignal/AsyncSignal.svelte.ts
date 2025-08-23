@@ -1,5 +1,5 @@
 import { untrack } from 'svelte';
-import { browser } from '$app/environment';
+import { EnvironmentUtil } from 'azure-net-tools';
 
 export type AsyncStatus = 'idle' | 'pending' | 'success' | 'error';
 
@@ -64,7 +64,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 		}
 	}
 
-	if (browser && watch.length > 0) {
+	if (EnvironmentUtil.isBrowser && watch.length > 0) {
 		let isFirst = true;
 
 		$effect(() => {
@@ -84,11 +84,11 @@ export const createAsyncSignal = <TData, TError = Error>(
 	}
 
 	if (immediate) {
-		if (!browser && server) {
+		if (EnvironmentUtil.isServer && server) {
 			untrack(() => {
 				void execute();
 			});
-		} else if (browser) {
+		} else if (EnvironmentUtil.isBrowser) {
 			void execute();
 		}
 	}
