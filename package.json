@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "0.9.0",
+	"version": "0.9.1",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
@@ -39,17 +39,9 @@
 			"types": "./dist/core/infra/index.d.ts",
 			"svelte": "./dist/core/infra/index.js"
 		},
-		"./svelte": {
-			"types": "./dist/svelte/index.d.ts",
-			"svelte": "./dist/svelte/index.js"
-		},
-		"./request/rules": {
-			"types": "./dist/core/shared/request/rules/index.d.ts",
-			"svelte": "./dist/core/shared/request/rules/index.js"
-		},
-		"./request/messages": {
-			"types": "./dist/core/shared/request/rules/messages/index.d.ts",
-			"svelte": "./dist/core/shared/request/rules/messages/index.js"
+		"./schema": {
+			"types": "./dist/core/delivery/schema/rules/index.d.ts",
+			"svelte": "./dist/core/delivery/schema/rules/index.js"
 		},
 		"./edges": {
 			"types": "./dist/edges/index.d.ts",

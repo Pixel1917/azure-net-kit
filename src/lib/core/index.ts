@@ -6,3 +6,5 @@ export * from './shared/cookie/index.js';
 export * from './shared/boundaryProvider/index.js';
 
 export * from './ui/index.js';
+
+export * from './svelte/index.js';

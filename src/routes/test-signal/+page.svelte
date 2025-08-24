@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createAsyncSignal } from '$lib/svelte/index.js';
+	import { createAsyncSignal } from '$lib/core/svelte/index.js';
 	import { HttpService, HttpServiceResponse } from '$lib/core/infra/index.js';
 	import { ObjectUtil } from 'azure-net-tools';
 
