@@ -1,10 +1,8 @@
-import { type RequestErrors, BaseRequest } from '../../core/index.js';
-
 export interface FormConfig<T> {
 	onSubmit: (data: T) => Promise<void> | void;
 	initialData?: T;
 	validation?: {
-		schema?: new (data: Partial<T>) => BaseRequest<T, T>;
+		//schema?: new (data: Partial<T>) => BaseRequest<T, T>;
 		validateOnChange?: boolean;
 		validateOnBlur?: boolean;
 	};
@@ -12,7 +10,7 @@ export interface FormConfig<T> {
 
 export interface ActiveForm<T> {
 	data: Partial<T>;
-	errors: RequestErrors<T>;
+	//errors: RequestErrors<T>;
 	touched: Partial<Record<keyof T, boolean>>;
 	pending: boolean;
 	dirty: boolean;
@@ -22,7 +20,7 @@ export interface ActiveForm<T> {
 	validate: (field?: keyof T) => void;
 	reset: () => void;
 	setField: <K extends keyof T>(field: K, value: T[K]) => void;
-	setErrors: (errors: RequestErrors<T>) => void;
+	//setErrors: (errors: RequestErrors<T>) => void;
 	touchField: (field: keyof T) => void;
 }
 

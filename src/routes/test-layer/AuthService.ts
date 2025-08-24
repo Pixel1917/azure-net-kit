@@ -1,6 +1,5 @@
 import { ClassMirror } from '$lib/core/shared/classMirror/index.js';
 import { AuthRepository } from './AuthRepository.js';
-import { LoginRequest } from './LoginRequest.js';
 import type { ILoginRequest } from './Abstracts.js';
 
 export class AuthService extends ClassMirror<AuthRepository> {
@@ -8,9 +7,8 @@ export class AuthService extends ClassMirror<AuthRepository> {
 		super(authRepository);
 	}
 
-	async login(data: Partial<ILoginRequest> | FormData) {
-		const request = new LoginRequest(data);
-		return this.authRepository.login(request.json());
+	async login(data: ILoginRequest | FormData) {
+		return this.authRepository.login(data);
 	}
 
 	declare current: AuthRepository['current'];

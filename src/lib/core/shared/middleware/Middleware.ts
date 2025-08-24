@@ -5,27 +5,29 @@ import { page } from '$app/state';
 import { EnvironmentUtil } from 'azure-net-tools';
 import { UniversalCookie } from '../cookie/index.js';
 
+type RedirectStatus = 300 | 301 | 302 | 303 | 304 | 305 | 306 | 307 | 308;
+
 export type IMiddleware = (middlewareData: {
 	to: RequestEvent['url'] | Page['url'];
 	from?: RequestEvent['url'] | Page['url'];
 	error: typeof error;
-	next: (location?: string | URL, status?: 300 | 301 | 302 | 303 | 304 | 305 | 306 | 307 | 308 | number) => void;
+	next: (location?: string | URL, status?: RedirectStatus) => void;
 	isServer: boolean;
-	cookies: UniversalCookie;
+	cookies: typeof UniversalCookie;
 	event?: RequestEvent;
 	page: Page;
 }) => Promise<void> | void;
 
-const universalRedirect = (location: string | URL, status = 301, navigation?: BeforeNavigate) => {
-	if (EnvironmentUtil.isBrowser && navigation) {
-		navigation?.cancel();
-		return goto(location);
-	} else {
-		return redirect(status, location);
-	}
-};
-
 export const createMiddlewareManager = (middlewares: IMiddleware[]) => {
+	const universalRedirect = (location: string | URL, status: RedirectStatus = 301, navigation?: BeforeNavigate) => {
+		if (EnvironmentUtil.isBrowser && navigation) {
+			navigation?.cancel();
+			return goto(location);
+		} else {
+			return redirect(status, location);
+		}
+	};
+
 	const executeMiddlewares = async (navigation?: BeforeNavigate) => {
 		let event: RequestEvent | undefined;
 		let from: RequestEvent['url'] | Page['url'] | undefined = undefined;
@@ -39,7 +41,7 @@ export const createMiddlewareManager = (middlewares: IMiddleware[]) => {
 		const to = (EnvironmentUtil.isBrowser ? (navigation?.to?.url ?? page?.url) : event?.url) as URL;
 		for (const middleware of middlewares) {
 			let shouldContinue = false;
-			const next = (location?: string | URL, status: number = 301) => {
+			const next = (location?: string | URL, status: RedirectStatus = 301) => {
 				shouldContinue = true;
 				if (location) {
 					return universalRedirect(location, status, navigation);

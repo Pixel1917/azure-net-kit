@@ -4,7 +4,7 @@ import type { ILoginRequest, ILoginResponse, IUser } from './Abstracts.js';
 export class AuthRepository {
 	constructor(private source: AzureNetRestDatasource) {}
 
-	public async login(request: ILoginRequest) {
+	public async login(request: ILoginRequest | FormData) {
 		return this.source.createRequest<ILoginResponse>(({ http }) => http.post('/auth/login', { json: request })).then((res) => res.getData());
 	}
 

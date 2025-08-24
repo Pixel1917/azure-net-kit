@@ -1,10 +1,9 @@
 <script lang="ts">
-	import { BaseRequest, type RequestErrors } from '$lib/core/shared/request/index.js';
 	import { ObjectUtil } from 'azure-net-tools';
-	import { Rules } from '$lib/core/shared/request/rules/index.js';
-	import { validationMessagesI18n } from '$lib/core/shared/request/rules/messages/index.js';
 	import { TranslationProvider } from '../../translation/index.js';
 	import { event } from '$lib/core/ui/index.js';
+	import { createSchemaFactory, type RequestErrors } from '$lib/core/delivery/schema/index.js';
+	import { createRules, validationMessagesI18n } from '$lib/core/delivery/schema/rules/index.js';
 
 	type ITestRequest = {
 		name: string;
@@ -16,47 +15,43 @@
 		arr: { id: number; name: string }[];
 	};
 
-	const rules = new Rules(validationMessagesI18n);
+	const schema = createSchemaFactory(createRules(validationMessagesI18n));
+	const TestSchema = schema<ITestRequest>()
+		.rules((rules) => ({
+			name: [rules.required(), rules.string({ length: { min: 3, max: 5 } }), rules.lettersOnly({ whiteSpaces: true })],
+			'user.id': [rules.required(), rules.number()],
+			arr: [
+				rules.required(),
+				rules.array({
+					length: { min: 1, max: 5 },
+					schema: { name: [rules.required(), rules.string()], id: [rules.required(), rules.number({ range: { min: 1 } })] }
+				})
+			]
+		}))
+		.with(() => ({
+			fromSomeObj: () =>
+				<ITestRequest>{
+					name: '',
+					user: {
+						id: undefined
+					},
+					pass: '',
+					cPass: '',
+					arr: []
+				}
+		}))
+		.create();
 
-	class TestRequest extends BaseRequest<ITestRequest> {
-		rules() {
-			return {
-				name: [rules.required(), rules.string({ length: { min: 3, max: 5 } }), rules.lettersOnly({ whiteSpaces: true })],
-				'user.id': [rules.required(), rules.number()],
-				pass: [rules.required(), rules.sameAs({ key: 'cPass' })],
-				cPass: [rules.required()],
-				arr: [
-					rules.required(),
-					rules.array({
-						length: { min: 1, max: 5 },
-						schema: { name: [rules.required(), rules.string()], id: [rules.required(), rules.number({ range: { min: 1 } })] }
-					})
-				]
-			};
-		}
-	}
-
-	const form = $state<ITestRequest>({
-		name: '',
-		user: {
-			id: undefined
-		},
-		pass: '',
-		cPass: '',
-		arr: []
-	});
-
+	const form = $state<ITestRequest>(TestSchema.fromSomeObj());
 	let errors = $state<RequestErrors<ITestRequest>>({});
 
 	const onSubmit = () => {
-		const req = new TestRequest(form);
+		const req = TestSchema.from($state.snapshot(form));
 		try {
 			console.log(req.json());
 			errors = {};
 		} catch (e) {
-			if (e instanceof TestRequest) {
-				errors = e.getErrors();
-			}
+			errors = TestSchema.getSchemaError(e);
 		}
 	};
 
