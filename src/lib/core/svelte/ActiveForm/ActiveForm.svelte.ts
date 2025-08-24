@@ -11,16 +11,15 @@ export interface FormConfig<T> {
 export interface ActiveForm<T> {
 	data: Partial<T>;
 	//errors: RequestErrors<T>;
-	touched: Partial<Record<keyof T, boolean>>;
+	submit: () => Promise<void>;
+	reset: () => void;
 	pending: boolean;
 	dirty: boolean;
+	validate: (field?: keyof T) => void;
+
 	valid: boolean;
 
-	submit: () => Promise<void>;
-	validate: (field?: keyof T) => void;
-	reset: () => void;
-	setField: <K extends keyof T>(field: K, value: T[K]) => void;
-	//setErrors: (errors: RequestErrors<T>) => void;
+	touched: Partial<Record<keyof T, boolean>>;
 	touchField: (field: keyof T) => void;
 }
 
