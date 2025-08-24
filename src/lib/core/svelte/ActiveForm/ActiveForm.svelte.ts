@@ -1,3 +1,5 @@
+//import { ObjectUtil } from 'azure-net-tools';
+
 export interface FormConfig<T> {
 	onSubmit: (data: T) => Promise<void> | void;
 	initialData?: T;
@@ -25,7 +27,7 @@ export interface ActiveForm<T> {
 
 // export function createActiveForm<T extends object>(config: FormConfig<T>): ActiveForm<T> {
 // 	const initial: Partial<T> = config.initialData ?? {};
-// 	let data = $state<Partial<T>>(structuredClone(initial));
+// 	let data = $state<Partial<T>>(ObjectUtil.deepClone(initial));
 // 	let errors = $state<RequestErrors<T>>({});
 // 	let touched = $state<Partial<Record<keyof T, boolean>>>({});
 // 	let pending = $state(false);
@@ -182,6 +184,3 @@ export interface ActiveForm<T> {
 // 	};
 // }
 //
-// function structuredClone<T>(obj: T): T {
-// 	return JSON.parse(JSON.stringify(obj));
-// }

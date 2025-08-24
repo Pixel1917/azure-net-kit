@@ -1,9 +1,9 @@
 import { RequestContext } from '../../../edges/context/index.js';
-import { error, fail, redirect } from '@sveltejs/kit';
+import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit';
 import { EnvironmentUtil } from 'azure-net-tools';
 
 type Deps = {
-	context: Required<ReturnType<typeof RequestContext.current>['event']>;
+	context: RequestEvent;
 	utils: {
 		fail: typeof fail;
 		redirect: typeof redirect;

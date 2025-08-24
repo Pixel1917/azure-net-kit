@@ -1,15 +1,15 @@
 import { dev } from '$app/environment';
 import { edgesHandle } from '$lib/edges/server/index.js';
 import { type Handle } from '@sveltejs/kit';
-import { TranslationProvider } from './translation/index.js';
-import { serverMiddleware } from './middlewares/middlewareManager.js';
+import { Translation } from './app/core/index.js';
+import { serverMiddleware } from './app/core/index.js';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	return edgesHandle(
 		event,
 		async ({ edgesEvent, serialize }) => {
 			await serverMiddleware();
-			const { preloadTranslation, applyHtmlLocaleAttr } = TranslationProvider();
+			const { preloadTranslation, applyHtmlLocaleAttr } = Translation();
 			await preloadTranslation(edgesEvent);
 			return resolve(edgesEvent, {
 				transformPageChunk: ({ html }) => {

@@ -57,8 +57,8 @@ interface SchemaInstance<TransformResult> {
 }
 
 type Schema<SchemaData, TransformResult, CustomMethods> = CustomMethods & {
-	from(data: Partial<SchemaData>): SchemaInstance<TransformResult>;
-	getSchemaError(e: unknown): RequestErrors<SchemaData>;
+	from(data: Partial<SchemaData> | FormData): SchemaInstance<TransformResult>;
+	getSchemaError(e: unknown): RequestErrors<SchemaData> | undefined;
 };
 
 class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaData, CustomMethods = unknown>
@@ -91,7 +91,7 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 		const customMethods = this._customMethods ? this._customMethods() : {};
 		const rulesFactory = this._rulesFactory;
 
-		const prepare = (dataToPrepare: Partial<SchemaData>) => {
+		const prepare = (dataToPrepare: Partial<SchemaData> | FormData) => {
 			if (dataToPrepare instanceof FormData) {
 				return FormDataUtil.toObject<SchemaData>(dataToPrepare);
 			}
@@ -121,8 +121,9 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 				if (e instanceof SchemaFail) {
 					return (e as SchemaFail<SchemaData>).getErrors();
 				}
+				return undefined;
 			},
-			from(data: Partial<SchemaData>): SchemaInstance<TransformResult> {
+			from(data: Partial<SchemaData> | FormData): SchemaInstance<TransformResult> {
 				const _preparedData = prepare(data);
 				let _errors: RequestErrors<SchemaData> = {};
 				let _isValid = true;
