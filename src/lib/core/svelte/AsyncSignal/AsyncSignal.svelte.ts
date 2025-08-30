@@ -8,6 +8,7 @@ export interface AsyncSignalOptions<TData> {
 	immediate?: boolean;
 	watch?: (() => unknown)[];
 	initialData?: TData | null;
+	key?: string;
 }
 
 export interface AsyncSignalSvelte<TData, TError = Error> {
@@ -21,11 +22,63 @@ export interface AsyncSignalSvelte<TData, TError = Error> {
 	abort: () => void;
 }
 
+const createAsyncSignalManager = () => {
+	const instances = EnvironmentUtil.isBrowser ? new Map<string, () => Promise<void>>() : undefined;
+
+	const generateUid = () => {
+		return Math.random().toString(36).substring(2, 9);
+	};
+
+	const generateKey = (): string => {
+		if (instances) {
+			return `${instances.size}-async-signal-${Date.now()}-${generateUid()}`;
+		}
+		return `async-signal-${Date.now()}-${generateUid()}`;
+	};
+
+	const register = (key: string, callback: () => Promise<void>) => {
+		if (instances) {
+			instances.set(key, callback);
+		}
+	};
+
+	const unregister = (key: string) => {
+		if (instances) {
+			instances.delete(key);
+		}
+	};
+
+	const refreshByKey = async (key: string) => {
+		if (instances) {
+			const instance = instances.get(key);
+			try {
+				await instance?.();
+			} catch {
+				return;
+			}
+		}
+	};
+
+	const refreshAll = async () => {
+		if (instances) {
+			try {
+				await Promise.all(instances.values().map((val) => val()));
+			} catch {
+				return;
+			}
+		}
+	};
+
+	return { refreshAll, refreshByKey, generateKey, register, unregister };
+};
+
+const asyncSignalManager = createAsyncSignalManager();
+
 export const createAsyncSignal = <TData, TError = Error>(
 	handler: (signal?: AbortSignal) => Promise<TData>,
 	options: AsyncSignalOptions<TData> = {}
 ): AsyncSignalSvelte<TData, TError> => {
-	const { server = false, immediate = true, watch = [], initialData = null } = options;
+	const { server = false, immediate = true, watch = [], initialData = null, key } = options;
 
 	let data = $state<TData | null>(initialData);
 	let error = $state<TError | null>(null);
@@ -64,23 +117,32 @@ export const createAsyncSignal = <TData, TError = Error>(
 		}
 	}
 
-	if (EnvironmentUtil.isBrowser && watch.length > 0) {
-		let isFirst = true;
-
+	if (EnvironmentUtil.isBrowser) {
+		const signalKey = key ?? asyncSignalManager.generateKey();
+		asyncSignalManager.register(signalKey, () => execute());
 		$effect(() => {
-			watch.forEach((dep) => dep());
-
-			if (isFirst && !immediate) {
-				isFirst = false;
-				return;
-			}
-
-			if (!isFirst) {
-				void execute();
-			}
-
-			isFirst = false;
+			return () => {
+				asyncSignalManager.unregister(signalKey);
+			};
 		});
+		if (watch.length > 0) {
+			let isFirst = true;
+
+			$effect(() => {
+				watch.forEach((dep) => dep());
+
+				if (isFirst && !immediate) {
+					isFirst = false;
+					return;
+				}
+
+				if (!isFirst) {
+					void execute();
+				}
+
+				isFirst = false;
+			});
+		}
 	}
 
 	if (immediate) {
@@ -123,4 +185,12 @@ export const createAsyncSignal = <TData, TError = Error>(
 			}
 		}
 	};
+};
+
+export const refreshAsyncSignal = async (key: string) => {
+	return await asyncSignalManager.refreshByKey(key);
+};
+
+export const refreshAllAsyncSignals = async () => {
+	return await asyncSignalManager.refreshAll();
 };
