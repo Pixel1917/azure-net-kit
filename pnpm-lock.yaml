@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       azure-net-tools:
-        specifier: ^1.0.8
-        version: 1.0.9
+        specifier: ^1.1.0
+        version: 1.1.0
       edges-svelte:
         specifier: ^1.1.0
         version: 1.1.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)
@@ -961,8 +961,8 @@ packages:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
     engines: {node: '>= 0.4'}
 
-  azure-net-tools@1.0.9:
-    resolution: {integrity: sha512-7qkzyU/R6+b366310uNAk3965oHU83C6uD+5+lEgHqK3gwwn9qMCOBCCxwplRD3wJv3bWiurs7lYmnKcffxURA==}
+  azure-net-tools@1.1.0:
+    resolution: {integrity: sha512-zxZe3C7E4ISUQPoO9feYfJSHEwp+7JiCtuozYaGbe4Nba08pFrJt58IFoyMBywCtRIBHuJy/rriYKfLd4FzEeQ==}
 
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
@@ -3964,7 +3964,7 @@ snapshots:
 
   axobject-query@4.1.0: {}
 
-  azure-net-tools@1.0.9: {}
+  azure-net-tools@1.1.0: {}
 
   balanced-match@1.0.2: {}
 

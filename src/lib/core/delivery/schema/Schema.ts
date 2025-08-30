@@ -56,7 +56,7 @@ interface SchemaInstance<TransformResult> {
 	validated(): boolean;
 }
 
-type Schema<SchemaData, TransformResult, CustomMethods> = CustomMethods & {
+export type Schema<SchemaData, TransformResult, CustomMethods> = CustomMethods & {
 	from(data: Partial<SchemaData> | FormData): SchemaInstance<TransformResult>;
 	getSchemaError(e: unknown): RequestErrors<SchemaData> | undefined;
 };

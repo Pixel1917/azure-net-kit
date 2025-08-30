@@ -1,13 +1,11 @@
-//import { ObjectUtil } from 'azure-net-tools';
+import { ObjectUtil } from 'azure-net-tools';
+import type { RequestErrors, Schema } from '../../delivery/schema/index.js';
 
-export interface FormConfig<T> {
+export interface FormConfig<T, D> {
 	onSubmit: (data: T) => Promise<void> | void;
 	initialData?: T;
-	validation?: {
-		//schema?: new (data: Partial<T>) => BaseRequest<T, T>;
-		validateOnChange?: boolean;
-		validateOnBlur?: boolean;
-	};
+	schema?: D;
+	validateOnChange?: boolean;
 }
 
 export interface ActiveForm<T> {
@@ -17,38 +15,46 @@ export interface ActiveForm<T> {
 	reset: () => void;
 	pending: boolean;
 	dirty: boolean;
-	validate: (field?: keyof T) => void;
-
-	valid: boolean;
-
-	touched: Partial<Record<keyof T, boolean>>;
-	touchField: (field: keyof T) => void;
 }
 
+export const createActiveForm = <T extends object, D extends Schema<unknown, unknown, unknown>>(config: FormConfig<T, D>) => {
+	const initial: Partial<T> = config.initialData ?? {};
+	let formData = $state<Partial<T>>(ObjectUtil.deepClone(initial));
+	let formErrors = $state<RequestErrors<T>>({});
+
+	//let pending = $state(false);
+
+	const dirty = $derived(JSON.stringify(formData) !== JSON.stringify(initial));
+
+	// const validate = () => {};
+	//
+	// const submit = async () => {
+	// 	pending = true;
+	// };
+
+	const reset = (toInitial = false) => {
+		formData = toInitial ? ObjectUtil.deepClone(initial) : {};
+		formErrors = {};
+	};
+
+	return {
+		get data() {
+			return formData;
+		},
+		get errors() {
+			return formErrors;
+		},
+		get dirty() {
+			return dirty;
+		},
+		// get pending() {
+		// 	return pending;
+		// },
+		reset
+	};
+};
+
 // export function createActiveForm<T extends object>(config: FormConfig<T>): ActiveForm<T> {
-// 	const initial: Partial<T> = config.initialData ?? {};
-// 	let data = $state<Partial<T>>(ObjectUtil.deepClone(initial));
-// 	let errors = $state<RequestErrors<T>>({});
-// 	let touched = $state<Partial<Record<keyof T, boolean>>>({});
-// 	let pending = $state(false);
-//
-// 	const dirty = $derived(JSON.stringify(data) !== JSON.stringify(config.initialData));
-//
-// 	const valid = $derived(() => {
-// 		if (Object.keys(errors).length > 0) return false;
-//
-// 		if (config.validation?.schema) {
-// 			try {
-// 				const request = new config.validation.schema(data);
-// 				request.validated();
-// 				return true;
-// 			} catch {
-// 				return false;
-// 			}
-// 		}
-//
-// 		return true;
-// 	});
 //
 // 	function validateForm(): boolean {
 // 		if (!config.validation?.schema) return true;
@@ -67,29 +73,6 @@ export interface ActiveForm<T> {
 // 		}
 // 	}
 //
-// 	function validateField(field: keyof T): void {
-// 		if (!config.validation?.schema) return;
-//
-// 		try {
-// 			const request = new config.validation.schema(data);
-// 			request.validated();
-//
-// 			const newErrors = { ...errors };
-// 			delete newErrors[field];
-// 			errors = newErrors;
-// 		} catch (error) {
-// 			if (error instanceof config.validation.schema) {
-// 				const allErrors = error.getErrors();
-// 				if (field in allErrors) {
-// 					errors = { ...errors, [field]: allErrors[field] };
-// 				} else {
-// 					const newErrors = { ...errors };
-// 					delete newErrors[field];
-// 					errors = newErrors;
-// 				}
-// 			}
-// 		}
-// 	}
 //
 // 	if (config.validation?.validateOnChange) {
 // 		$effect(() => {
@@ -123,64 +106,5 @@ export interface ActiveForm<T> {
 // 			pending = false;
 // 		}
 // 	}
-//
-// 	function setField<K extends keyof T>(field: K, value: T[K]): void {
-// 		data = { ...data, [field]: value };
-// 		touched = { ...touched, [field]: true };
-//
-// 		if (config.validation?.validateOnBlur && touched[field]) {
-// 			validateField(field);
-// 		}
-// 	}
-//
-// 	function touchField(field: keyof T): void {
-// 		touched = { ...touched, [field]: true };
-//
-// 		if (config.validation?.validateOnBlur) {
-// 			validateField(field);
-// 		}
-// 	}
-//
-// 	function reset(): void {
-// 		data = structuredClone(config.initialData);
-// 		errors = {};
-// 		touched = {};
-// 	}
-//
-// 	return {
-// 		get data() {
-// 			return data;
-// 		},
-// 		get errors() {
-// 			return errors;
-// 		},
-// 		get touched() {
-// 			return touched;
-// 		},
-// 		get pending() {
-// 			return pending;
-// 		},
-// 		get dirty() {
-// 			return dirty;
-// 		},
-// 		get valid() {
-// 			return valid();
-// 		},
-//
-// 		submit,
-// 		validate: (field?: keyof T) => {
-// 			if (field) {
-// 				validateField(field);
-// 			} else {
-// 				validateForm();
-// 			}
-// 		},
-// 		reset,
-// 		setField,
-// 		setErrors: (newErrors: RequestErrors<T>) => {
-// 			errors = newErrors;
-// 		},
-// 		touchField
-// 	};
 // }
 //
