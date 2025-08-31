@@ -3,17 +3,19 @@ import { EnvironmentUtil } from 'azure-net-tools';
 
 export type AsyncStatus = 'idle' | 'pending' | 'success' | 'error';
 
-export interface AsyncSignalOptions<TData> {
+export interface AsyncSignalOptions<TData, TError = Error> {
 	server?: boolean;
 	immediate?: boolean;
 	watch?: (() => unknown)[];
-	initialData?: TData | null;
+	initialData?: TData;
+	onSuccess?: (data: TData) => void | Promise<void>;
+	onError?: (error: TError) => void | Promise<void>;
 	key?: string;
 }
 
 export interface AsyncSignalSvelte<TData, TError = Error> {
-	data: TData | null;
-	error: TError | null;
+	data?: TData;
+	error?: TError;
 	status: AsyncStatus;
 	pending: boolean;
 	execute: () => Promise<void>;
@@ -76,12 +78,12 @@ const asyncSignalManager = createAsyncSignalManager();
 
 export const createAsyncSignal = <TData, TError = Error>(
 	handler: (signal?: AbortSignal) => Promise<TData>,
-	options: AsyncSignalOptions<TData> = {}
+	options: AsyncSignalOptions<TData, TError> = {}
 ): AsyncSignalSvelte<TData, TError> => {
-	const { server = false, immediate = true, watch = [], initialData = null, key } = options;
+	const { server = false, immediate = true, watch = [], initialData = undefined, key } = options;
 
-	let data = $state<TData | null>(initialData);
-	let error = $state<TError | null>(null);
+	let data = $state<TData | undefined>(initialData);
+	let error = $state<TError>();
 	let status = $state<AsyncStatus>('idle');
 
 	const pending = $derived(status === 'pending');
@@ -96,7 +98,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 		abortController = new AbortController();
 
 		status = 'pending';
-		error = null;
+		error = undefined;
 
 		try {
 			const result = await handler(abortController.signal);
@@ -107,6 +109,9 @@ export const createAsyncSignal = <TData, TError = Error>(
 
 			data = result;
 			status = 'success';
+			if (options.onSuccess) {
+				options.onSuccess(result);
+			}
 		} catch (err) {
 			if (err instanceof Error && err.name === 'AbortError') {
 				return;
@@ -114,6 +119,9 @@ export const createAsyncSignal = <TData, TError = Error>(
 
 			error = err as TError;
 			status = 'error';
+			if (options.onError) {
+				options.onError(err as TError);
+			}
 		}
 	}
 
@@ -171,8 +179,8 @@ export const createAsyncSignal = <TData, TError = Error>(
 		execute,
 		refresh: execute,
 		reset: () => {
-			data = null;
-			error = null;
+			data = undefined;
+			error = undefined;
 			status = 'idle';
 			if (abortController) {
 				abortController.abort();

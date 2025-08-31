@@ -2,6 +2,7 @@ import { AppPresenter } from '../../../../core/Presenter/index.js';
 import { ApplicationProvider } from '../../Application/index.js';
 import { CreateScriptSchema, UpdateScriptSchema } from './Schema/index.js';
 import type { IScriptCreateRequest, IScriptUpdateRequest } from '../../Domain/Ports/Script/index.js';
+import type { IScript } from '../../Domain/Entities/Script/index.js';
 
 export const ScriptPresenter = AppPresenter('ScriptPresenter', ({ createAsyncResource, createAsyncAction }) => {
 	const { ScriptService } = ApplicationProvider();
@@ -10,8 +11,8 @@ export const ScriptPresenter = AppPresenter('ScriptPresenter', ({ createAsyncRes
 
 	const resource = async (id: number) => await createAsyncResource(ScriptService.resource(id));
 
-	const create = async (request: IScriptCreateRequest) =>
-		await createAsyncAction(ScriptService.create(CreateScriptSchema.from(request).json()), {
+	const create = async (request: Partial<IScriptCreateRequest>) =>
+		await createAsyncAction<IScript, IScriptCreateRequest>(ScriptService.create(CreateScriptSchema.from(request).json()), {
 			onSuccess: () => {
 				//TODO: add notification and redirect;
 			}

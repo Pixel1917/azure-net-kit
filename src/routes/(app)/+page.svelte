@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import type { PageProps } from '../../../.svelte-kit/types/src/routes/(app)/$types.js';
 	import { ScriptPresenter } from '../../app/contexts/app/Delivery/Script/index.js';
-	import { createAsyncSignal } from '$lib/index.js';
+	import { createActiveForm, createAsyncSignal } from '$lib/index.js';
 	import { ObjectUtil } from 'azure-net-tools';
 
 	const { data }: PageProps = $props();
@@ -14,6 +14,9 @@
 		initialData: data.scripts,
 		watch: [() => page]
 	});
+
+	const { create } = ScriptPresenter();
+	const form = createActiveForm<ReturnType<typeof create>>((formData) => create(formData));
 </script>
 
 <form action="?/logout" method="post" use:enhance>
@@ -21,6 +24,7 @@
 </form>
 
 Hello kitty
+{form.data.name}
 
 {@html ObjectUtil.renderAsString(signal.data?.data ?? {})}
 

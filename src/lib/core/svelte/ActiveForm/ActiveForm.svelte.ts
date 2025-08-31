@@ -2,37 +2,71 @@ import { ObjectUtil } from 'azure-net-tools';
 import type { RequestErrors } from '../../delivery/schema/index.js';
 import type { AsyncActionResponse } from '$lib/core/index.js';
 
-export interface FormConfig<FormData, Response> {
-	onSubmit: (formData: Partial<FormData>) => Promise<AsyncActionResponse<Response, FormData>>;
+export interface FormConfig<FormData> {
 	initialData?: FormData;
+	onSuccess?: () => Promise<void> | void;
+	onError?: () => Promise<void> | void;
 }
 
-export interface ActiveForm<FormData, Response> {
+export interface ActiveForm<FormData, Response, Custom> {
 	data: Partial<FormData>;
 	errors: RequestErrors<FormData>;
-	submit: () => Promise<AsyncActionResponse<Response, FormData>>;
-	reset: () => void;
+	submit: () => Promise<AsyncActionResponse<Response, FormData, Custom>>;
+	reset: (toInitial?: boolean) => void;
 	pending: boolean;
 	dirty: boolean;
 }
 
-export const createActiveForm = <FormData, Response = unknown>(config: FormConfig<FormData, Response>): ActiveForm<FormData, Response> => {
-	const initial: Partial<FormData> = config.initialData ?? {};
-	let formData = $state<Partial<FormData>>(ObjectUtil.deepClone(initial));
-	let formErrors = $state<RequestErrors<FormData>>({});
+type ExtractResponse<T> = T extends AsyncActionResponse<infer R, unknown, unknown> ? R : never;
+type ExtractFormData<T> = T extends AsyncActionResponse<unknown, infer D, unknown> ? D : never;
+type ExtractCustom<T> = T extends AsyncActionResponse<unknown, unknown, infer C> ? C : never;
 
+type UnwrapPromise<T> = T extends Promise<infer U> ? U : T;
+
+type ExtractFromSubmit<T> = {
+	response: ExtractResponse<UnwrapPromise<T>>;
+	formData: ExtractFormData<UnwrapPromise<T>>;
+	custom: ExtractCustom<UnwrapPromise<T>>;
+};
+
+export const createActiveForm = <SubmitReturn extends Promise<AsyncActionResponse<unknown, unknown, unknown>>>(
+	onSubmit: (formData: Partial<ExtractFromSubmit<SubmitReturn>['formData']>) => SubmitReturn,
+	config?: FormConfig<ExtractFromSubmit<SubmitReturn>['formData']>
+): ActiveForm<
+	ExtractFromSubmit<SubmitReturn>['formData'],
+	ExtractFromSubmit<SubmitReturn>['response'],
+	ExtractFromSubmit<SubmitReturn>['custom']
+> => {
+	type FormData = ExtractFromSubmit<SubmitReturn>['formData'];
+	type Response = ExtractFromSubmit<SubmitReturn>['response'];
+	type Custom = ExtractFromSubmit<SubmitReturn>['custom'];
+
+	const initial: Partial<FormData> = config?.initialData ?? {};
+	let formData = $state<Partial<FormData>>(ObjectUtil.deepClone({}));
+	let formErrors = $state<RequestErrors<FormData>>({});
 	let pending = $state(false);
 
 	const dirty = $derived(JSON.stringify(formData) !== JSON.stringify(initial));
 
-	const submit = async () => {
+	const submit = async (): Promise<AsyncActionResponse<Response, FormData, Custom>> => {
 		pending = true;
-		const result = await config.onSubmit(formData);
-		if (result.error?.fields) {
-			formErrors = result.error?.fields;
+		try {
+			const result = await onSubmit(formData);
+
+			if (result.error?.fields) {
+				formErrors = result.error.fields as RequestErrors<FormData>;
+			}
+
+			if (result.success) {
+				await config?.onSuccess?.();
+			} else {
+				await config?.onError?.();
+			}
+
+			return result as Promise<AsyncActionResponse<Response, FormData, Custom>>;
+		} finally {
+			pending = false;
 		}
-		pending = false;
-		return result;
 	};
 
 	const reset = (toInitial = false) => {
@@ -43,6 +77,9 @@ export const createActiveForm = <FormData, Response = unknown>(config: FormConfi
 	return {
 		get data() {
 			return formData;
+		},
+		set data(value: Partial<FormData>) {
+			formData = value;
 		},
 		get errors() {
 			return formErrors;
