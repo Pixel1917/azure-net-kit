@@ -1,19 +1,19 @@
 import { createErrorParser, type AppError, type ErrorType } from './ErrorHandler.js';
 
-export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: ReturnType<typeof createErrorParser<Custom>> }) => {
-	type ActionResponse<T, D = unknown> = {
-		success: boolean;
-		response: T;
-		error?: AppError<D, Custom>;
-	};
+export interface AsyncActionResponse<T, D = unknown, CustomErrorField = never> {
+	success: boolean;
+	response: T;
+	error?: AppError<D, CustomErrorField>;
+}
 
+export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: ReturnType<typeof createErrorParser<Custom>> }) => {
 	const errorParser = opts?.parseError ?? createErrorParser();
 
-	const createAsyncAction = async <Req = unknown, Res = unknown>(
+	const createAsyncAction = async <Res = unknown, Req = unknown>(
 		action: Promise<Res>,
 		args?: {
-			onSuccess?: (result: ActionResponse<Res, undefined>) => Promise<unknown> | unknown;
-			onError?: (result: ActionResponse<never, Req>) => Promise<unknown> | unknown;
+			onSuccess?: (result: AsyncActionResponse<Res, undefined, Custom>) => Promise<unknown> | unknown;
+			onError?: (result: AsyncActionResponse<never, Req, Custom>) => Promise<unknown> | unknown;
 			reject?: boolean;
 			abort?: {
 				condition: boolean;
@@ -21,7 +21,7 @@ export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: Retur
 			};
 			fallbackResponse?: Res;
 		}
-	): Promise<ActionResponse<Res, Req>> => {
+	): Promise<AsyncActionResponse<Res, Req, Custom>> => {
 		if (args?.abort?.condition) {
 			args.abort.onAbort?.();
 			const abortError: AppError<Req, Custom> = {
@@ -39,14 +39,14 @@ export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: Retur
 
 		try {
 			const response = await action;
-			const result = { response, success: true } as ActionResponse<Res, Req>;
-			await args?.onSuccess?.(result as ActionResponse<Res, undefined>);
+			const result = { response, success: true } as AsyncActionResponse<Res, Req, Custom>;
+			await args?.onSuccess?.(result as AsyncActionResponse<Res, undefined, Custom>);
 			return result;
 		} catch (err) {
 			const error = errorParser<Req>(err as ErrorType<Req>);
 			if (args?.reject) throw error;
 			const result = { error, response: args?.fallbackResponse as Res, success: false };
-			await args?.onError?.(result as ActionResponse<never, Req>);
+			await args?.onError?.(result as AsyncActionResponse<never, Req, Custom>);
 			return result;
 		}
 	};

@@ -3,13 +3,13 @@ import { SchemaFail, type RequestErrors } from '../schema/index.js';
 
 export type AppErrorType = 'http' | 'app' | 'schema' | 'abort';
 
-export interface AppError<T = unknown, D = never> {
+export interface AppError<T = unknown, CustomErrorField = never> {
 	type: AppErrorType;
 	message: string;
 	fields?: RequestErrors<T>;
 	status?: number;
 	original?: HttpServiceError<T> | SchemaFail<T> | Error;
-	custom?: D;
+	custom?: CustomErrorField;
 }
 
 export type ErrorType<T = unknown> = Error | HttpServiceError<T> | SchemaFail<T>;
