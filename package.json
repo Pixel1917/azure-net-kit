@@ -35,10 +35,10 @@
 			"types": "./dist/index.d.ts",
 			"svelte": "./dist/index.js"
 		},
-        "./constants": {
-          "types": "./dist/core/constants/index.d.ts",
-          "svelte": "./dist/core/constants/index.js"
-        },
+		"./constants": {
+			"types": "./dist/core/constants/index.d.ts",
+			"svelte": "./dist/core/constants/index.js"
+		},
 		"./infra": {
 			"types": "./dist/core/infra/index.d.ts",
 			"svelte": "./dist/core/infra/index.js"
