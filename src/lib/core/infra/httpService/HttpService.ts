@@ -48,7 +48,7 @@ export class HttpServiceError<T> implements IHttpServiceError<T> {
 }
 
 export interface IHttpServiceOptions extends Options {
-	responseFormat?: 'json' | 'blob' | 'text';
+	responseFormat?: 'json' | 'blob' | 'text' | 'arrayBuffer' | 'body';
 }
 
 export const httpServiceEventBus = new EventBus<'HttpServiceError'>({
@@ -82,11 +82,37 @@ export class HttpService {
 	}
 
 	private async prepareResponse<T>(request: KyResponse<T>, format: IHttpServiceOptions['responseFormat'] = 'json') {
+		let data: T;
+		try {
+			switch (format) {
+				case 'blob':
+					data = (await request.blob()) as T;
+					break;
+				case 'text':
+					data = (await request.text()) as T;
+					break;
+				case 'arrayBuffer':
+					data = (await request.arrayBuffer()) as T;
+					break;
+				case 'body':
+					data = request.body as T;
+					break;
+				case 'json':
+					data = (await request.json()) as T;
+					break;
+				default:
+					data = (await request.json()) as T;
+					break;
+			}
+		} catch {
+			data = null as T;
+		}
+
 		return new HttpServiceResponse<T>({
 			headers: request.headers instanceof Headers ? Object.fromEntries(request.headers.entries()) : {},
 			status: request.status,
 			success: request.status < 400,
-			data: await request?.[format](),
+			data,
 			message: 'Request completed'
 		});
 	}
@@ -147,8 +173,8 @@ export class HttpService {
 	}
 
 	private async handleError(err?: HTTPError): Promise<unknown> {
-		let headers: Record<string, string> = {};
-		let response: unknown = {};
+		let headers: Record<string, string>;
+		let response: unknown;
 		try {
 			headers = err?.response?.headers && err?.response?.headers instanceof Headers ? Object.fromEntries(err?.response?.headers.entries()) : {};
 			response = await err?.response?.json();
