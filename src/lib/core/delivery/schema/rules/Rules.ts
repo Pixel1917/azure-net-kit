@@ -1,6 +1,6 @@
 import type { BaseValidationMessages } from './messages/types.js';
 import type { ValidationErrorsMap, ValidationMessage, ValidationParams, ValidationRuleResult } from '../index.js';
-import { type CountryCode, isValidNumber } from 'libphonenumber-js';
+import {masks} from '../../../constants/masks.js';
 
 export type ValidationRuleParams<T extends keyof BaseValidationMessages, D = object> = D & { message?: BaseValidationMessages[T] };
 
@@ -156,11 +156,76 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
-	const phone = <T = unknown, D = unknown>(params?: ValidationRuleParams<'phone', { country: CountryCode }>): ValidationRuleResult<T, D> => {
-		const { message, country = 'RU' } = { ...params, message: params?.message ?? validationMessages.phone };
+	const phone = <T = unknown, D = unknown>(params?: ValidationRuleParams<'phone'>): ValidationRuleResult<T, D> => {
+		const { message } = { ...params, message: params?.message ?? validationMessages.phone };
+
+		const countryCodes = new Set(
+			Object.values(masks).map(country => country.cc)
+		);
+
+		countryCodes.add('8');
 		return ({ val }: ValidationParams<T, D>): ValidationMessage | undefined => {
 			if (checkVal(val)) {
-				return isValidNumber(String(val), country) ? undefined : message();
+				// eslint-disable-next-line
+				const cleanedVal = String(val).replace(/[\s\-\(\)\.]/g, '');
+
+				if (!cleanedVal) {
+					return message();
+				}
+
+
+				if (!/^\+?\d+$/.test(cleanedVal)) {
+					return message();
+				}
+
+				if (cleanedVal.length < 7 || cleanedVal.length > 16) {
+					return message();
+				}
+
+				let hasValidCountryCode = false;
+
+				if (cleanedVal.startsWith('+')) {
+					const sortedCodes = Array.from(countryCodes)
+						.filter(code => code.startsWith('+'))
+						.sort((a, b) => b.length - a.length);
+
+					for (const code of sortedCodes) {
+						if (cleanedVal.startsWith(code)) {
+							const remainingDigits = cleanedVal.slice(code.length);
+							if (remainingDigits.length >= 4) {
+								hasValidCountryCode = true;
+								break;
+							}
+						}
+					}
+				}
+				else if (cleanedVal.startsWith('8')) {
+					if (cleanedVal.length === 11) {
+						hasValidCountryCode = true;
+					}
+				}
+				else if (/^\d+$/.test(cleanedVal)) {
+					const codesWithoutPlus = Array.from(countryCodes)
+						.filter(code => !code.startsWith('+') && code !== 'N/A')
+						.map(code => code.replace('+', ''))
+						.sort((a, b) => b.length - a.length);
+
+					for (const code of codesWithoutPlus) {
+						if (cleanedVal.startsWith(code)) {
+							const remainingDigits = cleanedVal.slice(code.length);
+							if (remainingDigits.length >= 4) {
+								hasValidCountryCode = true;
+								break;
+							}
+						}
+					}
+
+					if (!hasValidCountryCode && cleanedVal.length >= 7 && cleanedVal.length <= 10) {
+						hasValidCountryCode = true;
+					}
+				}
+
+				return hasValidCountryCode ? undefined : message();
 			}
 			return undefined;
 		};

@@ -3,7 +3,7 @@ export type ObjectFormat = 'default' | 'nested-brackets';
 
 export interface IQueryBuilder {
 	build(
-		params: Record<string, unknown>,
+		query: Record<string, unknown>,
 		opts?: {
 			arrayFormat?: ArrayFormat;
 			objectFormat?: ObjectFormat;
@@ -20,14 +20,19 @@ export class QueryBuilder implements IQueryBuilder {
 		this.defaultObjectFormat = options?.objectFormat ?? 'default';
 	}
 
+	transform(object: Record<string, unknown>): Record<string, unknown> {
+		return object;
+	}
+
 	build(
-		params: Record<string, unknown> = {},
+		query: Record<string, unknown> = {},
 		opts?: {
 			delimiter?: boolean;
 			arrayFormat?: ArrayFormat;
 			objectFormat?: ObjectFormat;
 		}
 	): string {
+		const params = this.transform(query);
 		const arrayFormat = opts?.arrayFormat ?? this.defaultArrayFormat;
 		const objectFormat = opts?.objectFormat ?? this.defaultObjectFormat;
 
