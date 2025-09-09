@@ -85,7 +85,7 @@ export class HttpService {
 		return new HttpServiceResponse<T>({
 			headers: request.headers instanceof Headers ? Object.fromEntries(request.headers.entries()) : {},
 			status: request.status,
-			success: request.status <= 400,
+			success: request.status < 400,
 			data: await request?.[format](),
 			message: 'Request completed'
 		});

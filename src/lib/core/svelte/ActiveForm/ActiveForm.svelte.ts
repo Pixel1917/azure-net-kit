@@ -2,9 +2,9 @@ import { ObjectUtil } from 'azure-net-tools';
 import type { RequestErrors } from '../../delivery/schema/index.js';
 import type { AsyncActionResponse } from '$lib/core/index.js';
 
-export interface FormConfig<FormData> {
+export interface FormConfig<FormData, Response> {
 	initialData?: FormData;
-	onSuccess?: () => Promise<void> | void;
+	onSuccess?: (response: Response) => Promise<void> | void;
 	onError?: () => Promise<void> | void;
 }
 
@@ -31,7 +31,7 @@ type ExtractFromSubmit<T> = {
 
 export const createActiveForm = <SubmitReturn extends Promise<AsyncActionResponse<unknown, unknown, unknown>>>(
 	onSubmit: (formData: Partial<ExtractFromSubmit<SubmitReturn>['formData']>) => SubmitReturn,
-	config?: FormConfig<ExtractFromSubmit<SubmitReturn>['formData']>
+	config?: FormConfig<ExtractFromSubmit<SubmitReturn>['formData'], ExtractFromSubmit<SubmitReturn>['response']>
 ): ActiveForm<
 	ExtractFromSubmit<SubmitReturn>['formData'],
 	ExtractFromSubmit<SubmitReturn>['response'],
@@ -42,7 +42,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	type Custom = ExtractFromSubmit<SubmitReturn>['custom'];
 
 	const initial: Partial<FormData> = config?.initialData ?? {};
-	let formData = $state<Partial<FormData>>(ObjectUtil.deepClone({}));
+	let formData = $state<Partial<FormData>>(ObjectUtil.deepClone(initial));
 	let formErrors = $state<RequestErrors<FormData>>({});
 	let pending = $state(false);
 
@@ -58,7 +58,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 			}
 
 			if (result.success) {
-				await config?.onSuccess?.();
+				await config?.onSuccess?.(result.response as Response);
 			} else {
 				await config?.onError?.();
 			}
