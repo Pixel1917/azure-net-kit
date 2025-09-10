@@ -20,12 +20,12 @@ export class QueryBuilder implements IQueryBuilder {
 		this.defaultObjectFormat = options?.objectFormat ?? 'default';
 	}
 
-	transform(object: Record<string, unknown>): Record<string, unknown> {
+	transform(object: object): object {
 		return object;
 	}
 
 	build(
-		query: Record<string, unknown> = {},
+		query: object = {},
 		opts?: {
 			delimiter?: boolean;
 			arrayFormat?: ArrayFormat;
@@ -41,7 +41,7 @@ export class QueryBuilder implements IQueryBuilder {
 		return delimiter && parts.length ? `?${parts.join('&')}` : parts.join('&');
 	}
 
-	private serialize(obj: Record<string, unknown>, arrayFormat: ArrayFormat, objectFormat: ObjectFormat, prefix = ''): string[] {
+	private serialize(obj: object, arrayFormat: ArrayFormat, objectFormat: ObjectFormat, prefix = ''): string[] {
 		const parts: string[] = [];
 
 		for (const [key, value] of Object.entries(obj)) {
