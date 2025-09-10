@@ -6,11 +6,13 @@ export interface AsyncActionResponse<T, D = unknown, CustomErrorField = never> {
 	error?: AppError<D, CustomErrorField>;
 }
 
+type ActionOrThunk<Res> = Promise<Res> | (() => Promise<Res>);
+
 export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: ReturnType<typeof createErrorParser<Custom>> }) => {
 	const errorParser = opts?.parseError ?? createErrorParser();
 
 	const createAsyncAction = async <Res = unknown, Req = unknown>(
-		action: Promise<Res>,
+		action: ActionOrThunk<Res>,
 		args?: {
 			onSuccess?: (result: AsyncActionResponse<Res, undefined, Custom>) => Promise<unknown> | unknown;
 			onError?: (result: AsyncActionResponse<never, Req, Custom>) => Promise<unknown> | unknown;
@@ -38,7 +40,7 @@ export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: Retur
 		}
 
 		try {
-			const response = await action;
+			const response = await Promise.resolve(typeof action === 'function' ? (action as () => Promise<Res>)() : action);
 			const result = { response, success: true } as AsyncActionResponse<Res, Req, Custom>;
 			await args?.onSuccess?.(result as AsyncActionResponse<Res, undefined, Custom>);
 			return result;
@@ -52,7 +54,7 @@ export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: Retur
 	};
 
 	const createAsyncResource = async <Res, Req = unknown>(
-		action: Promise<Res>,
+		action: ActionOrThunk<Res>,
 		args?: {
 			onSuccess?: (result: Res) => Promise<unknown> | unknown;
 			onError?: (error: AppError<Req, Custom>) => Promise<unknown> | unknown;
@@ -70,7 +72,7 @@ export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: Retur
 		}
 
 		try {
-			const response = await action;
+			const response = await Promise.resolve(typeof action === 'function' ? (action as () => Promise<Res>)() : action);
 			await args?.onSuccess?.(response);
 			return response;
 		} catch (err) {

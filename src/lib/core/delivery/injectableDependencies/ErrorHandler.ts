@@ -42,9 +42,9 @@ export const baseParseBaseError = <D = never>(error: Error): AppError<never, D> 
 };
 
 export const createErrorParser = <Custom = unknown>(parsers?: {
-	parseBaseError: typeof baseParseBaseError;
-	parseHttpError: typeof baseParseHttpError;
-	parseSchemaError: typeof baseParseSchemaError;
+	parseBaseError?: typeof baseParseBaseError;
+	parseHttpError?: typeof baseParseHttpError;
+	parseSchemaError?: typeof baseParseSchemaError;
 }): (<T>(error: ErrorType<T>) => AppError<T, Custom>) => {
 	return <T = unknown>(error: ErrorType<T>) => {
 		const { parseBaseError = baseParseBaseError, parseHttpError = baseParseHttpError, parseSchemaError = baseParseSchemaError } = parsers ?? {};
