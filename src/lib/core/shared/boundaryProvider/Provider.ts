@@ -17,15 +17,17 @@ type ProviderFactory<T extends ServiceMap, D extends Record<string, ProviderWith
 	[K in keyof D]: InferProviderType<D[K]>;
 }) => T;
 
-interface LayerProviderOptions<D> {
+export interface ProviderSettings<T extends ServiceMap, D extends Record<string, ProviderWithType<ServiceMap>>> {
 	dependsOn?: D;
+	boot?: (services: ResolvedServices<T>) => void | Promise<void>;
+	register: ProviderFactory<T, D>;
 }
 
 const clientCache = new Map<string, Map<string, unknown>>();
-
 const factoriesCache = new WeakMap<ProviderFactory<ServiceMap, Record<string, ProviderWithType<ServiceMap>>>, ServiceMap>();
-
 const providerProxyCache = new Map<string, ResolvedServices<ServiceMap>>();
+
+const clientBootFlags = new Map<string, boolean>();
 
 const getProviderCache = (providerName: string): Map<string, unknown> => {
 	if (EnvironmentUtil.isBrowser) {
@@ -53,20 +55,45 @@ const getProviderCache = (providerName: string): Map<string, unknown> => {
 	}
 };
 
+const getBootFlag = (providerName: string): boolean => {
+	if (EnvironmentUtil.isBrowser) {
+		return clientBootFlags.get(providerName) ?? false;
+	} else {
+		const context = RequestContext.current();
+		if (!context.data.bootFlags) {
+			context.data.bootFlags = new Map<string, boolean>();
+		}
+		const bootFlags = context.data.bootFlags as Map<string, boolean>;
+		return bootFlags.get(providerName) ?? false;
+	}
+};
+
+const setBootFlag = (providerName: string, value: boolean): void => {
+	if (EnvironmentUtil.isBrowser) {
+		clientBootFlags.set(providerName, value);
+	} else {
+		const context = RequestContext.current();
+		if (!context.data.bootFlags) {
+			context.data.bootFlags = new Map<string, boolean>();
+		}
+		const bootFlags = context.data.bootFlags as Map<string, boolean>;
+		bootFlags.set(providerName, value);
+	}
+};
+
 export const createBoundaryProvider = <T extends ServiceMap, D extends Record<string, ProviderWithType<ServiceMap>>>(
 	name: string,
-	services: ProviderFactory<T, D>,
-	options?: LayerProviderOptions<D>
+	settings: ProviderSettings<T, D>
 ): ProviderWithType<T> => {
-	const { dependsOn = {} as D } = options ?? {};
+	const { dependsOn = {} as D, boot, register } = settings;
 	type Deps = { [K in keyof D]: InferProviderType<D[K]> };
+
 	const providerFn = () => {
 		if (EnvironmentUtil.isBrowser && providerProxyCache.has(name)) {
 			return providerProxyCache.get(name) as ResolvedServices<T>;
 		}
 
 		const cache = getProviderCache(name);
-
 		let factories: T | null = null;
 
 		type UntypedFactoryCache = ProviderFactory<ServiceMap, Record<string, ProviderWithType<ServiceMap>>>;
@@ -74,8 +101,8 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 		const getFactories = (): T => {
 			if (factories) return factories;
 
-			if (factoriesCache.has(services as UntypedFactoryCache)) {
-				factories = factoriesCache.get(services as UntypedFactoryCache) as T;
+			if (factoriesCache.has(register as UntypedFactoryCache)) {
+				factories = factoriesCache.get(register as UntypedFactoryCache) as T;
 				return factories;
 			}
 
@@ -97,10 +124,10 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 				);
 			}
 
-			factories = services(deps as Deps);
+			factories = register(deps as Deps);
 
 			if (EnvironmentUtil.isBrowser) {
-				factoriesCache.set(services as UntypedFactoryCache, factories);
+				factoriesCache.set(register as UntypedFactoryCache, factories);
 			}
 
 			return factories;
@@ -145,8 +172,19 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 			providerProxyCache.set(name, providerProxy);
 		}
 
+		if (boot && !getBootFlag(name)) {
+			setBootFlag(name, true);
+			getFactories();
+
+			const bootResult = boot(providerProxy);
+			if (bootResult instanceof Promise) {
+				bootResult.catch((err) => console.error(`Error in boot for provider '${name}':`, err));
+			}
+		}
+
 		return providerProxy;
 	};
+
 	return providerFn as ProviderWithType<T>;
 };
 
@@ -173,6 +211,7 @@ export function cleanupProvider(name: string): void {
 			void cleanupCache(cache);
 		}
 		providerProxyCache.delete(name);
+		clientBootFlags.delete(name);
 	} else {
 		const context = RequestContext.current();
 		const providers = context.data.providers as Map<string, Map<string, unknown>> | undefined;

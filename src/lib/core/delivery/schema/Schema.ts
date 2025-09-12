@@ -50,14 +50,19 @@ interface SchemaBuilder<SchemaData, Rules = unknown, TransformResult = SchemaDat
 	create(): Schema<SchemaData, TransformResult, CustomMethods>;
 }
 
-interface SchemaInstance<TransformResult> {
-	json(): TransformResult;
-	formData(): FormData;
-	validated(): boolean;
+interface SchemaInstance<TransformResult, SchemaData> {
+	json(validate?: boolean): TransformResult;
+	formData(validate?: boolean): FormData;
+	validated(): {
+		valid: boolean;
+		errors: RequestErrors<SchemaData>;
+		json(): TransformResult;
+		formData(): FormData;
+	};
 }
 
 export type Schema<SchemaData, TransformResult, CustomMethods> = CustomMethods & {
-	from(data: Partial<SchemaData> | FormData): SchemaInstance<TransformResult>;
+	from(data: Partial<SchemaData> | FormData): SchemaInstance<TransformResult, SchemaData>;
 	getSchemaError(e: unknown): RequestErrors<SchemaData> | undefined;
 };
 
@@ -123,7 +128,7 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 				}
 				return undefined;
 			},
-			from(data: Partial<SchemaData> | FormData): SchemaInstance<TransformResult> {
+			from(data: Partial<SchemaData> | FormData): SchemaInstance<TransformResult, SchemaData> {
 				const _preparedData = prepare(data);
 				let _errors: RequestErrors<SchemaData> = {};
 				let _isValid = true;
@@ -132,45 +137,50 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 					throw Error('Data to validate is not an object');
 				}
 
-				const validated = (): boolean => {
-					if (!rules) return true;
-
+				const validated = (): ReturnType<SchemaInstance<TransformResult, SchemaData>['validated']> => {
 					_isValid = true;
 					_errors = {};
-					const definedSchema = rules(rulesFactory);
+					const definedSchema = rules?.(rulesFactory);
+					if (definedSchema && typeof definedSchema === 'object' && Object.keys(definedSchema).length) {
+						for (const key in definedSchema) {
+							const fieldRules = definedSchema[key as DeepKeys<SchemaData>] ?? [];
+							const value = getByPath(key as DeepKeys<SchemaData>, _preparedData);
 
-					for (const key in definedSchema) {
-						const fieldRules = definedSchema[key as DeepKeys<SchemaData>] ?? [];
-						const value = getByPath(key as DeepKeys<SchemaData>, _preparedData);
+							for (const rule of fieldRules) {
+								const failMessage = rule({
+									val: value,
+									listValues: _preparedData,
+									key: key as DeepKeys<SchemaData>
+								});
 
-						for (const rule of fieldRules) {
-							const failMessage = rule({
-								val: value,
-								listValues: _preparedData,
-								key: key as DeepKeys<SchemaData>
-							});
-
-							if (failMessage) {
-								setByPath(_errors, key as DeepKeys<SchemaData>, failMessage);
-								_isValid = false;
-								break;
+								if (failMessage) {
+									setByPath(_errors, key as DeepKeys<SchemaData>, failMessage);
+									_isValid = false;
+									break;
+								}
 							}
 						}
 					}
 
-					if (!_isValid) {
-						throw new SchemaFail<SchemaData>(_errors);
-					}
-					return true;
+					return {
+						valid: _isValid,
+						errors: _errors,
+						json: () => json(false),
+						formData: () => formData(false)
+					};
 				};
 
-				const json = (): TransformResult => {
-					validated();
+				const json = (validate: boolean = true): TransformResult => {
+					if (validate && !validated().valid) {
+						throw new SchemaFail<SchemaData>(_errors);
+					}
 					return transform(_preparedData as SchemaData) as TransformResult;
 				};
 
-				const formData = (): FormData => {
-					validated();
+				const formData = (validate: boolean = true): FormData => {
+					if (validate && !validated().valid) {
+						throw new SchemaFail<SchemaData>(_errors);
+					}
 					return FormDataUtil.fromObject(transform(_preparedData as SchemaData));
 				};
 

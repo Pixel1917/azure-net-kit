@@ -3,7 +3,7 @@ import type { RequestErrors } from '../../delivery/schema/index.js';
 import type { AsyncActionResponse } from '$lib/core/index.js';
 
 export interface FormConfig<FormData, Response> {
-	initialData?: FormData;
+	initialData?: Partial<FormData>;
 	onSuccess?: (response: Response) => Promise<void> | void;
 	onError?: () => Promise<void> | void;
 }
@@ -51,7 +51,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	const submit = async (): Promise<AsyncActionResponse<Response, FormData, Custom>> => {
 		pending = true;
 		try {
-			const result = await onSubmit(formData);
+			const result = await onSubmit(ObjectUtil.deepClone(formData));
 
 			if (result.error?.fields) {
 				formErrors = result.error.fields as RequestErrors<FormData>;

@@ -1,5 +1,4 @@
 import ky, { type KyResponse, type Options, type HTTPError } from 'ky';
-import { EventBus } from 'azure-net-tools';
 
 export interface IHttpServiceResponse<T = unknown> {
 	headers: Record<string, string>;
@@ -50,10 +49,6 @@ export class HttpServiceError<T> implements IHttpServiceError<T> {
 export interface IHttpServiceOptions extends Options {
 	responseFormat?: 'json' | 'blob' | 'text' | 'arrayBuffer' | 'body';
 }
-
-export const httpServiceEventBus = new EventBus<'HttpServiceError'>({
-	HttpServiceError: []
-});
 
 export class HttpService {
 	private readonly baseUrl;
@@ -190,7 +185,6 @@ export class HttpService {
 			original: err,
 			message: 'Request failed'
 		});
-		httpServiceEventBus.publish('HttpServiceError', error);
 		return this.errorHandler ? this.errorHandler(error) : error;
 	}
 }
