@@ -1,4 +1,4 @@
-import ky, { type KyResponse, type Options, type HTTPError } from 'ky';
+import ky, { type KyResponse, type Options, type HTTPError, type ResponsePromise } from 'ky';
 
 export interface IHttpServiceResponse<T = unknown> {
 	headers: Record<string, string>;
@@ -50,25 +50,42 @@ export interface IHttpServiceOptions extends Options {
 	responseFormat?: 'json' | 'blob' | 'text' | 'arrayBuffer' | 'body';
 }
 
+export interface IHttpServiceInstance {
+	<T>(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise<T>;
+	get<T>(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise<T>;
+	post<T>(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise<T>;
+	put<T>(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise<T>;
+	delete<T>(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise<T>;
+	patch<T>(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise<T>;
+	head(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise;
+	create(defaultOptions?: IHttpServiceOptions): IHttpServiceInstance;
+	extend: (defaultOptions: IHttpServiceOptions | ((parentOptions: IHttpServiceOptions) => IHttpServiceOptions)) => IHttpServiceInstance;
+	readonly stop: typeof stop;
+}
+
 export class HttpService {
 	private readonly baseUrl;
 	private readonly instance;
 	private readonly requestHandler?: (options: Options) => void | Promise<void>;
-	private readonly errorHandler?: (err: IHttpServiceError) => unknown;
+	private readonly errorHandler?: (err: IHttpServiceError) => HttpServiceError<unknown>;
+	private readonly globalErrorHandler?: (err: unknown) => Promise<HttpServiceError<unknown>>;
 
 	constructor(opts: {
 		baseUrl: string;
+		instance?: IHttpServiceInstance;
 		baseOptions?: Options;
-		requestHandler?: (options: Options) => void | Promise<void>;
-		errorHandler?: (err: IHttpServiceError) => unknown;
+		onRequest?: (options: Options) => void | Promise<void>;
+		onError?: (err: IHttpServiceError) => HttpServiceError<unknown>;
+		handleError?: (err: unknown) => Promise<HttpServiceError<unknown>>;
 	}) {
 		this.baseUrl = opts.baseUrl;
-		this.instance = ky.create(opts?.baseOptions);
-		this.errorHandler = opts?.errorHandler ?? undefined;
-		this.requestHandler = opts?.requestHandler ?? undefined;
+		this.instance = opts.instance ? opts.instance.create(opts?.baseOptions) : ky.create(opts?.baseOptions);
+		this.errorHandler = opts?.onError ?? undefined;
+		this.requestHandler = opts?.onRequest ?? undefined;
+		this.globalErrorHandler = opts?.handleError ?? undefined;
 	}
 
-	private async prepareOptions(requestOptions?: Options) {
+	private async prepareOptions(requestOptions?: IHttpServiceOptions) {
 		const options = typeof requestOptions === 'object' ? { ...requestOptions } : {};
 		if (this.requestHandler) {
 			await this.requestHandler(options);
@@ -167,7 +184,11 @@ export class HttpService {
 			});
 	}
 
-	private async handleError(err?: HTTPError): Promise<unknown> {
+	private async handleError(error: unknown): Promise<HttpServiceError<unknown>> {
+		return this.globalErrorHandler ? await this.globalErrorHandler(error) : await this.baseErrorHandler(error as HTTPError);
+	}
+
+	private async baseErrorHandler(err?: HTTPError): Promise<HttpServiceError<unknown>> {
 		let headers: Record<string, string>;
 		let response: unknown;
 		try {

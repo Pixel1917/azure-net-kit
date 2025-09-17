@@ -9,6 +9,7 @@ export interface IQueryBuilder {
 			objectFormat?: ObjectFormat;
 		}
 	): string;
+	transform(object: object): object;
 }
 
 export class QueryBuilder implements IQueryBuilder {

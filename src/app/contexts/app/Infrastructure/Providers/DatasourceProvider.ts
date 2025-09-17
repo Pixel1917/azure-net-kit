@@ -8,7 +8,7 @@ export const DatasourceProvider = createBoundaryProvider('DatasourceProvider', {
 			new AzureNetRestDatasource({
 				http: new HttpService({
 					baseUrl: `https://api-laravel.azure-net.ru/back`,
-					requestHandler: (options) => {
+					onRequest: (options) => {
 						console.log('Ya in Opcii sizhu');
 						const token = UniversalCookie.get('token');
 						console.log('Ya blyat token', token);
