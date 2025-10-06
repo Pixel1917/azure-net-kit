@@ -1,4 +1,4 @@
-import ky, { type KyResponse, type Options, type HTTPError, type ResponsePromise } from 'ky';
+import ky, { type Options, type HTTPError } from 'ky';
 
 export interface IHttpServiceResponse<T = unknown> {
 	headers: Record<string, string>;
@@ -50,16 +50,23 @@ export interface IHttpServiceOptions extends Options {
 	responseFormat?: 'json' | 'blob' | 'text' | 'arrayBuffer' | 'body';
 }
 
+export interface IHttpServiceInstanceResponse<T = unknown> extends Response {
+	arrayBuffer: () => Promise<ArrayBuffer>;
+	blob: () => Promise<Blob>;
+	formData: () => Promise<FormData>;
+	json: <J = T>() => Promise<J>;
+	text: () => Promise<string>;
+}
+
 export interface IHttpServiceInstance {
-	<T>(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise<T>;
-	get<T>(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise<T>;
-	post<T>(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise<T>;
-	put<T>(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise<T>;
-	delete<T>(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise<T>;
-	patch<T>(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise<T>;
-	head(url: string | URL | Request, options?: IHttpServiceOptions): ResponsePromise;
-	create(defaultOptions?: IHttpServiceOptions): IHttpServiceInstance;
-	extend: (defaultOptions: IHttpServiceOptions | ((parentOptions: IHttpServiceOptions) => IHttpServiceOptions)) => IHttpServiceInstance;
+	get: <T>(url: string | URL | Request, options?: IHttpServiceOptions) => Promise<IHttpServiceInstanceResponse<T>>;
+	post: <T>(url: string | URL | Request, options?: IHttpServiceOptions) => Promise<IHttpServiceInstanceResponse<T>>;
+	put: <T>(url: string | URL | Request, options?: IHttpServiceOptions) => Promise<IHttpServiceInstanceResponse<T>>;
+	delete: <T>(url: string | URL | Request, options?: IHttpServiceOptions) => Promise<IHttpServiceInstanceResponse<T>>;
+	patch: <T>(url: string | URL | Request, options?: IHttpServiceOptions) => Promise<IHttpServiceInstanceResponse<T>>;
+	head?: (url: string | URL | Request, options?: IHttpServiceOptions) => Promise<IHttpServiceInstanceResponse>;
+	create: (defaultOptions?: IHttpServiceOptions) => IHttpServiceInstance;
+	extend?: (defaultOptions: IHttpServiceOptions | ((parentOptions: IHttpServiceOptions) => IHttpServiceOptions)) => IHttpServiceInstance;
 	readonly stop: typeof stop;
 }
 
@@ -93,7 +100,7 @@ export class HttpService {
 		return options;
 	}
 
-	private async prepareResponse<T>(request: KyResponse<T>, format: IHttpServiceOptions['responseFormat'] = 'json') {
+	private async prepareResponse<T>(request: IHttpServiceInstanceResponse<T>, format: IHttpServiceOptions['responseFormat'] = 'json') {
 		let data: T;
 		try {
 			switch (format) {

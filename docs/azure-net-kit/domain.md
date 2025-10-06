@@ -1,60 +1,3 @@
-# Слой домена (Domain)
-
-Слой домена содержит основные компоненты для организации бизнес-логики приложения, включая провайдеры границ, управление событиями, middleware и другие базовые абстракции.
-
-## 🏗️ Основные компоненты
-
-### Boundary Provider (Провайдер границ)
-
-**Файл:** `src/lib/core/shared/boundaryProvider/Provider.ts`
-
-Система управления зависимостями с поддержкой иерархии провайдеров.
-
-#### createBoundaryProvider
-
-Создает провайдер с управлением жизненным циклом сервисов.
-
-```typescript
-import { createBoundaryProvider } from '@azure-net/kit';
-
-// Определение типов сервисов
-interface InfraServices {
-	AuthRepository: () => AuthRepository;
-	ScriptRepository: () => ScriptRepository;
-}
-
-// Создание провайдера
-export const InfrastructureProvider = createBoundaryProvider('InfrastructureProvider', {
-	dependsOn: { DatasourceProvider }, // Зависимости от других провайдеров
-	register: ({ DatasourceProvider }) => ({
-		AuthRepository: () => new AuthRepository(DatasourceProvider.AzureNetRestDatasource),
-		ScriptRepository: () => new ScriptRepository(DatasourceProvider.AzureNetRestDatasource)
-	}),
-	boot: async (services) => {
-		// Опциональная функция инициализации
-		console.log('Infrastructure Provider загружен');
-	}
-});
-```
-
-#### Особенности:
-
-- **Ленивая инициализация** - сервисы создаются по требованию
-- **Кеширование** - каждый сервис создается один раз
-- **Зависимости** - автоматическое разрешение зависимостей между провайдерами
-- **Контекст** - поддержка серверного и клиентского контекста
-- **Очистка** - автоматическая очистка ресурсов
-
-**Пример использования:**
-
-```typescript
-// В приложении
-const { AuthRepository, ScriptRepository } = InfrastructureProvider();
-
-// Сервисы будут созданы лениво при первом обращении
-const users = await AuthRepository.findAll();
-```
-
 ### Event Bus (Шина событий)
 
 **Файлы:**
@@ -85,34 +28,6 @@ eventBus.once('app:ready', () => {
 
 // Отписка от события
 eventBus.off('user:created', handler);
-```
-
-### Class Mirror (Зеркало класса)
-
-**Файлы:**
-
-- `src/lib/core/shared/classMirror/ClassMirror.ts`
-- `src/lib/core/shared/classMirror/index.ts`
-
-Утилита для работы с метаданными классов и рефлексией.
-
-```typescript
-import { ClassMirror } from '@azure-net/kit';
-
-class UserService {
-	constructor(private repository: UserRepository) {}
-
-	async findUser(id: number) {
-		return this.repository.findById(id);
-	}
-}
-
-// Получение метаданных класса
-const mirror = new ClassMirror(UserService);
-
-console.log(mirror.name); // 'UserService'
-console.log(mirror.methods); // ['constructor', 'findUser']
-console.log(mirror.properties); // ['repository']
 ```
 
 ### Middleware
@@ -174,47 +89,6 @@ cookies.remove('token');
 
 // Получение всех cookies
 const allCookies = cookies.getAll();
-```
-
-## 📝 Примеры использования в приложении
-
-### Создание Application Provider
-
-```typescript
-// src/app/contexts/app/Application/Providers/ApplicationProvider.ts
-import { createBoundaryProvider } from '$lib/index.js';
-import { InfrastructureProvider } from '../../Infrastructure/index.js';
-import { AuthService, ScriptService } from '../Services/index.js';
-
-export const ApplicationProvider = createBoundaryProvider('ApplicationProvider', {
-	dependsOn: { InfrastructureProvider },
-	register: ({ InfrastructureProvider }) => ({
-		AuthService: () => new AuthService(InfrastructureProvider.AuthRepository),
-		ScriptService: () => new ScriptService(InfrastructureProvider.ScriptRepository)
-	})
-});
-```
-
-### Использование в Server Actions
-
-```typescript
-// src/app/contexts/app/Delivery/Auth/Actions.ts
-import { createServerAction } from '$lib/index.js';
-import { ApplicationProvider } from '../../Application/index.js';
-
-export const LoginAction = createServerAction(async ({ context, utils }) => {
-	const { AuthService } = ApplicationProvider();
-	const data = await context.request.formData();
-
-	try {
-		const res = await AuthService.login(LoginSchema.from(data).json());
-		context.cookies.set('token', res.token, { path: '/', httpOnly: false });
-		return utils.redirect(301, '/');
-	} catch (e) {
-		// Обработка ошибок
-		throw e;
-	}
-});
 ```
 
 ## 🎯 Ключевые особенности

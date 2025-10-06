@@ -1,58 +1,42 @@
-# Svelte library
+# Welcome to **@azure-net/kit**
 
-Everything you need to build a Svelte library, powered by [`sv`](https://npmjs.com/package/sv).
+#### [docs](https://svelte.kit.azure-net.ru)
 
-Read more about creating a library [in the docs](https://svelte.dev/docs/kit/packaging).
+**@azure-net/kit** is a universal toolkit and library collection, developed as part of the **Azure-net** ecosystem. It is designed to speed up modern application development, reduce boilerplate code, and maintain a unified project architecture.
 
-## Creating a project
+## ✨ What is it?
 
-If you're seeing this, you've probably already done this step. Congrats!
+**@azure-net/kit** is much more than just a collection of utilities or components. It is a complete **architecture** (Azure-net Architecture) based on **DDD (Domain-Driven Design)** principles, helping you build scalable and maintainable projects with a clear structure.
 
-```bash
-# create a new project in the current directory
-npx sv create
+## 🚀 What's included?
 
-# create a new project in my-app
-npx sv create my-app
-```
+- **Built-in store** — flexible and SSR-friendly state management powered by [edges-svelte](https://github.com/Pixel1917/edge-s).
+- **Localization and translation** — ready-to-use i18n solution ([edges-svelte-translations](https://github.com/Pixel1917/edges-svelte-translations)) for multilingual applications.
+- **Extensive utilities** — for working with text, objects, dates, and common tasks.
+- **Data validation** — handy rules and validators.
+- **Reusable base abstractions** — `Repositories`, `Services`, `Providers`, and `Datasources` for quick setup and reuse.
+- **Unified architecture approach** — the package provides a solid project structure and helps enforce consistent development standards.
 
-## Developing
+## 🎯 Why use it?
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+By using **@azure-net/kit**, you get a ready-to-use project framework that:
 
-```bash
-npm run dev
+- reduces boilerplate code,
+- accelerates development,
+- simplifies testing,
+- supports a clear and predictable architecture.
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
+This is especially useful for teamwork on medium to large-scale applications.
 
-Everything inside `src/lib` is part of your library, everything inside `src/routes` can be used as a showcase or preview app.
+## 📚 Learn more
 
-## Building
+In this guide, you will find:
 
-To build your library:
+- Step-by-step instructions for setup and configuration.
+- Detailed explanations of architectural patterns.
+- Examples of using the built-in store and translation.
+- Recommendations for organizing code with `Repositories`, `Services`, and `Datasources`.
 
-```bash
-npm run package
-```
+## 🚀 Get started
 
-To create a production version of your showcase app:
-
-```bash
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
-
-## Publishing
-
-Go into the `package.json` and give your package the desired name through the `"name"` option. Also consider adding a `"license"` field and point it to a `LICENSE` file which you can create from a template (one popular option is the [MIT license](https://opensource.org/license/mit/)).
-
-To publish your library to [npm](https://www.npmjs.com):
-
-```bash
-npm publish
-```
+Ready to dive in? Check out the [docs](https://svelte.kit.azure-net.ru) and start building your app faster and more reliably with **Azure-net**.
