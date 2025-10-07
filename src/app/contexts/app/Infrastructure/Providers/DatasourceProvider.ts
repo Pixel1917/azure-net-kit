@@ -9,9 +9,7 @@ export const DatasourceProvider = createBoundaryProvider('DatasourceProvider', {
 				http: new HttpService({
 					baseUrl: `https://api-laravel.azure-net.ru/back`,
 					onRequest: (options) => {
-						console.log('Ya in Opcii sizhu');
 						const token = UniversalCookie.get('token');
-						console.log('Ya blyat token', token);
 						if (token) {
 							options.headers = { ...options.headers, Authorization: `Bearer ${token}` };
 						}

@@ -1,13 +1,15 @@
 import { AzureNetRestDatasource } from '../../../../../core/index.js';
-import type { IScriptCollection, IScriptCreateRequest, IScriptUpdateRequest } from '../../../Domain/Ports/Script/index.js';
+import type { IScriptCollection, IScriptCollectionQuery, IScriptCreateRequest, IScriptUpdateRequest } from '../../../Domain/Ports/Script/index.js';
 import type { IScript } from '../../../Domain/Entities/Script/index.js';
 
 export class ScriptRepository {
 	private endpoint = '/scripts';
 	constructor(private azureNetRestDatasource: AzureNetRestDatasource) {}
 
-	public async collection() {
-		return this.azureNetRestDatasource.createRequest<IScriptCollection>(({ http }) => http.get(this.endpoint)).then((res) => res.paginate().get());
+	public async collection(query?: IScriptCollectionQuery) {
+		return this.azureNetRestDatasource
+			.createRequest<IScriptCollection>(({ http, query: q }) => http.get(this.endpoint + q.build(query)))
+			.then((res) => res.paginate().get());
 	}
 
 	public async resource(id: number) {

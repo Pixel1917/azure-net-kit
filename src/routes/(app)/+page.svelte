@@ -8,11 +8,11 @@
 	const { data }: PageProps = $props();
 	const { collection } = ScriptPresenter();
 
-	let page = $state(1);
-	const signal = createAsyncSignal(() => collection(), {
+	let query = $state({ page: 1, 'per-page': 2 });
+	const signal = createAsyncSignal(() => collection(query), {
 		immediate: false,
 		initialData: data.scripts,
-		watch: [() => page]
+		watch: [() => query.page, () => query['per-page']]
 	});
 
 	const { create } = ScriptPresenter();
@@ -26,6 +26,6 @@
 Hello kitty
 {form.data.name}
 
-{@html ObjectUtil.renderAsString(signal.data?.data ?? {})}
+{@html ObjectUtil.renderAsString(signal.data ?? {})}
 
-<button onclick={() => page++}>page change</button>
+<button onclick={() => query.page++}>page change</button>

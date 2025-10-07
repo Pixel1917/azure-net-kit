@@ -12,6 +12,11 @@ export class AzureNetApiResponse<TData = unknown, TMeta = unknown> extends Respo
 	}
 
 	paginate() {
+		console.log(this.response);
+		return this.addMeta({ page: Number(this.response.headers?.['x-current-page']), total: Number(this.response.headers?.['x-total-pages']) });
+	}
+
+	test() {
 		return this.addMeta({ page: Number(this.response.headers.page), total: Number(this.response.headers.total) });
 	}
 }

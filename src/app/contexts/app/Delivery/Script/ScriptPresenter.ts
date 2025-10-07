@@ -1,13 +1,13 @@
 import { AppPresenter } from '../../../../core/Presenter/index.js';
 import { ApplicationProvider } from '../../Application/index.js';
 import { CreateScriptSchema, UpdateScriptSchema } from './Schema/index.js';
-import type { IScriptCreateRequest, IScriptUpdateRequest } from '../../Domain/Ports/Script/index.js';
+import type { IScriptCollectionQuery, IScriptCreateRequest, IScriptUpdateRequest } from '../../Domain/Ports/Script/index.js';
 import type { IScript } from '../../Domain/Entities/Script/index.js';
 
 export const ScriptPresenter = AppPresenter('ScriptPresenter', ({ createAsyncResource, createAsyncAction }) => {
 	const { ScriptService } = ApplicationProvider();
 
-	const collection = async () => await createAsyncResource(ScriptService.collection());
+	const collection = async (query?: IScriptCollectionQuery) => await createAsyncResource(ScriptService.collection(query));
 
 	const resource = async (id: number) => await createAsyncResource(ScriptService.resource(id));
 
