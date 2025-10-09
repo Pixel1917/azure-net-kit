@@ -9,7 +9,9 @@ export interface AsyncActionResponse<T, D = unknown, CustomErrorField = never> {
 
 type ActionOrThunk<Res> = Promise<Res> | (() => Promise<Res>);
 
-export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: ReturnType<typeof createErrorParser<Custom>> }) => {
+export const createAsyncHelpers = <BaseError = unknown, Custom = unknown>(opts?: {
+	parseError?: ReturnType<typeof createErrorParser<BaseError, Custom>>;
+}) => {
 	const errorParser = opts?.parseError ?? createErrorParser();
 
 	const createAsyncAction = async <Res = unknown, Req = unknown>(
@@ -24,6 +26,7 @@ export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: Retur
 				onAbort?: () => void;
 			};
 			fallbackResponse?: Res;
+			maxRetries?: number;
 		}
 	): Promise<AsyncActionResponse<Res, Req, Custom>> => {
 		if (args?.abort?.condition) {
@@ -66,13 +69,32 @@ export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: Retur
 			}
 		}
 
-		try {
+		const maxRetries = args?.maxRetries ?? 3;
+		let retries = 0;
+		const req = async (isRetry: boolean = false) => {
+			if (isRetry) {
+				retries++;
+				if (retries > maxRetries) {
+					return Promise.reject(Error('Max retries reached'));
+				}
+			}
 			const response = await Promise.resolve(typeof action === 'function' ? action() : action);
 			const result = { response, success: true } as AsyncActionResponse<Res, Req, Custom>;
 			await args?.onSuccess?.(result as AsyncActionResponse<Res, undefined, Custom>);
 			return result;
+		};
+		try {
+			return await req();
 		} catch (err) {
-			const error = errorParser<Req>(err as ErrorType<Req>);
+			let retryResult;
+			const retry = async () =>
+				await req(true)
+					.then((res) => (retryResult = res))
+					.catch(() => undefined);
+			const error = await errorParser<Req>(err as ErrorType<BaseError>, async () => await retry());
+			if (retryResult) {
+				return retryResult;
+			}
 			const { bus } = AppEvents();
 			bus.publish('OnAsyncHelperError', error);
 			const result = { error, response: args?.fallbackResponse as Res, success: false };
@@ -94,6 +116,7 @@ export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: Retur
 				onAbort?: () => void;
 			};
 			fallbackResponse?: Res;
+			maxRetries?: number;
 		}
 	): Promise<Res> => {
 		if (args?.abort?.condition) {
@@ -108,7 +131,6 @@ export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: Retur
 
 				Promise.resolve(args.beforeSend!(next, abort)).catch((err) => {
 					console.error('Error in beforeSend:', err);
-					// If beforeSend throws, treat it as abort
 					resolve('abort');
 				});
 			});
@@ -125,12 +147,31 @@ export const createAsyncHelpers = <Custom = unknown>(opts?: { parseError?: Retur
 			}
 		}
 
-		try {
+		const maxRetries = args?.maxRetries ?? 3;
+		let retries = 0;
+		const req = async (isRetry: boolean = false) => {
+			if (isRetry) {
+				retries++;
+				if (retries > maxRetries) {
+					return Promise.reject(Error('Max retries reached'));
+				}
+			}
 			const response = await Promise.resolve(typeof action === 'function' ? action() : action);
 			await args?.onSuccess?.(response);
 			return response;
+		};
+		try {
+			return await req();
 		} catch (err) {
-			const error = errorParser<Req>(err as ErrorType<Req>);
+			let retryResult;
+			const retry = async () =>
+				await req(true)
+					.then((res) => (retryResult = res))
+					.catch(() => undefined);
+			const error = await errorParser<Req>(err as ErrorType<BaseError>, async () => await retry());
+			if (retryResult) {
+				return retryResult;
+			}
 			const { bus } = AppEvents();
 			bus.publish('OnAsyncHelperError', error);
 			await args?.onError?.(error);

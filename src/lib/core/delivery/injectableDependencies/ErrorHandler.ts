@@ -10,52 +10,68 @@ export interface AppError<T = unknown, CustomErrorField = never> {
 	status?: number;
 	original?: HttpServiceError<T> | SchemaFail<T> | Error;
 	custom?: CustomErrorField;
+	retry?: () => unknown;
 }
 
 export type ErrorType<T = unknown> = Error | HttpServiceError<T> | SchemaFail<T>;
 
-export const baseParseHttpError = <T = unknown, D = never>(error: HttpServiceError<T>): AppError<T, D> => {
-	return {
+export const baseParseHttpError = async <T = unknown, D = never>(
+	error: HttpServiceError<T>,
+	retry?: () => unknown | Promise<unknown>
+): Promise<AppError<T, D>> => {
+	const err: AppError<T, D> = {
 		type: 'http',
 		message: error.message ?? 'unexpected error',
 		status: error.status ?? 500,
-		original: error
+		original: error,
+		retry
 	};
+
+	return { ...err, retry: undefined, original: undefined };
 };
 
-export const baseParseSchemaError = <SchemaData = unknown, D = never>(error: SchemaFail<SchemaData>): AppError<SchemaData, D> => {
-	return {
+export const baseParseSchemaError = async <SchemaData = unknown, D = never>(
+	error: SchemaFail<SchemaData>,
+	retry?: () => unknown | Promise<unknown>
+): Promise<AppError<SchemaData, D>> => {
+	const err: AppError<SchemaData, D> = {
 		type: 'schema',
 		message: 'schema validation error',
 		status: 422,
 		fields: error.getErrors(),
-		original: error
+		original: error,
+		retry
 	};
+
+	return { ...err, retry: undefined, original: undefined };
 };
 
-export const baseParseBaseError = <D = never>(error: Error): AppError<never, D> => {
-	return {
+export const baseParseBaseError = async <D = never>(error: Error, retry?: () => unknown | Promise<unknown>): Promise<AppError<never, D>> => {
+	const err: AppError<never, D> = {
 		type: 'app',
 		message: error.message,
-		original: error
+		original: error,
+		retry
 	};
+
+	return { ...err, retry: undefined, original: undefined };
 };
 
-export const createErrorParser = <Custom = unknown>(parsers?: {
-	parseBaseError?: typeof baseParseBaseError;
-	parseHttpError?: typeof baseParseHttpError;
-	parseSchemaError?: typeof baseParseSchemaError;
-}): (<T>(error: ErrorType<T>) => AppError<T, Custom>) => {
-	return <T = unknown>(error: ErrorType<T>) => {
+export const createErrorParser = <BaseError = unknown, Custom = unknown>(parsers?: {
+	parseBaseError?: typeof baseParseBaseError<Custom>;
+	parseHttpError?: typeof baseParseHttpError<BaseError, Custom>;
+	parseSchemaError?: typeof baseParseSchemaError<BaseError, Custom>;
+}): (<T = unknown>(error: ErrorType<BaseError>, retry?: () => unknown) => Promise<AppError<T, Custom>>) => {
+	return async <T = unknown>(error: ErrorType<BaseError>, retry?: () => unknown | Promise<unknown>) => {
 		const { parseBaseError = baseParseBaseError, parseHttpError = baseParseHttpError, parseSchemaError = baseParseSchemaError } = parsers ?? {};
 
 		switch (true) {
 			case error instanceof HttpServiceError:
-				return parseHttpError<T>(error);
+				return (await parseHttpError(error, retry)) as AppError<T, Custom>;
 			case error instanceof SchemaFail:
-				return parseSchemaError<T>(error);
+				return (await parseSchemaError(error, retry)) as AppError<T, Custom>;
 			default:
-				return parseBaseError<Custom>(error);
+				return (await parseBaseError(error, retry)) as AppError<T, Custom>;
 		}
 	};
 };
