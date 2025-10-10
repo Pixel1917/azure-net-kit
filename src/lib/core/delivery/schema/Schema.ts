@@ -100,7 +100,7 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 			if (dataToPrepare instanceof FormData) {
 				return FormDataUtil.toObject<SchemaData>(dataToPrepare);
 			}
-			return ObjectUtil.deepClone(dataToPrepare);
+			return ObjectUtil.deepClone(dataToPrepare, true);
 		};
 
 		const getByPath = <P extends DeepKeys<SchemaData>>(path: P, data: unknown): unknown => {

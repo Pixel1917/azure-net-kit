@@ -6,13 +6,13 @@ type DeepKeys<T> = T extends object
 		}[keyof T & string]
 	: never;
 
-// type DeepValue<T, Path extends string> = Path extends `${infer Key}.${infer Rest}`
-// 	? Key extends keyof T
-// 		? DeepValue<T[Key], Rest>
-// 		: never
-// 	: Path extends keyof T
-// 		? T[Path]
-// 		: never;
+type DeepValue<T, Path extends string> = Path extends `${infer Key}.${infer Rest}`
+	? Key extends keyof T
+		? DeepValue<T[Key], Rest>
+		: never
+	: Path extends keyof T
+		? T[Path]
+		: never;
 
 type ResponseBuilderState<TData, TMeta = unknown> = {
 	data: TData;
@@ -35,30 +35,36 @@ export class ResponseBuilder<TData = unknown, TMeta = object, TWrapper = TData> 
 		return data as unknown as TData;
 	}
 
-	mapUsing<TResource>(ResourceClass: new (data: TData) => { toPlainObject(): TResource }): this {
+	mapUsing<TResource>(
+		ResourceClass: new (data: TData) => { toPlainObject(): TResource }
+	): Omit<this, keyof ResponseBuilder<unknown, unknown, unknown>> & ResponseBuilder<TResource, TMeta, TWrapper> {
 		const resource = new ResourceClass(this.state.data);
-		const newResponse = new (this.constructor as new (response: HttpServiceResponse<TWrapper>) => this)(this.response);
+		const newResponse = new (this.constructor as typeof ResponseBuilder<unknown, unknown, unknown>)(this.response);
 		newResponse.state = {
 			...this.state,
-			data: resource.toPlainObject() as unknown as TData
+			data: resource.toPlainObject() as TResource
 		};
-		return newResponse;
+		return newResponse as Omit<this, keyof ResponseBuilder<unknown, unknown, unknown>> & ResponseBuilder<TResource, TMeta, TWrapper>;
 	}
 
-	mapCollectionUsing<TResource>(ResourceClass: new (data: ArrayElement<TData>) => { toPlainObject(): TResource }): this {
+	mapCollectionUsing<TResource>(
+		ResourceClass: new (data: ArrayElement<TData>) => { toPlainObject(): TResource }
+	): Omit<this, keyof ResponseBuilder<unknown, unknown, unknown>> & ResponseBuilder<TResource[], TMeta, TWrapper> {
 		if (!Array.isArray(this.state.data)) {
 			throw new Error('toCollection can only be used when data is an array');
 		}
 		const collection = (this.state.data as ArrayElement<TData>[]).map((dataElement) => new ResourceClass(dataElement).toPlainObject());
-		const newResponse = new (this.constructor as new (response: HttpServiceResponse<TWrapper>) => this)(this.response);
+		const newResponse = new (this.constructor as typeof ResponseBuilder<unknown, unknown, unknown>)(this.response);
 		newResponse.state = {
 			...this.state,
-			data: collection as unknown as TData
+			data: collection as TResource[]
 		};
-		return newResponse;
+		return newResponse as Omit<this, keyof ResponseBuilder<unknown, unknown, unknown>> & ResponseBuilder<TResource[], TMeta, TWrapper>;
 	}
 
-	extract<TPath extends DeepKeys<TData>>(path: TPath): this {
+	extract<TPath extends DeepKeys<TData>>(
+		path: TPath
+	): Omit<this, keyof ResponseBuilder<unknown, unknown, unknown>> & ResponseBuilder<DeepValue<TData, TPath>, TMeta, TWrapper> {
 		const keys = path.split('.');
 		let result: unknown = this.state.data;
 
@@ -70,12 +76,12 @@ export class ResponseBuilder<TData = unknown, TMeta = object, TWrapper = TData> 
 			}
 		}
 
-		const newResponse = new (this.constructor as new (response: HttpServiceResponse<TWrapper>) => this)(this.response);
+		const newResponse = new (this.constructor as typeof ResponseBuilder<unknown, unknown, unknown>)(this.response);
 		newResponse.state = {
 			...this.state,
-			data: result as TData
+			data: result as DeepValue<TData, TPath>
 		};
-		return newResponse;
+		return newResponse as Omit<this, keyof ResponseBuilder<unknown, unknown, unknown>> & ResponseBuilder<DeepValue<TData, TPath>, TMeta, TWrapper>;
 	}
 
 	addMeta<TNewMeta extends Record<string, unknown>>(
