@@ -51,7 +51,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	const submit = async (): Promise<AsyncActionResponse<Response, FormData, Custom>> => {
 		pending = true;
 		try {
-			const result = await onSubmit(ObjectUtil.deepClone(formData, true));
+			const result = await onSubmit($state.snapshot(formData) as Partial<ExtractFromSubmit<SubmitReturn>['formData']>);
 
 			if (result.error?.fields) {
 				formErrors = result.error.fields as RequestErrors<FormData>;
@@ -70,7 +70,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	};
 
 	const reset = (toInitial = false) => {
-		formData = toInitial ? ObjectUtil.deepClone(initial, true) : {};
+		formData = toInitial ? ObjectUtil.deepClone(initial) : {};
 		formErrors = {};
 	};
 

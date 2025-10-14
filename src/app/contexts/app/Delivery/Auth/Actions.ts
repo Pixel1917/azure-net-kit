@@ -1,6 +1,7 @@
 import { createServerAction } from '$lib/index.js';
 import { ApplicationProvider } from '../../Application/index.js';
 import { LoginSchema } from './Schema/index.js';
+import { CurrentUser } from './Current.js';
 
 export const LoginAction = createServerAction(async ({ context, utils }) => {
 	const { AuthService } = ApplicationProvider();
@@ -25,5 +26,7 @@ export const LogoutAction = createServerAction(async ({ context, utils }) => {
 	await AuthService.logout();
 	context.cookies.delete('token', { path: '/' });
 	context.locals.user = undefined;
+	const { user } = CurrentUser();
+	user.value = undefined;
 	return redirect(301, '/login');
 });

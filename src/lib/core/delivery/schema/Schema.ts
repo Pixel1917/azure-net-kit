@@ -1,4 +1,4 @@
-import { FormDataUtil, ObjectUtil } from 'azure-net-tools';
+import { FormDataUtil } from 'azure-net-tools';
 
 type DeepKeys<SchemaData> = SchemaData extends object
 	? {
@@ -100,7 +100,7 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 			if (dataToPrepare instanceof FormData) {
 				return FormDataUtil.toObject<SchemaData>(dataToPrepare);
 			}
-			return ObjectUtil.deepClone(dataToPrepare, true);
+			return dataToPrepare;
 		};
 
 		const getByPath = <P extends DeepKeys<SchemaData>>(path: P, data: unknown): unknown => {

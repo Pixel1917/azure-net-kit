@@ -47,8 +47,8 @@
 
 	const onSubmit = () => {
 		const req = TestSchema.from($state.snapshot(form));
+		console.log(req.json());
 		try {
-			console.log(req.json());
 			errors = {};
 		} catch (e) {
 			errors = TestSchema.getSchemaError(e) ?? {};

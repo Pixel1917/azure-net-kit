@@ -1,9 +1,10 @@
 import { svelteTesting } from '@testing-library/svelte/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
+import { edgesPlugin } from 'edges-svelte/plugin';
 
 export default defineConfig({
-	plugins: [sveltekit()],
+	plugins: [sveltekit(), edgesPlugin()],
 	server: {
 		port: 5178
 	},
