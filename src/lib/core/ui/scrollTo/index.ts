@@ -2,6 +2,7 @@ import { EnvironmentUtil } from 'azure-net-tools';
 
 export const scrollTo = (nodeOrName: string | Element, offset = 220) => {
 	if (EnvironmentUtil.isBrowser) {
+		setTimeout(() => {}, 1);
 		let element: Element;
 		if (typeof nodeOrName === 'string') {
 			const node = document.querySelector(nodeOrName);

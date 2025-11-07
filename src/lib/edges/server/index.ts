@@ -1,1 +1,1 @@
-export { edgesHandle } from 'edges-svelte/server';
+export { edgesHandle, __autoWrapHandle, edgesHandleRaw } from 'edges-svelte/server';
