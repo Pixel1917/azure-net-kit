@@ -3,7 +3,7 @@ import type { RequestErrors } from '../../delivery/schema/index.js';
 import type { AsyncActionResponse } from '$lib/core/index.js';
 
 export interface FormConfig<FormData, Response> {
-	initialData?: Partial<FormData>;
+	initialData?: (() => Partial<FormData>) | Partial<FormData>;
 	onSuccess?: (response: Response) => Promise<void> | void;
 	onError?: () => Promise<void> | void;
 }
@@ -41,7 +41,11 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	type Response = ExtractFromSubmit<SubmitReturn>['response'];
 	type Custom = ExtractFromSubmit<SubmitReturn>['custom'];
 
-	const initial: Partial<FormData> = config?.initialData ?? {};
+	const initial: Partial<FormData> = config?.initialData
+		? typeof config.initialData === 'function'
+			? config.initialData()
+			: config.initialData
+		: {};
 	let formData = $state<Partial<FormData>>(ObjectUtil.deepClone(initial));
 	let formErrors = $state<RequestErrors<FormData>>({});
 	let pending = $state(false);
