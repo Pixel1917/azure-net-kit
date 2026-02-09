@@ -11,11 +11,23 @@ type ArrayItemRules<Context> = ValidationRuleResult<Context>[] | Record<string, 
 
 type ArrayParams<Context> = LengthParams & { schema?: ArrayItemRules<Context> };
 
+/**
+ *
+ * @param validationMessages - BaseValidationMessages
+ * @returns ValidationRuleResult<T, D>
+ * @description Creates the rules for the schema.
+ */
 export const createRules = <M extends BaseValidationMessages>(validationMessages: M) => {
 	const checkVal = <Val>(val: Val) => {
 		return val !== undefined && val !== null;
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'string', LengthParams>
+	 * @returns ValidationRuleResult<T, D>
+	 * @description Checks if the value is a string and if it is within the length specified in the params.
+	 */
 	const string = <T = unknown, D = unknown>(params?: ValidationRuleParams<'string', LengthParams>): ValidationRuleResult<T, D> => {
 		const { message, length } = { ...params, message: { ...validationMessages.string, ...params?.message } };
 		return ({ val }: ValidationParams<T, D>): ValidationMessage | undefined => {
@@ -36,6 +48,12 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'number', RangeParams>
+	 * @returns ValidationRuleResult<T, D>
+	 * @description Checks if the value is a whole number (integer) and if it is within the range specified in the params.
+	 */
 	const number = <T = unknown, D = unknown>(params?: ValidationRuleParams<'number', RangeParams>): ValidationRuleResult<T, D> => {
 		const { message, range } = { ...params, message: { ...validationMessages.number, ...params?.message } };
 		return ({ val }: ValidationParams<T, D>): ValidationMessage | undefined => {
@@ -57,6 +75,12 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'finite', RangeParams & { maxDigitsAfterDot?: number }>
+	 * @returns ValidationRuleResult<T, D>
+	 * @description Checks if the value is a finite number and if it is within the range specified in the params.
+	 */
 	const finite = <T = unknown, D = unknown>(
 		params?: ValidationRuleParams<'finite', RangeParams & { maxDigitsAfterDot?: number }>
 	): ValidationRuleResult<T, D> => {
@@ -81,6 +105,12 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'boolean', { expected?: boolean }>
+	 * @returns ValidationRuleResult<T, D>
+	 * @description Checks if the value is a boolean and if it is the expected value specified in the params.
+	 */
 	const boolean = <T = unknown, D = unknown>(params?: ValidationRuleParams<'boolean', { expected?: boolean }>): ValidationRuleResult<T, D> => {
 		const { message, expected } = { ...params, message: { ...validationMessages.boolean, ...params?.message } };
 		return ({ val }: ValidationParams<T, D>): ValidationMessage | undefined => {
@@ -93,6 +123,12 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'array', ArrayParams<T>>
+	 * @returns ValidationRuleResult<T>
+	 * @description Checks if the value is an array and if it is within the length specified in the params. Can check every array item with the rules specified in the schema.
+	 */
 	const array = <T = unknown>(params?: ValidationRuleParams<'array', ArrayParams<T>>): ValidationRuleResult<T> => {
 		const { message, length = {}, schema } = { ...params, message: { ...validationMessages.array, ...params?.message } };
 
@@ -156,12 +192,16 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'phone'>
+	 * @returns ValidationRuleResult<T, D>
+	 * @description Checks if the value is a phone number and if it is valid.
+	 */
+	const countryCodes = new Set(Object.values(masks).map((country) => country.cc)).add('8');
 	const phone = <T = unknown, D = unknown>(params?: ValidationRuleParams<'phone'>): ValidationRuleResult<T, D> => {
 		const { message } = { ...params, message: params?.message ?? validationMessages.phone };
 
-		const countryCodes = new Set(Object.values(masks).map((country) => country.cc));
-
-		countryCodes.add('8');
 		return ({ val }: ValidationParams<T, D>): ValidationMessage | undefined => {
 			if (checkVal(val)) {
 				// eslint-disable-next-line
@@ -226,6 +266,12 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'email'>
+	 * @returns ValidationRuleResult<T, D>
+	 * @description Checks if the value is a valid email address.
+	 */
 	const email = <T = unknown, D = unknown>(params?: ValidationRuleParams<'email'>): ValidationRuleResult<T, D> => {
 		const { message } = { message: params?.message ?? validationMessages.email };
 		const emailRegExp =
@@ -240,6 +286,12 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'lettersOnly', { whiteSpaces?: boolean }>
+	 * @returns ValidationRuleResult<T, D>
+	 * @description Checks if the value is a string and if it contains only letters.
+	 */
 	const lettersOnly = <T = unknown, D = unknown>(
 		params?: ValidationRuleParams<'lettersOnly', { whiteSpaces?: boolean }>
 	): ValidationRuleResult<T, D> => {
@@ -254,6 +306,12 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'allowedOnly', { allowed?: unknown[] }>
+	 * @returns ValidationRuleResult<T, D>
+	 * @description Checks if the value is in the allowed values specified in the params.
+	 */
 	const allowedOnly = <T = unknown, D = unknown>(
 		params?: ValidationRuleParams<'allowedOnly', { allowed?: unknown[] }>
 	): ValidationRuleResult<T, D> => {
@@ -274,6 +332,12 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'sameAs', { key: keyof T | string }>
+	 * @returns ValidationRuleResult<T, D>
+	 * @description Checks if the value is the same as the value of the field specified in the params.
+	 */
 	const sameAs = <T = unknown, D = unknown>(params: ValidationRuleParams<'sameAs', { key: keyof T | string }>): ValidationRuleResult<T, D> => {
 		const { message, key } = { ...params, message: params?.message ?? validationMessages.sameAs };
 		return ({ val, listValues }: ValidationParams<T, D>): ValidationMessage | undefined => {
@@ -286,7 +350,7 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 						try {
 							return JSON.stringify(val) === JSON.stringify(listValues[key as keyof T]) ? undefined : message(String(key));
 						} catch {
-							return undefined;
+							return 'Parsing error';
 						}
 					default:
 						return String(val ?? '') === String(listValues?.[key as keyof T] ?? '') ? undefined : message(String(key));
@@ -296,6 +360,12 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'notSameAs', { key: keyof T | string }>
+	 * @returns ValidationRuleResult<T, D>
+	 * @description Checks if the value is not the same as the value of the field specified in the params.
+	 */
 	const notSameAs = <T = unknown, D = unknown>(params: ValidationRuleParams<'sameAs', { key: keyof T | string }>): ValidationRuleResult<T, D> => {
 		const { message, key } = { ...params, message: params?.message ?? validationMessages.notSameAs };
 		return ({ val, listValues }: ValidationParams<T, D>): ValidationMessage | undefined => {
@@ -308,7 +378,7 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 						try {
 							return JSON.stringify(val) !== JSON.stringify(listValues[key as keyof T]) ? undefined : message(String(key));
 						} catch {
-							return undefined;
+							return 'Parsing error';
 						}
 					default:
 						return String(val) === String(listValues?.[key as keyof T]) ? undefined : message(String(key));
@@ -318,14 +388,19 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'required', { byCondition?: (params: ValidationParams<T, D, J>) => boolean }>
+	 * @returns ValidationRuleResult<T, D, J>
+	 * @description Marks the field as required. If the byCondition is specified, the field will be required only if the byCondition returns true.
+	 */
 	const required = <T = unknown, D = unknown, J = unknown>(
 		params?: ValidationRuleParams<'required', { byCondition?: (params: ValidationParams<T, D, J>) => boolean }>
 	): ValidationRuleResult<T, D, J> => {
 		const { message, byCondition } = { ...params, message: params?.message ?? validationMessages.required };
 		return ({ val, listValues, key }: ValidationParams<T, D, J>): ValidationMessage | undefined => {
-			if (!checkVal(val)) return message();
-
 			if (byCondition && !byCondition({ val, listValues, key })) return undefined;
+			if (!checkVal(val)) return message();
 			if (typeof val === 'string' && !val.length) return message();
 			if (val instanceof File && val.size < 1) return message();
 			if (typeof val === 'number' && !String(val).length) return message();
@@ -334,6 +409,12 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
+	/**
+	 *
+	 * @param params - ValidationRuleParams<'password', { length?: number; specialChars?: boolean | number; numbers?: boolean | number; lowerUpperCasePattern?: boolean }>
+	 * @returns ValidationRuleResult<T, D>
+	 * @description Sets the password rules. Can check the length, the number of special characters, the number of numbers and the presence of uppercase and lowercase letters.
+	 */
 	const password = <T = unknown, D = unknown>(
 		params?: ValidationRuleParams<
 			'password',

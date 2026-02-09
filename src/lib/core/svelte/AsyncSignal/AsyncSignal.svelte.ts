@@ -20,6 +20,7 @@ export interface AsyncSignalSvelte<TData, TError = Error> {
 	pending: boolean;
 	execute: () => Promise<void>;
 	refresh: () => Promise<void>;
+	ready: Promise<TData | undefined>;
 	reset: () => void;
 	abort: () => void;
 }
@@ -89,8 +90,9 @@ export const createAsyncSignal = <TData, TError = Error>(
 	const pending = $derived(status === 'pending');
 
 	let abortController: AbortController | null = null;
+	let currentPromise: Promise<TData | undefined> | null = null;
 
-	async function execute(): Promise<void> {
+	const run = async (): Promise<TData | undefined> => {
 		if (abortController) {
 			abortController.abort();
 		}
@@ -104,7 +106,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 			const result = await handler(abortController.signal);
 
 			if (abortController.signal.aborted) {
-				return;
+				return undefined;
 			}
 
 			data = result;
@@ -112,9 +114,10 @@ export const createAsyncSignal = <TData, TError = Error>(
 			if (options.onSuccess) {
 				options.onSuccess(result);
 			}
+			return result;
 		} catch (err) {
 			if (err instanceof Error && err.name === 'AbortError') {
-				return;
+				return undefined;
 			}
 
 			error = err as TError;
@@ -122,8 +125,18 @@ export const createAsyncSignal = <TData, TError = Error>(
 			if (options.onError) {
 				options.onError(err as TError);
 			}
+			return undefined;
 		}
-	}
+	};
+
+	const execute = async (): Promise<void> => {
+		if (status === 'pending' && currentPromise) {
+			await currentPromise;
+			return;
+		}
+		currentPromise = run();
+		await currentPromise;
+	};
 
 	if (EnvironmentUtil.isBrowser) {
 		const signalKey = key ?? asyncSignalManager.generateKey();
@@ -176,12 +189,16 @@ export const createAsyncSignal = <TData, TError = Error>(
 		get pending() {
 			return pending;
 		},
+		get ready() {
+			return currentPromise ?? Promise.resolve(data);
+		},
 		execute,
 		refresh: execute,
 		reset: () => {
 			data = undefined;
 			error = undefined;
 			status = 'idle';
+			currentPromise = null;
 			if (abortController) {
 				abortController.abort();
 				abortController = null;
