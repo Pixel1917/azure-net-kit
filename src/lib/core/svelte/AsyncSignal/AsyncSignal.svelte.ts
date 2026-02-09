@@ -91,14 +91,9 @@ export const createAsyncSignal = <TData, TError = Error>(
 
 	let abortController: AbortController | null = null;
 	let currentPromise: Promise<TData | undefined> | null = null;
+	let currentRunId = 0;
 
-	const ensurePromise = (): Promise<TData | undefined> => {
-		if (currentPromise) return currentPromise;
-		currentPromise = run();
-		return currentPromise;
-	};
-
-	const run = async (): Promise<TData | undefined> => {
+	const run = async (runId: number): Promise<TData | undefined> => {
 		if (abortController) {
 			abortController.abort();
 		}
@@ -132,7 +127,18 @@ export const createAsyncSignal = <TData, TError = Error>(
 				options.onError(err as TError);
 			}
 			return undefined;
+		} finally {
+			if (currentRunId === runId) {
+				currentPromise = null;
+			}
 		}
+	};
+
+	const start = (): Promise<TData | undefined> => {
+		const runId = ++currentRunId;
+		const localPromise = run(runId);
+		currentPromise = localPromise;
+		return localPromise;
 	};
 
 	const execute = async (): Promise<void> => {
@@ -140,7 +146,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 			await currentPromise;
 			return;
 		}
-		await ensurePromise();
+		await start();
 	};
 
 	if (EnvironmentUtil.isBrowser) {
@@ -195,7 +201,8 @@ export const createAsyncSignal = <TData, TError = Error>(
 			return pending;
 		},
 		get ready() {
-			return ensurePromise();
+			if (currentPromise) return currentPromise;
+			return start();
 		},
 		execute,
 		refresh: execute,
