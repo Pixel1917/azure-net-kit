@@ -92,6 +92,12 @@ export const createAsyncSignal = <TData, TError = Error>(
 	let abortController: AbortController | null = null;
 	let currentPromise: Promise<TData | undefined> | null = null;
 
+	const ensurePromise = (): Promise<TData | undefined> => {
+		if (currentPromise) return currentPromise;
+		currentPromise = run();
+		return currentPromise;
+	};
+
 	const run = async (): Promise<TData | undefined> => {
 		if (abortController) {
 			abortController.abort();
@@ -134,8 +140,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 			await currentPromise;
 			return;
 		}
-		currentPromise = run();
-		await currentPromise;
+		await ensurePromise();
 	};
 
 	if (EnvironmentUtil.isBrowser) {
@@ -190,7 +195,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 			return pending;
 		},
 		get ready() {
-			return currentPromise ?? Promise.resolve(data);
+			return ensurePromise();
 		},
 		execute,
 		refresh: execute,
