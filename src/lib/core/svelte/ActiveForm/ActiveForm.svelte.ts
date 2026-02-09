@@ -144,7 +144,18 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	};
 
 	return {
-		...formApi,
+		get data() {
+			return formData;
+		},
+		set data(value: Partial<FormData>) {
+			formData = value;
+		},
+		get errors() {
+			return formErrors;
+		},
+		set errors(value: RequestErrors<FormData>) {
+			formErrors = value;
+		},
 		get dirty() {
 			return dirty;
 		},
