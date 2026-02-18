@@ -20,8 +20,10 @@ export type IMiddleware = (middlewareData: {
 
 export const createMiddlewareManager = (middlewares: IMiddleware[]) => {
 	const universalRedirect = (location: string | URL, status: RedirectStatus = 301, navigation?: BeforeNavigate) => {
-		if (EnvironmentUtil.isBrowser && navigation) {
-			navigation?.cancel();
+		if (EnvironmentUtil.isBrowser) {
+			if (navigation) {
+				navigation?.cancel();
+			}
 			return goto(location);
 		} else {
 			return redirect(status, location);
