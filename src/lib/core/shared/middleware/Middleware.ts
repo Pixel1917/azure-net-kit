@@ -80,5 +80,5 @@ export const createMiddlewareManager = (middlewares: IMiddleware[]) => {
 		});
 	};
 
-	return { serverMiddleware, clientMiddleware };
+	return { serverMiddleware, clientMiddleware, executeMiddlewares };
 };

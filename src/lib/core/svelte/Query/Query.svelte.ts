@@ -1,4 +1,5 @@
 import { ObjectUtil } from 'azure-net-tools';
+import { untrack } from 'svelte';
 
 export type QuerySignal = {
 	refresh: () => Promise<void>;
@@ -40,23 +41,33 @@ export const createQuery = <T extends Record<string, unknown>>(options: CreateQu
 	const keys = resolveKeys();
 	let isFirstRun = true;
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+	const lastValues = new Map<keyof T, unknown>();
 
 	const scheduleRefresh = () => {
 		if (!signal) return;
 		if (debounceTimer) clearTimeout(debounceTimer);
 		if (debounceMs > 0) {
 			debounceTimer = setTimeout(() => {
-				void signal?.refresh();
+				untrack(() => {
+					void signal?.refresh();
+				});
 			}, debounceMs);
 		} else {
-			void signal.refresh();
+			untrack(() => {
+				void signal?.refresh();
+			});
 		}
 	};
 
 	if (autoRefresh) {
 		$effect(() => {
+			let hasChanged = false;
 			keys.forEach((key) => {
-				void data[key];
+				const nextValue = data[key];
+				if (!Object.is(lastValues.get(key), nextValue)) {
+					hasChanged = true;
+					lastValues.set(key, nextValue);
+				}
 			});
 
 			if (isFirstRun) {
@@ -64,7 +75,9 @@ export const createQuery = <T extends Record<string, unknown>>(options: CreateQu
 				return;
 			}
 
-			scheduleRefresh();
+			if (hasChanged) {
+				scheduleRefresh();
+			}
 		});
 	}
 
