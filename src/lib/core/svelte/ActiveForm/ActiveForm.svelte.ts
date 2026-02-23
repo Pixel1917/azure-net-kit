@@ -2,18 +2,39 @@ import { ObjectUtil } from 'azure-net-tools';
 import type { RequestErrors } from '../../delivery/schema/index.js';
 import type { AsyncActionResponse } from '$lib/core/index.js';
 
-type InitialData<FormData> = Partial<FormData> | Promise<Partial<FormData>> | (() => Partial<FormData> | Promise<Partial<FormData>>);
+type InitialData<FormData, Initial extends Partial<FormData>> =
+	| Initial
+	| Promise<Initial>
+	| (() => Initial | Promise<Initial>);
 
-export interface FormConfig<FormData, Response> {
-	initialData?: InitialData<FormData>;
+type PathRequiredShape<T, P extends string> = P extends `${infer Head}.${infer Tail}`
+	? Head extends keyof T
+		? { [K in Head]-?: PathRequiredShape<NonNullable<T[K]>, Tail> }
+		: unknown
+	: P extends keyof T
+		? { [K in P]-?: NonNullable<T[K]> }
+		: unknown;
+
+type UnionToIntersection<U> = (U extends unknown ? (arg: U) => void : never) extends (arg: infer I) => void ? I : never;
+
+type RequiredByPaths<T, P extends string> = [P] extends [never] ? {} : UnionToIntersection<PathRequiredShape<T, P>>;
+
+export interface FormConfig<
+	FormData,
+	Response,
+	Initial extends Partial<FormData> = Partial<FormData>,
+	RequiredPath extends string = never
+> {
+	initialData?: InitialData<FormData, Initial>;
+	required?: readonly RequiredPath[];
 	onSuccess?: (response: Response) => Promise<void> | void;
 	onError?: () => Promise<void> | void;
-	beforeSubmit?: (form: ActiveFormController<FormData>, abort: () => void) => Promise<void> | void;
+	beforeSubmit?: (form: ActiveFormController<FormData, RequiredPath>, abort: () => void) => Promise<void> | void;
 	waitForInitialData?: boolean;
 }
 
-export interface ActiveForm<FormData, Response, Custom> {
-	data: Partial<FormData>;
+export interface ActiveForm<FormData, Response, Custom, RequiredPath extends string = never> {
+	data: Partial<FormData> & RequiredByPaths<FormData, RequiredPath>;
 	errors: RequestErrors<FormData>;
 	submit: () => Promise<AsyncActionResponse<Response, FormData, Custom>>;
 	reset: (toInitial?: boolean) => void;
@@ -22,8 +43,8 @@ export interface ActiveForm<FormData, Response, Custom> {
 	ready: Promise<Partial<FormData>>;
 }
 
-export interface ActiveFormController<FormData> {
-	data: Partial<FormData>;
+export interface ActiveFormController<FormData, RequiredPath extends string = never> {
+	data: Partial<FormData> & RequiredByPaths<FormData, RequiredPath>;
 	errors: RequestErrors<FormData>;
 	reset: (toInitial?: boolean) => void;
 }
@@ -40,17 +61,27 @@ type ExtractFromSubmit<T> = {
 	custom: ExtractCustom<UnwrapPromise<T>>;
 };
 
-export const createActiveForm = <SubmitReturn extends Promise<AsyncActionResponse<unknown, unknown, unknown>>>(
+export const createActiveForm = <
+	SubmitReturn extends Promise<AsyncActionResponse<unknown, unknown, unknown>>,
+	RequiredPath extends string = never
+>(
 	onSubmit: (formData: Partial<ExtractFromSubmit<SubmitReturn>['formData']>) => SubmitReturn,
-	config?: FormConfig<ExtractFromSubmit<SubmitReturn>['formData'], ExtractFromSubmit<SubmitReturn>['response']>
+	config?: FormConfig<
+		ExtractFromSubmit<SubmitReturn>['formData'],
+		ExtractFromSubmit<SubmitReturn>['response'],
+		Partial<ExtractFromSubmit<SubmitReturn>['formData']>,
+		RequiredPath
+	>
 ): ActiveForm<
 	ExtractFromSubmit<SubmitReturn>['formData'],
 	ExtractFromSubmit<SubmitReturn>['response'],
-	ExtractFromSubmit<SubmitReturn>['custom']
+	ExtractFromSubmit<SubmitReturn>['custom'],
+	RequiredPath
 > => {
 	type FormData = ExtractFromSubmit<SubmitReturn>['formData'];
 	type Response = ExtractFromSubmit<SubmitReturn>['response'];
 	type Custom = ExtractFromSubmit<SubmitReturn>['custom'];
+	type FormDataState = Partial<FormData> & RequiredByPaths<FormData, RequiredPath>;
 
 	const isPromise = <T>(value: T | Promise<T>): value is Promise<T> => {
 		return typeof (value as Promise<T>)?.then === 'function';
@@ -71,7 +102,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	const initialSource = resolveInitialSource();
 	let initial: Partial<FormData> = initialSource.sync ? initialSource.value : {};
 
-	let formData = $state<Partial<FormData>>(ObjectUtil.deepClone(initial));
+	let formData = $state<FormDataState>(ObjectUtil.deepClone(initial) as FormDataState);
 	let formErrors = $state<RequestErrors<FormData>>({});
 	let pending = $state(false);
 
@@ -81,7 +112,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 		if (!initialSource.sync) {
 			initial = (await initialSource.promise) ?? {};
 			if (config?.waitForInitialData !== false) {
-				formData = ObjectUtil.deepClone(initial);
+				formData = ObjectUtil.deepClone(initial) as FormDataState;
 			}
 		}
 		return initial;
@@ -123,16 +154,16 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	};
 
 	const reset = (toInitial = false) => {
-		formData = toInitial ? ObjectUtil.deepClone(initial) : {};
+		formData = toInitial ? (ObjectUtil.deepClone(initial) as FormDataState) : ({} as FormDataState);
 		formErrors = {};
 	};
 
-	const formApi: ActiveFormController<FormData> = {
+	const formApi: ActiveFormController<FormData, RequiredPath> = {
 		get data() {
 			return formData;
 		},
-		set data(value: Partial<FormData>) {
-			formData = value;
+		set data(value: FormDataState) {
+			formData = value as FormDataState;
 		},
 		get errors() {
 			return formErrors;
@@ -147,8 +178,8 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 		get data() {
 			return formData;
 		},
-		set data(value: Partial<FormData>) {
-			formData = value;
+		set data(value: FormDataState) {
+			formData = value as FormDataState;
 		},
 		get errors() {
 			return formErrors;

@@ -2,12 +2,14 @@ import { untrack } from 'svelte';
 import { EnvironmentUtil } from 'azure-net-tools';
 
 export type AsyncStatus = 'idle' | 'pending' | 'success' | 'error';
+export type AsyncSignalSource = 'auto' | 'manual' | 'global';
 
 export interface AsyncSignalOptions<TData, TError = Error> {
 	server?: boolean;
 	immediate?: boolean;
 	watch?: (() => unknown)[];
-	initialData?: TData;
+	initialData?: TData | (() => TData);
+	beforeSend?: (meta: { initial: boolean; source: AsyncSignalSource }) => void | Promise<void>;
 	onSuccess?: (data: TData) => void | Promise<void>;
 	onError?: (error: TError) => void | Promise<void>;
 	key?: string;
@@ -26,7 +28,7 @@ export interface AsyncSignalSvelte<TData, TError = Error> {
 }
 
 const createAsyncSignalManager = () => {
-	const instances = EnvironmentUtil.isBrowser ? new Map<string, () => Promise<void>>() : undefined;
+	const instances = EnvironmentUtil.isBrowser ? new Map<string, (source: AsyncSignalSource) => Promise<void>>() : undefined;
 
 	const generateUid = () => {
 		return Math.random().toString(36).substring(2, 9);
@@ -39,7 +41,7 @@ const createAsyncSignalManager = () => {
 		return `async-signal-${Date.now()}-${generateUid()}`;
 	};
 
-	const register = (key: string, callback: () => Promise<void>) => {
+	const register = (key: string, callback: (source: AsyncSignalSource) => Promise<void>) => {
 		if (instances) {
 			instances.set(key, callback);
 		}
@@ -55,7 +57,7 @@ const createAsyncSignalManager = () => {
 		if (instances) {
 			const instance = instances.get(key);
 			try {
-				await instance?.();
+				await instance?.('global');
 			} catch {
 				return;
 			}
@@ -65,7 +67,7 @@ const createAsyncSignalManager = () => {
 	const refreshAll = async () => {
 		if (instances) {
 			try {
-				await Promise.all(instances.values().map((val) => val()));
+				await Promise.all(instances.values().map((val) => val('global')));
 			} catch {
 				return;
 			}
@@ -82,8 +84,9 @@ export const createAsyncSignal = <TData, TError = Error>(
 	options: AsyncSignalOptions<TData, TError> = {}
 ): AsyncSignalSvelte<TData, TError> => {
 	const { server = false, immediate = true, watch = [], initialData = undefined, key } = options;
+	const resolvedInitialData = typeof initialData === 'function' ? initialData() : initialData;
 
-	let data = $state<TData | undefined>(initialData);
+	let data = $state<TData | undefined>(resolvedInitialData);
 	let error = $state<TError>();
 	let status = $state<AsyncStatus>('idle');
 
@@ -92,13 +95,20 @@ export const createAsyncSignal = <TData, TError = Error>(
 	let abortController: AbortController | null = null;
 	let currentPromise: Promise<TData | undefined> | null = null;
 	let currentRunId = 0;
+	let started = false;
 
-	const run = async (runId: number): Promise<TData | undefined> => {
+	const run = async (runId: number, source: AsyncSignalSource): Promise<TData | undefined> => {
+		const initial = !started;
+		started = true;
 		if (abortController) {
 			abortController.abort();
 		}
 
 		abortController = new AbortController();
+
+		if (options.beforeSend) {
+			await options.beforeSend({ initial, source });
+		}
 
 		status = 'pending';
 		error = undefined;
@@ -134,24 +144,29 @@ export const createAsyncSignal = <TData, TError = Error>(
 		}
 	};
 
-	const start = (): Promise<TData | undefined> => {
+	const start = (source: AsyncSignalSource): Promise<TData | undefined> => {
+		if (currentPromise) {
+			return currentPromise;
+		}
 		const runId = ++currentRunId;
-		const localPromise = run(runId);
+		const localPromise = run(runId, source);
 		currentPromise = localPromise;
 		return localPromise;
 	};
 
 	const execute = async (): Promise<void> => {
-		if (status === 'pending' && currentPromise) {
+		if (currentPromise) {
 			await currentPromise;
 			return;
 		}
-		await start();
+		await start('manual');
 	};
 
 	if (EnvironmentUtil.isBrowser) {
 		const signalKey = key ?? asyncSignalManager.generateKey();
-		asyncSignalManager.register(signalKey, () => execute());
+		asyncSignalManager.register(signalKey, (source) => {
+			return start(source);
+		});
 		$effect(() => {
 			return () => {
 				asyncSignalManager.unregister(signalKey);
@@ -169,7 +184,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 				}
 
 				if (!isFirst) {
-					void execute();
+					void start('auto');
 				}
 
 				isFirst = false;
@@ -180,10 +195,10 @@ export const createAsyncSignal = <TData, TError = Error>(
 	if (immediate) {
 		if (EnvironmentUtil.isServer && server) {
 			untrack(() => {
-				void execute();
+				void start('auto');
 			});
 		} else if (EnvironmentUtil.isBrowser) {
-			void execute();
+			void start('auto');
 		}
 	}
 
@@ -202,7 +217,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 		},
 		get ready() {
 			if (currentPromise) return currentPromise;
-			return start();
+			return start('auto');
 		},
 		execute,
 		refresh: execute,
