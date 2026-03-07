@@ -28,7 +28,7 @@ export interface AsyncSignalSvelte<TData, TError = Error> {
 }
 
 const createAsyncSignalManager = () => {
-	const instances = EnvironmentUtil.isBrowser ? new Map<string, (source: AsyncSignalSource) => Promise<void>>() : undefined;
+	const instances = EnvironmentUtil.isBrowser ? new Map<string, (source: AsyncSignalSource) => Promise<unknown>>() : undefined;
 
 	const generateUid = () => {
 		return Math.random().toString(36).substring(2, 9);
@@ -41,14 +41,14 @@ const createAsyncSignalManager = () => {
 		return `async-signal-${Date.now()}-${generateUid()}`;
 	};
 
-	const register = (key: string, callback: (source: AsyncSignalSource) => Promise<void>) => {
+	const register = (key: string, callback: (source: AsyncSignalSource) => Promise<unknown>) => {
 		if (instances) {
 			instances.set(key, callback);
 		}
 	};
 
-	const unregister = (key: string) => {
-		if (instances) {
+	const unregister = (key: string, callback: (source: AsyncSignalSource) => Promise<unknown>) => {
+		if (instances && instances.get(key) === callback) {
 			instances.delete(key);
 		}
 	};
@@ -84,7 +84,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 	options: AsyncSignalOptions<TData, TError> = {}
 ): AsyncSignalSvelte<TData, TError> => {
 	const { server = false, immediate = true, watch = [], initialData = undefined, key } = options;
-	const resolvedInitialData = typeof initialData === 'function' ? initialData() : initialData;
+	const resolvedInitialData = typeof initialData === 'function' ? (initialData as () => TData)() : initialData;
 
 	let data = $state<TData | undefined>(resolvedInitialData);
 	let error = $state<TError>();
@@ -164,12 +164,11 @@ export const createAsyncSignal = <TData, TError = Error>(
 
 	if (EnvironmentUtil.isBrowser) {
 		const signalKey = key ?? asyncSignalManager.generateKey();
-		asyncSignalManager.register(signalKey, (source) => {
-			return start(source);
-		});
+		const callback = (source: AsyncSignalSource) => start(source);
+		asyncSignalManager.register(signalKey, callback);
 		$effect(() => {
 			return () => {
-				asyncSignalManager.unregister(signalKey);
+				asyncSignalManager.unregister(signalKey, callback);
 			};
 		});
 		if (watch.length > 0) {

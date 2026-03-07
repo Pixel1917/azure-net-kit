@@ -1,5 +1,7 @@
 import { FormDataUtil } from 'azure-net-tools';
 
+type TransformationParams<SchemaData> = { validate?: boolean; onValidationError?: (errors: RequestErrors<SchemaData>) => void };
+
 type DeepKeys<SchemaData> = SchemaData extends object
 	? {
 			[K in keyof SchemaData & string]: SchemaData[K] extends object ? K | `${K}.${DeepKeys<SchemaData[K]>}` : K;
@@ -51,8 +53,8 @@ interface SchemaBuilder<SchemaData, Rules = unknown, TransformResult = SchemaDat
 }
 
 interface SchemaInstance<TransformResult, SchemaData> {
-	json(validate?: boolean): TransformResult;
-	formData(validate?: boolean): FormData;
+	json(params?: TransformationParams<SchemaData>): TransformResult;
+	formData(params?: TransformationParams<SchemaData>): FormData;
 	validated(): {
 		valid: boolean;
 		errors: RequestErrors<SchemaData>;
@@ -137,7 +139,9 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 					throw Error('Data to validate is not an object');
 				}
 
-				const validated = (): ReturnType<SchemaInstance<TransformResult, SchemaData>['validated']> => {
+				const validated = (params?: {
+					onValidationError?: (errors: RequestErrors<SchemaData>) => void;
+				}): ReturnType<SchemaInstance<TransformResult, SchemaData>['validated']> => {
 					_isValid = true;
 					_errors = {};
 					const definedSchema = rules?.(rulesFactory);
@@ -161,24 +165,28 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 							}
 						}
 					}
-
+					if (!_isValid && params?.onValidationError) {
+						params.onValidationError(_errors);
+					}
 					return {
 						valid: _isValid,
 						errors: _errors,
-						json: () => json(false),
-						formData: () => formData(false)
+						json: () => json({ validate: false }),
+						formData: () => formData({ validate: false })
 					};
 				};
 
-				const json = (validate: boolean = true): TransformResult => {
-					if (validate && !validated().valid) {
+				const json = (params: TransformationParams<SchemaData> = {}): TransformResult => {
+					const { validate = true, onValidationError } = params;
+					if (validate && !validated({ onValidationError }).valid) {
 						throw new SchemaFail<SchemaData>(_errors);
 					}
 					return transform(_preparedData as SchemaData) as TransformResult;
 				};
 
-				const formData = (validate: boolean = true): FormData => {
-					if (validate && !validated().valid) {
+				const formData = (params: TransformationParams<SchemaData> = {}): FormData => {
+					const { validate = true, onValidationError } = params;
+					if (validate && !validated({ onValidationError }).valid) {
 						throw new SchemaFail<SchemaData>(_errors);
 					}
 					return FormDataUtil.fromObject(transform(_preparedData as SchemaData));

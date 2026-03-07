@@ -2,10 +2,7 @@ import { ObjectUtil } from 'azure-net-tools';
 import type { RequestErrors } from '../../delivery/schema/index.js';
 import type { AsyncActionResponse } from '$lib/core/index.js';
 
-type InitialData<FormData, Initial extends Partial<FormData>> =
-	| Initial
-	| Promise<Initial>
-	| (() => Initial | Promise<Initial>);
+type InitialData<FormData, Initial extends Partial<FormData>> = Initial | Promise<Initial> | (() => Initial | Promise<Initial>);
 
 type PathRequiredShape<T, P extends string> = P extends `${infer Head}.${infer Tail}`
 	? Head extends keyof T
@@ -17,14 +14,9 @@ type PathRequiredShape<T, P extends string> = P extends `${infer Head}.${infer T
 
 type UnionToIntersection<U> = (U extends unknown ? (arg: U) => void : never) extends (arg: infer I) => void ? I : never;
 
-type RequiredByPaths<T, P extends string> = [P] extends [never] ? {} : UnionToIntersection<PathRequiredShape<T, P>>;
+type RequiredByPaths<T, P extends string> = [P] extends [never] ? object : UnionToIntersection<PathRequiredShape<T, P>>;
 
-export interface FormConfig<
-	FormData,
-	Response,
-	Initial extends Partial<FormData> = Partial<FormData>,
-	RequiredPath extends string = never
-> {
+export interface FormConfig<FormData, Response, Initial extends Partial<FormData> = Partial<FormData>, RequiredPath extends string = never> {
 	initialData?: InitialData<FormData, Initial>;
 	required?: readonly RequiredPath[];
 	onSuccess?: (response: Response) => Promise<void> | void;
@@ -61,10 +53,7 @@ type ExtractFromSubmit<T> = {
 	custom: ExtractCustom<UnwrapPromise<T>>;
 };
 
-export const createActiveForm = <
-	SubmitReturn extends Promise<AsyncActionResponse<unknown, unknown, unknown>>,
-	RequiredPath extends string = never
->(
+export const createActiveForm = <SubmitReturn extends Promise<AsyncActionResponse<unknown, unknown, unknown>>, RequiredPath extends string = never>(
 	onSubmit: (formData: Partial<ExtractFromSubmit<SubmitReturn>['formData']>) => SubmitReturn,
 	config?: FormConfig<
 		ExtractFromSubmit<SubmitReturn>['formData'],

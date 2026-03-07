@@ -71,7 +71,7 @@ export interface IHttpServiceInstance {
 }
 
 export class HttpService {
-	private readonly baseUrl;
+	private baseUrl;
 	private readonly instance;
 	private readonly requestHandler?: (options: Options) => void | Promise<void>;
 	private readonly errorHandler?: (err: IHttpServiceError) => HttpServiceError<unknown>;
@@ -90,6 +90,10 @@ export class HttpService {
 		this.errorHandler = opts?.onError ?? undefined;
 		this.requestHandler = opts?.onRequest ?? undefined;
 		this.globalErrorHandler = opts?.handleError ?? undefined;
+	}
+
+	setBaseUrl(newBaseUrl: string) {
+		this.baseUrl = newBaseUrl;
 	}
 
 	private async prepareOptions(requestOptions?: IHttpServiceOptions) {

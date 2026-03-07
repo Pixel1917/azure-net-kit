@@ -61,7 +61,7 @@ export const createErrorParser = <BaseError = unknown, Custom = unknown>(parsers
 	parseBaseError?: typeof baseParseBaseError<Custom>;
 	parseHttpError?: typeof baseParseHttpError<BaseError, Custom>;
 	parseSchemaError?: typeof baseParseSchemaError<BaseError, Custom>;
-}): (<T = unknown>(error: ErrorType<BaseError>, retry?: () => unknown) => Promise<AppError<T, Custom>>) => {
+}): (<T = unknown>(error: ErrorType<BaseError>, retry?: () => unknown | Promise<unknown>) => Promise<AppError<T, Custom>>) => {
 	return async <T = unknown>(error: ErrorType<BaseError>, retry?: () => unknown | Promise<unknown>) => {
 		const { parseBaseError = baseParseBaseError, parseHttpError = baseParseHttpError, parseSchemaError = baseParseSchemaError } = parsers ?? {};
 

@@ -9,17 +9,17 @@ importers:
   .:
     dependencies:
       azure-net-tools:
-        specifier: ^1.1.2
-        version: 1.1.2
+        specifier: ^1.2.0
+        version: 1.2.0
       edges-svelte:
-        specifier: ^2.2.0
-        version: 2.2.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)
+        specifier: ^2.2.1
+        version: 2.2.1(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)
       edges-svelte-translations:
-        specifier: ^2.2.0
-        version: 2.2.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(edges-svelte@2.2.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1))(svelte@5.33.1)
+        specifier: ^2.2.1
+        version: 2.2.1(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(edges-svelte@2.2.1(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1))(svelte@5.33.1)
       ky:
-        specifier: ^1.14.0
-        version: 1.14.0
+        specifier: ^1.14.3
+        version: 1.14.3
     devDependencies:
       '@commitlint/cli':
         specifier: ^19.7.1
@@ -958,8 +958,8 @@ packages:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
     engines: {node: '>= 0.4'}
 
-  azure-net-tools@1.1.2:
-    resolution: {integrity: sha512-WtNeyBlc1jqqGjjNGlVfzwcEVr9tzV/1tll7h+e2IKYcL72GnAd2Ss+vwB/qN8bv5v1ljluBE+hapvItKMABhg==}
+  azure-net-tools@1.2.0:
+    resolution: {integrity: sha512-JLzScL6liyYSERF839dgKnD6NfWx7D38omiR6cxyNR7/A/5y2jnAw9s33253Taf6GEh1hzsceQJ67MalsXEK+w==}
 
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
@@ -1273,15 +1273,15 @@ packages:
   duplexer2@0.1.4:
     resolution: {integrity: sha512-asLFVfWWtJ90ZyOUHMqk7/S2w2guQKxUI2itj3d92ADHhxUSbCMGi1f1cBcJ7xM1To+pE/Khbwo1yuNbMEPKeA==}
 
-  edges-svelte-translations@2.2.0:
-    resolution: {integrity: sha512-k702Ebv8fy18b+T/7XSPHtktVGuXMK/+D0D7hMM9WMa/vQ1tI7CWByvyWO452HKVm1f83LYZ+1wt+GPSoTFQCQ==}
+  edges-svelte-translations@2.2.1:
+    resolution: {integrity: sha512-hujyZxPFmRU+0xoPIxTdOP1fF7ePlhN4n2mBrsf8JWHgB7iFAChRT2tw4/17jWDlwfC+eOjxLnZmsdJzPSDNYw==}
     peerDependencies:
       '@sveltejs/kit': ^2.16.0
-      edges-svelte: '>=2.2.0'
+      edges-svelte: '>=2.2.1'
       svelte: ^5.0.0
 
-  edges-svelte@2.2.0:
-    resolution: {integrity: sha512-TaZlsYw3ieLdiEAZx1aQy6wS3fI6Y8olFOvtn8eU/BsEXEmJ2S6Gl2wQ2sDg4PnEG+26SN0NPhjsEIBKexxV/g==}
+  edges-svelte@2.2.1:
+    resolution: {integrity: sha512-b50RP7ARrPASiLE5ntmkVtFTL9nJsTyPSp5ehkaij0f1L+x0dCsZBd5095CSWdrWRn0ClS7F6hag9UZSXGmM2g==}
     peerDependencies:
       '@sveltejs/kit': ^2.16.0
       svelte: ^5.0.0
@@ -1889,8 +1889,8 @@ packages:
   known-css-properties@0.36.0:
     resolution: {integrity: sha512-A+9jP+IUmuQsNdsLdcg6Yt7voiMF/D4K83ew0OpJtpu+l34ef7LaohWV0Rc6KNvzw6ZDizkqfyB5JznZnzuKQA==}
 
-  ky@1.14.0:
-    resolution: {integrity: sha512-Rczb6FMM6JT0lvrOlP5WUOCB7s9XKxzwgErzhKlKde1bEV90FXplV1o87fpt4PU/asJFiqjYJxAJyzJhcrxOsQ==}
+  ky@1.14.3:
+    resolution: {integrity: sha512-9zy9lkjac+TR1c2tG+mkNSVlyOpInnWdSMiue4F+kq8TwJSgv6o8jhLRg8Ho6SnZ9wOYUq/yozts9qQCfk7bIw==}
     engines: {node: '>=18'}
 
   levn@0.4.1:
@@ -3958,7 +3958,7 @@ snapshots:
 
   axobject-query@4.1.0: {}
 
-  azure-net-tools@1.1.2: {}
+  azure-net-tools@1.2.0: {}
 
   balanced-match@1.0.2: {}
 
@@ -4265,16 +4265,15 @@ snapshots:
     dependencies:
       readable-stream: 2.3.8
 
-  edges-svelte-translations@2.2.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(edges-svelte@2.2.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1))(svelte@5.33.1):
+  edges-svelte-translations@2.2.1(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(edges-svelte@2.2.1(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1))(svelte@5.33.1):
     dependencies:
       '@sveltejs/kit': 2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2))
-      edges-svelte: 2.2.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)
+      edges-svelte: 2.2.1(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)
       svelte: 5.33.1
 
-  edges-svelte@2.2.0(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1):
+  edges-svelte@2.2.1(@sveltejs/kit@2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1):
     dependencies:
       '@sveltejs/kit': 2.21.1(@sveltejs/vite-plugin-svelte@5.0.3(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2)))(svelte@5.33.1)(vite@6.3.5(@types/node@24.0.3)(jiti@2.4.2))
-      devalue: 5.1.1
       svelte: 5.33.1
 
   emoji-regex@8.0.0: {}
@@ -4936,7 +4935,7 @@ snapshots:
 
   known-css-properties@0.36.0: {}
 
-  ky@1.14.0: {}
+  ky@1.14.3: {}
 
   levn@0.4.1:
     dependencies:
