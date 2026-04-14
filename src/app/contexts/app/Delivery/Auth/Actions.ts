@@ -1,5 +1,5 @@
 import { createServerAction } from '$lib/index.js';
-import { ApplicationProvider } from '../../Application/index.js';
+import { ApplicationProvider } from '../../Application/Providers/index.js';
 import { LoginSchema } from './Schema/index.js';
 import { CurrentUser } from './Current.js';
 

@@ -1,5 +1,5 @@
 import { AppPresenter } from '../../../../core/Presenter/index.js';
-import { ApplicationProvider } from '../../Application/index.js';
+import { ApplicationProvider } from '../../Application/Providers/index.js';
 import { CreateScriptSchema, UpdateScriptSchema } from './Schema/index.js';
 import type { IScriptCollectionQuery, IScriptCreateRequest, IScriptUpdateRequest } from '../../Domain/Ports/Script/index.js';
 import type { IScript } from '../../Domain/Entities/Script/index.js';

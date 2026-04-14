@@ -1,1 +1,8 @@
-export { edgesHandle, __autoWrapHandle, edgesHandleRaw } from 'edges-svelte/server';
+export {
+	edgesHandle,
+	__autoWrapHandle,
+	edgesHandleRaw,
+	__withEdgesUniversalLoad,
+	__withEdgesServerLoad,
+	__withEdgesActions
+} from 'edges-svelte/server';

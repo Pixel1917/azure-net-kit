@@ -1,5 +1,5 @@
 import { createMiddlewareManager, type IMiddleware } from '$lib/index.js';
-import { ApplicationProvider } from '../../contexts/app/Application/index.js';
+import { ApplicationProvider } from '../../contexts/app/Application/Providers/index.js';
 import { CurrentUser } from '../../contexts/app/Delivery/Auth/index.js';
 
 const AuthMiddleware: IMiddleware = async ({ next, page, event, isServer, cookies }) => {

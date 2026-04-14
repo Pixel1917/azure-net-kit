@@ -3,7 +3,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
 import { createEdgesPluginFactory } from 'edges-svelte/plugin';
 
-export const edgesPlugin = createEdgesPluginFactory('@azure-net/kit', '$lib/edges/server');
+export const edgesPlugin = createEdgesPluginFactory('$lib', '$lib/edges/server');
 
 export default defineConfig({
 	plugins: [sveltekit(), edgesPlugin()],

@@ -1,1 +1,1 @@
-export { createPresenter, createPresenterFactory, createStore, createStoreFactory, batch, transaction } from 'edges-svelte';
+export { createPresenter, createPresenterFactory, createStore, createStoreFactory, batch, transaction, __withEdgesUniversalLoad } from 'edges-svelte';
