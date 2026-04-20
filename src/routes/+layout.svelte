@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { clientMiddleware } from '../app/core/index.js';
+	import { clientMiddleware } from '../core/middleware/index.js';
 
 	clientMiddleware();
 	const { children }: { children: Snippet } = $props();

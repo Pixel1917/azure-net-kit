@@ -1,1 +1,1 @@
-export { RequestContext } from 'edges-svelte/context';
+export { RequestContext } from '@azure-net/edges/context';

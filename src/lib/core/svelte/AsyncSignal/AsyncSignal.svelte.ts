@@ -1,5 +1,5 @@
 import { untrack } from 'svelte';
-import { EnvironmentUtil } from 'azure-net-tools';
+import { EnvironmentUtil } from '@azure-net/tools';
 
 export type AsyncStatus = 'idle' | 'pending' | 'success' | 'error';
 export type AsyncSignalSource = 'auto' | 'manual' | 'global';

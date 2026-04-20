@@ -1,6 +1,6 @@
 import { RequestContext } from '../../../edges/context/index.js';
 import { error, fail, redirect, type RequestEvent } from '@sveltejs/kit';
-import { EnvironmentUtil } from 'azure-net-tools';
+import { EnvironmentUtil } from '@azure-net/tools';
 
 type NoConflict<I, D> = {
 	[K in keyof I]: K extends keyof D ? never : I[K];

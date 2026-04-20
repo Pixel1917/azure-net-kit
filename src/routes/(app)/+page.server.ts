@@ -1,14 +1,9 @@
-import { LogoutAction } from '../../app/contexts/app/Delivery/Auth/index.js';
-import { ScriptPresenter } from '../../app/contexts/app/Delivery/Script/index.js';
-import type { PageServerLoad, Actions } from '../../../.svelte-kit/types/src/routes/(app)/$types.js';
+import type { PageServerLoad } from '../../../.svelte-kit/types/src/routes/(app)/$types.js';
+import { PrivatePresenter } from '../../app/mock-api-context/layers/delivery/private/index.js';
 
 export const load: PageServerLoad = async () => {
-	const { collection } = ScriptPresenter();
+	const { collection } = PrivatePresenter();
 	return {
-		scripts: await collection()
+		collection: await collection()
 	};
-};
-
-export const actions: Actions = {
-	logout: async () => await LogoutAction()
 };

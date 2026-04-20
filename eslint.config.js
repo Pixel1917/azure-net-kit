@@ -35,7 +35,9 @@ export default ts.config(
 	},
 	{
 		rules: {
-			'svelte/no-at-html-tags': 0
+			'svelte/no-at-html-tags': 0,
+			'svelte/no-navigation-without-resolve': 0,
+			'svelte/prefer-svelte-reactivity': 0
 		}
 	}
 );

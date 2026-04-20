@@ -17,7 +17,7 @@ export const createAsyncHelpers = <BaseError = unknown, Custom = unknown>(opts?:
 	const createAsyncAction = async <Res = unknown, Req = unknown>(
 		action: ActionOrThunk<Res>,
 		args?: {
-			beforeSend?: (next: () => void, abort: () => void) => void | Promise<void>;
+			beforeSend?: (actions: { next: () => void; abort: () => void }) => void | Promise<void>;
 			onSuccess?: (result: AsyncActionResponse<Res, undefined, Custom>) => Promise<unknown> | unknown;
 			onError?: (result: AsyncActionResponse<never, Req, Custom>) => Promise<unknown> | unknown;
 			reject?: boolean;
@@ -46,12 +46,22 @@ export const createAsyncHelpers = <BaseError = unknown, Custom = unknown>(opts?:
 
 		if (args?.beforeSend) {
 			const beforeSendResult = await new Promise<'next' | 'abort'>((resolve) => {
-				const next = () => resolve('next');
-				const abort = () => resolve('abort');
-				Promise.resolve(args.beforeSend!(next, abort)).catch((err) => {
-					console.error('Error in beforeSend:', err);
-					resolve('abort');
-				});
+				let settled = false;
+				const settle = (value: 'next' | 'abort') => {
+					if (settled) return;
+					settled = true;
+					resolve(value);
+				};
+				const next = () => settle('next');
+				const abort = () => settle('abort');
+				Promise.resolve(args.beforeSend!({ next, abort }))
+					.then(() => {
+						settle('next');
+					})
+					.catch((err) => {
+						console.error('Error in beforeSend:', err);
+						settle('abort');
+					});
 			});
 
 			if (beforeSendResult === 'abort') {
@@ -96,7 +106,7 @@ export const createAsyncHelpers = <BaseError = unknown, Custom = unknown>(opts?:
 				return retryResult;
 			}
 			const { bus } = AppEvents();
-			bus.publish('OnAsyncHelperError', error);
+			bus.publish('OnAsyncHelperError', () => error);
 			const result = { error, response: args?.fallbackResponse as Res, success: false };
 			await args?.onError?.(result as AsyncActionResponse<never, Req, Custom>);
 			if (args?.reject) throw error;
@@ -107,7 +117,7 @@ export const createAsyncHelpers = <BaseError = unknown, Custom = unknown>(opts?:
 	const createAsyncResource = async <Res, Req = unknown>(
 		action: ActionOrThunk<Res>,
 		args?: {
-			beforeSend?: (next: () => void, abort: () => void) => void | Promise<void>;
+			beforeSend?: (actions: { next: () => void; abort: () => void }) => void | Promise<void>;
 			onSuccess?: (result: Res) => Promise<unknown> | unknown;
 			onError?: (error: AppError<Req, Custom>) => Promise<unknown> | unknown;
 			reject?: boolean;
@@ -126,13 +136,23 @@ export const createAsyncHelpers = <BaseError = unknown, Custom = unknown>(opts?:
 
 		if (args?.beforeSend) {
 			const beforeSendResult = await new Promise<'next' | 'abort'>((resolve) => {
-				const next = () => resolve('next');
-				const abort = () => resolve('abort');
+				let settled = false;
+				const settle = (value: 'next' | 'abort') => {
+					if (settled) return;
+					settled = true;
+					resolve(value);
+				};
+				const next = () => settle('next');
+				const abort = () => settle('abort');
 
-				Promise.resolve(args.beforeSend!(next, abort)).catch((err) => {
-					console.error('Error in beforeSend:', err);
-					resolve('abort');
-				});
+				Promise.resolve(args.beforeSend!({ next, abort }))
+					.then(() => {
+						settle('next');
+					})
+					.catch((err) => {
+						console.error('Error in beforeSend:', err);
+						settle('abort');
+					});
 			});
 
 			if (beforeSendResult === 'abort') {
@@ -173,7 +193,7 @@ export const createAsyncHelpers = <BaseError = unknown, Custom = unknown>(opts?:
 				return retryResult;
 			}
 			const { bus } = AppEvents();
-			bus.publish('OnAsyncHelperError', error);
+			bus.publish('OnAsyncHelperError', () => error);
 			await args?.onError?.(error);
 			if (args?.reject) throw error;
 			return args?.fallbackResponse as Res;

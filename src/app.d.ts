@@ -1,4 +1,4 @@
-import type { Translation } from 'edges-svelte-translations';
+import type { Translation } from '@azure-net/edges-translations';
 import type { IUser } from './app/contexts/app/Domain/Entities/User/index.js';
 
 // See https://svelte.dev/docs/kit/types#app.d.ts

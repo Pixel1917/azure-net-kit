@@ -1,4 +1,4 @@
-import { EnvironmentUtil } from 'azure-net-tools';
+import { EnvironmentUtil } from '@azure-net/tools';
 
 export const onClickOutside = (node: HTMLElement, initiator?: HTMLElement) => {
 	if (EnvironmentUtil.isServer) return { destroy: () => {} };

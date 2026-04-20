@@ -1,2 +1,2 @@
-export * from './HttpService.js';
 export * from './Statuses.js';
+export * from './HttpServiceInstance.js';

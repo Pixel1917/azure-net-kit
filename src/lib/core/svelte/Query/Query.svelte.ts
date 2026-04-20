@@ -1,4 +1,4 @@
-import { ObjectUtil } from 'azure-net-tools';
+import { ObjectUtil } from '@azure-net/tools';
 import { untrack } from 'svelte';
 
 export type QuerySignal = {

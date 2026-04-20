@@ -1,12 +1,9 @@
-import { LoginAction } from '../../../app/contexts/app/Delivery/Auth/index.js';
-import type { PageServerLoad, Actions } from '../../../../.svelte-kit/types/src/routes/(app)/login/$types.js';
+import { PublicPresenter } from '../../../app/mock-api-context/layers/delivery/public/index.js';
+import type { PageServerLoad } from '../../../../.svelte-kit/types/src/routes/(app)/login/$types.js';
 
-export const load: PageServerLoad = ({ locals }) => {
+export const load: PageServerLoad = async () => {
+	const { collection } = PublicPresenter();
 	return {
-		user: locals.user,
-		lang: locals.lang
+		collection: await collection()
 	};
-};
-export const actions: Actions = {
-	login: async () => await LoginAction()
 };

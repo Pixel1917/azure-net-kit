@@ -1,4 +1,4 @@
-import { EnvironmentUtil } from 'azure-net-tools';
+import { EnvironmentUtil } from '@azure-net/tools';
 
 export const scrollTo = (nodeOrName: string | Element, offset = 220) => {
 	if (EnvironmentUtil.isBrowser) {

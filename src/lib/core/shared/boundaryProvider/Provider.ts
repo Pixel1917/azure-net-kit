@@ -1,10 +1,10 @@
 import { RequestContext } from '../../../edges/context/index.js';
-import { EnvironmentUtil } from 'azure-net-tools';
+import { BROWSER } from '@azure-net/tools/environment';
 
-type ServiceFactory<T> = () => T | Promise<T>;
+type ServiceFactory<T> = () => T;
 type ServiceMap = Record<string, ServiceFactory<unknown>>;
 type ResolvedServices<T extends ServiceMap> = {
-	[K in keyof T]: Awaited<ReturnType<T[K]>>;
+	[K in keyof T]: ReturnType<T[K]>;
 };
 
 type InferProviderType<T> = T extends ProviderWithType<infer S> ? ResolvedServices<S> : never;
@@ -30,7 +30,7 @@ const providerProxyCache = new Map<string, ResolvedServices<ServiceMap>>();
 const clientBootFlags = new Map<string, boolean>();
 
 const getProviderCache = (providerName: string): Map<string, unknown> => {
-	if (EnvironmentUtil.isBrowser) {
+	if (BROWSER) {
 		if (!clientCache.has(providerName)) {
 			clientCache.set(providerName, new Map());
 		}
@@ -56,7 +56,7 @@ const getProviderCache = (providerName: string): Map<string, unknown> => {
 };
 
 const getBootFlag = (providerName: string): boolean => {
-	if (EnvironmentUtil.isBrowser) {
+	if (BROWSER) {
 		return clientBootFlags.get(providerName) ?? false;
 	} else {
 		const context = RequestContext.current();
@@ -69,7 +69,7 @@ const getBootFlag = (providerName: string): boolean => {
 };
 
 const setBootFlag = (providerName: string, value: boolean): void => {
-	if (EnvironmentUtil.isBrowser) {
+	if (BROWSER) {
 		clientBootFlags.set(providerName, value);
 	} else {
 		const context = RequestContext.current();
@@ -89,7 +89,7 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 	type Deps = { [K in keyof D]: InferProviderType<D[K]> };
 
 	const providerFn = () => {
-		if (EnvironmentUtil.isBrowser && providerProxyCache.has(name)) {
+		if (BROWSER && providerProxyCache.has(name)) {
 			return providerProxyCache.get(name) as ResolvedServices<T>;
 		}
 
@@ -126,7 +126,7 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 
 			factories = register(deps as Deps);
 
-			if (EnvironmentUtil.isBrowser) {
+			if (BROWSER) {
 				factoriesCache.set(register as UntypedFactoryCache, factories);
 			}
 
@@ -146,7 +146,14 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 				}
 
 				const factory = factories[key as keyof T];
+				if (typeof factory !== 'function') {
+					throw Error('Factory must be a function');
+				}
 				const instance = factory();
+
+				if (instance && typeof (instance as Promise<unknown>)?.then === 'function') {
+					throw new Error(`Service '${key}' in provider '${name}' returned Promise.`);
+				}
 
 				cache.set(key, instance);
 
@@ -168,7 +175,7 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 			}
 		});
 
-		if (EnvironmentUtil.isBrowser) {
+		if (BROWSER) {
 			providerProxyCache.set(name, providerProxy);
 		}
 
@@ -205,7 +212,7 @@ export function cleanupProvider(name: string): void {
 		cache.clear();
 	};
 
-	if (EnvironmentUtil.isBrowser) {
+	if (BROWSER) {
 		const cache = clientCache.get(name);
 		if (cache) {
 			void cleanupCache(cache);

@@ -1,8 +1,8 @@
 import { type BeforeNavigate, error, type Page, redirect, type RequestEvent } from '@sveltejs/kit';
-import { RequestContext } from 'edges-svelte/context';
+import { RequestContext } from '@azure-net/edges/context';
 import { beforeNavigate, goto } from '$app/navigation';
 import { page } from '$app/state';
-import { EnvironmentUtil } from 'azure-net-tools';
+import { BROWSER } from '@azure-net/tools/environment';
 import { UniversalCookie } from '../cookie/index.js';
 
 type RedirectStatus = 300 | 301 | 302 | 303 | 304 | 305 | 306 | 307 | 308;
@@ -20,7 +20,7 @@ export type IMiddleware = (middlewareData: {
 
 export const createMiddlewareManager = (middlewares: IMiddleware[]) => {
 	const universalRedirect = (location: string | URL, status: RedirectStatus = 301, navigation?: BeforeNavigate) => {
-		if (EnvironmentUtil.isBrowser) {
+		if (BROWSER) {
 			if (navigation) {
 				navigation?.cancel();
 			}
@@ -32,15 +32,15 @@ export const createMiddlewareManager = (middlewares: IMiddleware[]) => {
 
 	const executeMiddlewares = async (navigation?: BeforeNavigate) => {
 		let event: RequestEvent | undefined;
-		let from: RequestEvent['url'] | Page['url'] | undefined = undefined;
-		if (EnvironmentUtil.isServer) {
+		let from: RequestEvent['url'] | Page['url'] | undefined;
+		if (!BROWSER) {
 			event = RequestContext.current().event;
 			const referer = event?.request.headers.get('referer');
 			from = referer ? new URL(referer) : undefined;
 		} else {
 			from = navigation?.from?.url ?? undefined;
 		}
-		const to = (EnvironmentUtil.isBrowser ? (navigation?.to?.url ?? page?.url) : event?.url) as URL;
+		const to = (BROWSER ? (navigation?.to?.url ?? page?.url) : event?.url) as URL;
 		for (const middleware of middlewares) {
 			let shouldContinue = false;
 			const next = (location?: string | URL, status: RedirectStatus = 301) => {
@@ -54,7 +54,7 @@ export const createMiddlewareManager = (middlewares: IMiddleware[]) => {
 				event,
 				page,
 				cookies: UniversalCookie,
-				isServer: EnvironmentUtil.isServer,
+				isServer: !BROWSER,
 				to,
 				from,
 				error,
@@ -62,7 +62,7 @@ export const createMiddlewareManager = (middlewares: IMiddleware[]) => {
 			});
 
 			if (!shouldContinue) {
-				if (EnvironmentUtil.isBrowser) {
+				if (BROWSER) {
 					navigation?.cancel();
 					if (from) {
 						void goto(from.pathname);
@@ -76,7 +76,12 @@ export const createMiddlewareManager = (middlewares: IMiddleware[]) => {
 	};
 
 	const serverMiddleware = async () => await executeMiddlewares();
+
+	let clientRegistered = false;
+
 	const clientMiddleware = () => {
+		if (!BROWSER || clientRegistered) return;
+		clientRegistered = true;
 		beforeNavigate(async (navigation) => {
 			await executeMiddlewares(navigation);
 		});

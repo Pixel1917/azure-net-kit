@@ -1,4 +1,4 @@
-import { FormDataUtil } from 'azure-net-tools';
+import { FormDataUtil } from '@azure-net/tools';
 
 type TransformationParams<SchemaData> = { validate?: boolean; onValidationError?: (errors: RequestErrors<SchemaData>) => void };
 
@@ -68,9 +68,12 @@ export type Schema<SchemaData, TransformResult, CustomMethods> = CustomMethods &
 	getSchemaError(e: unknown): RequestErrors<SchemaData> | undefined;
 };
 
-class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaData, CustomMethods = unknown>
-	implements SchemaBuilder<SchemaData, Rules, TransformResult, CustomMethods>
-{
+class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaData, CustomMethods = unknown> implements SchemaBuilder<
+	SchemaData,
+	Rules,
+	TransformResult,
+	CustomMethods
+> {
 	private _rules?: (factory: Rules) => RequestRules<SchemaData>;
 	private _transform?: (data: SchemaData) => unknown;
 	private _customMethods?: () => Record<string, unknown>;

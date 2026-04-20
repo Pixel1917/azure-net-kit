@@ -5,4 +5,4 @@ export {
 	__withEdgesUniversalLoad,
 	__withEdgesServerLoad,
 	__withEdgesActions
-} from 'edges-svelte/server';
+} from '@azure-net/edges/server';

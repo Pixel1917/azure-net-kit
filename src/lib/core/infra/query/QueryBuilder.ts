@@ -1,85 +1,104 @@
 export type ArrayFormat = 'repeat' | 'brackets' | 'comma' | 'json';
 export type ObjectFormat = 'default' | 'nested-brackets';
 
-export interface IQueryBuilder {
-	build(
-		query: Record<string, unknown>,
-		opts?: {
-			arrayFormat?: ArrayFormat;
-			objectFormat?: ObjectFormat;
-		}
-	): string;
-	transform(object: object): object;
+export interface IQueryBuilderSettings<TTransformInput extends object = object> {
+	delimiter?: boolean;
+	arrayFormat?: ArrayFormat;
+	objectFormat?: ObjectFormat;
+	transform?: (obj: TTransformInput) => object;
 }
 
-export class QueryBuilder implements IQueryBuilder {
-	private readonly defaultArrayFormat: ArrayFormat;
-	private readonly defaultObjectFormat: ObjectFormat;
+export interface IQueryBuilderInstance<TTransformInput extends object = object> {
+	toString: (query: object, settings?: IQueryBuilderSettings<TTransformInput>) => string;
+	toSearchParams: (query: object, settings?: Omit<IQueryBuilderSettings<TTransformInput>, 'delimiter'>) => URLSearchParams;
+}
 
-	constructor(options?: { arrayFormat?: ArrayFormat; objectFormat?: ObjectFormat }) {
-		this.defaultArrayFormat = options?.arrayFormat ?? 'repeat';
-		this.defaultObjectFormat = options?.objectFormat ?? 'default';
+type QuerySettingsResolved<TTransformInput extends object = object> = Required<
+	Pick<IQueryBuilderSettings<TTransformInput>, 'delimiter' | 'arrayFormat' | 'objectFormat'>
+> &
+	Pick<IQueryBuilderSettings<TTransformInput>, 'transform'>;
+
+const normalizeSettings = <TTransformInput extends object = object>(
+	base?: IQueryBuilderSettings<TTransformInput>,
+	override?: IQueryBuilderSettings<TTransformInput>
+): QuerySettingsResolved<TTransformInput> => {
+	return {
+		delimiter: override?.delimiter ?? base?.delimiter ?? true,
+		arrayFormat: override?.arrayFormat ?? base?.arrayFormat ?? 'repeat',
+		objectFormat: override?.objectFormat ?? base?.objectFormat ?? 'default',
+		transform: override?.transform ?? base?.transform
+	};
+};
+
+const encodeQuery = (entries: Array<[string, string]>) =>
+	entries.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&');
+
+const encodeArrayEntries = (key: string, values: unknown[], arrayFormat: ArrayFormat): Array<[string, string]> => {
+	const cleanValues = values.filter((v) => v !== null && v !== undefined).map((v) => String(v));
+	switch (arrayFormat) {
+		case 'repeat':
+			return cleanValues.map((v) => [key, v]);
+		case 'brackets':
+			return cleanValues.map((v) => [`${key}[]`, v]);
+		case 'comma':
+			return [[key, cleanValues.join(',')]];
+		case 'json':
+			return [[key, JSON.stringify(cleanValues)]];
+		default:
+			throw new Error(`Unsupported array format: ${arrayFormat}`);
 	}
+};
 
-	transform(object: object): object {
-		return object;
-	}
+const serializeEntries = (obj: object, arrayFormat: ArrayFormat, objectFormat: ObjectFormat, prefix = ''): Array<[string, string]> => {
+	const entries: Array<[string, string]> = [];
+	for (const [key, value] of Object.entries(obj)) {
+		if (value === null || value === undefined) continue;
 
-	build(
-		query: object = {},
-		opts?: {
-			delimiter?: boolean;
-			arrayFormat?: ArrayFormat;
-			objectFormat?: ObjectFormat;
+		const fullKey = prefix ? (objectFormat === 'nested-brackets' ? `${prefix}[${key}]` : `${prefix}.${key}`) : key;
+		if (Array.isArray(value)) {
+			entries.push(...encodeArrayEntries(fullKey, value, arrayFormat));
+			continue;
 		}
-	): string {
-		const params = this.transform(query);
-		const arrayFormat = opts?.arrayFormat ?? this.defaultArrayFormat;
-		const objectFormat = opts?.objectFormat ?? this.defaultObjectFormat;
 
-		const parts = this.serialize(params, arrayFormat, objectFormat);
-		const delimiter = opts?.delimiter ?? true;
-		return delimiter && parts.length ? `?${parts.join('&')}` : parts.join('&');
-	}
-
-	private serialize(obj: object, arrayFormat: ArrayFormat, objectFormat: ObjectFormat, prefix = ''): string[] {
-		const parts: string[] = [];
-
-		for (const [key, value] of Object.entries(obj)) {
-			if (value === null || value === undefined) continue;
-
-			const fullKey = prefix ? (objectFormat === 'nested-brackets' ? `${prefix}[${key}]` : `${prefix}.${key}`) : key;
-
-			if (Array.isArray(value)) {
-				parts.push(...this.encodeArray(fullKey, value, arrayFormat));
-			} else if (typeof value === 'object' && !(value instanceof Date)) {
-				if (objectFormat === 'nested-brackets') {
-					parts.push(...this.serialize(value as Record<string, unknown>, arrayFormat, objectFormat, fullKey));
-				} else {
-					parts.push(`${encodeURIComponent(fullKey)}=${encodeURIComponent(JSON.stringify(value))}`);
-				}
+		if (typeof value === 'object' && !(value instanceof Date)) {
+			if (objectFormat === 'nested-brackets') {
+				entries.push(...serializeEntries(value as object, arrayFormat, objectFormat, fullKey));
 			} else {
-				parts.push(`${encodeURIComponent(fullKey)}=${encodeURIComponent(String(value))}`);
+				entries.push([fullKey, JSON.stringify(value)]);
 			}
+			continue;
 		}
 
-		return parts;
+		entries.push([fullKey, String(value)]);
 	}
+	return entries;
+};
 
-	private encodeArray(key: string, arr: unknown[], arrayFormat: ArrayFormat): string[] {
-		const cleanArray = arr.filter((v) => v !== null && v !== undefined).map(String);
+const toSearchParamsWithSettings = <TTransformInput extends object = object>(
+	query: object,
+	settings: QuerySettingsResolved<TTransformInput>
+): URLSearchParams => {
+	const source = settings.transform ? settings.transform(query as TTransformInput) : query;
+	const entries = serializeEntries(source, settings.arrayFormat, settings.objectFormat);
+	const params = new URLSearchParams();
+	for (const [key, value] of entries) {
+		params.append(key, value);
+	}
+	return params;
+};
 
-		switch (arrayFormat) {
-			case 'repeat':
-				return cleanArray.map((v) => `${encodeURIComponent(key)}=${encodeURIComponent(v)}`);
-			case 'brackets':
-				return cleanArray.map((v) => `${encodeURIComponent(key)}[]=${encodeURIComponent(v)}`);
-			case 'comma':
-				return [`${encodeURIComponent(key)}=${encodeURIComponent(cleanArray.join(','))}`];
-			case 'json':
-				return [`${encodeURIComponent(key)}=${encodeURIComponent(JSON.stringify(cleanArray))}`];
-			default:
-				throw new Error(`Unsupported array format: ${arrayFormat}`);
+export const createQueryInstance = <TTransformInput extends object = object>(
+	defaults?: IQueryBuilderSettings<TTransformInput>
+): IQueryBuilderInstance<TTransformInput> => {
+	return {
+		toSearchParams: (query: object, settings?: Omit<IQueryBuilderSettings<TTransformInput>, 'delimiter'>) => {
+			const resolved = normalizeSettings<TTransformInput>(defaults, settings);
+			return toSearchParamsWithSettings(query, resolved);
+		},
+		toString: (query: object, settings?: IQueryBuilderSettings<TTransformInput>) => {
+			const resolved = normalizeSettings<TTransformInput>(defaults, settings);
+			const serialized = encodeQuery(Array.from(toSearchParamsWithSettings(query, resolved).entries()));
+			return resolved.delimiter && serialized ? `?${serialized}` : serialized;
 		}
-	}
-}
+	};
+};

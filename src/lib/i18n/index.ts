@@ -1,1 +1,1 @@
-export { createTranslations, type Path, type Translation } from 'edges-svelte-translations';
+export { createTranslations, type Path, type Translation } from '@azure-net/edges-translations';

@@ -1,5 +1,5 @@
-import { Cookies, EnvironmentUtil } from 'azure-net-tools';
-import { RequestContext } from 'edges-svelte/context';
+import { Cookies, EnvironmentUtil } from '@azure-net/tools';
+import { RequestContext } from '@azure-net/edges/context';
 
 export type CookieOptions = {
 	expires?: Date | number;

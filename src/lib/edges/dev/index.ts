@@ -1,1 +1,1 @@
-export { DevTools } from 'edges-svelte/dev';
+export { DevTools } from '@azure-net/edges/dev';

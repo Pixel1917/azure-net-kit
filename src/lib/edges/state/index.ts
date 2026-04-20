@@ -1,1 +1,1 @@
-export { createState, createDerivedState, createRawState } from 'edges-svelte/state';
+export { createState, createDerivedState, createRawState } from '@azure-net/edges/state';

@@ -10,8 +10,8 @@
 
 ## 🚀 What's included?
 
-- **Built-in store** — flexible and SSR-friendly state management powered by [edges-svelte](https://github.com/Pixel1917/edge-s).
-- **Localization and translation** — ready-to-use i18n solution ([edges-svelte-translations](https://github.com/Pixel1917/edges-svelte-translations)) for multilingual applications.
+- **Built-in store** — flexible and SSR-friendly state management powered by [@azure-net/edges](https://github.com/Pixel1917/edge-s).
+- **Localization and translation** — ready-to-use i18n solution ([@azure-net/edges-translations](https://github.com/Pixel1917/edges-svelte-translations)) for multilingual applications.
 - **Extensive utilities** — for working with text, objects, dates, and common tasks.
 - **Data validation** — handy rules and validators.
 - **Reusable base abstractions** — `Repositories`, `Services`, `Providers`, and `Datasources` for quick setup and reuse.

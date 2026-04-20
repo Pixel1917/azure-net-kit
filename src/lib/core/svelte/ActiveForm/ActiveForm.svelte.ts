@@ -1,4 +1,4 @@
-import { ObjectUtil } from 'azure-net-tools';
+import { ObjectUtil } from '@azure-net/tools';
 import type { RequestErrors } from '../../delivery/schema/index.js';
 import type { AsyncActionResponse } from '$lib/core/index.js';
 
@@ -21,7 +21,7 @@ export interface FormConfig<FormData, Response, Initial extends Partial<FormData
 	required?: readonly RequiredPath[];
 	onSuccess?: (response: Response) => Promise<void> | void;
 	onError?: () => Promise<void> | void;
-	beforeSubmit?: (form: ActiveFormController<FormData, RequiredPath>, abort: () => void) => Promise<void> | void;
+	beforeSubmit?: (actions: { form: ActiveFormController<FormData, RequiredPath>; abort: () => void }) => Promise<void> | void;
 	waitForInitialData?: boolean;
 }
 
@@ -95,7 +95,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	let formErrors = $state<RequestErrors<FormData>>({});
 	let pending = $state(false);
 
-	const dirty = $derived(JSON.stringify(formData) !== JSON.stringify(initial));
+	const dirty = $derived(!ObjectUtil.equals(formData, initial));
 
 	const ready = (async (): Promise<Partial<FormData>> => {
 		if (!initialSource.sync) {
@@ -109,34 +109,36 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 
 	const submit = async (): Promise<AsyncActionResponse<Response, FormData, Custom>> => {
 		pending = true;
-		if (config?.beforeSubmit) {
-			let aborted = false;
-			const abort = () => {
-				aborted = true;
-				pending = false;
-			};
-			await config.beforeSubmit(formApi, () => abort());
-			if (aborted) {
-				return {
-					success: false,
-					response: undefined as Response
-				} as AsyncActionResponse<Response, FormData, Custom>;
-			}
-		}
-		try {
-			const result = await onSubmit($state.snapshot(formData) as Partial<ExtractFromSubmit<SubmitReturn>['formData']>);
 
-			if (result.error?.fields) {
-				formErrors = result.error.fields as RequestErrors<FormData>;
+		try {
+			if (config?.beforeSubmit) {
+				let aborted = false;
+				const abort = () => {
+					aborted = true;
+					pending = false;
+				};
+				await config.beforeSubmit({ form: formApi, abort: () => abort() });
+				if (aborted) {
+					return {
+						success: false,
+						response: undefined as Response
+					} as AsyncActionResponse<Response, FormData, Custom>;
+				}
 			}
+
+			const result = await onSubmit($state.snapshot(formData) as Partial<ExtractFromSubmit<SubmitReturn>['formData']>);
 
 			if (result.success) {
 				await config?.onSuccess?.(result.response as Response);
+				formErrors = {};
 			} else {
+				if (result.error?.fields) {
+					formErrors = result.error.fields as RequestErrors<FormData>;
+				}
 				await config?.onError?.();
 			}
 
-			return result as Promise<AsyncActionResponse<Response, FormData, Custom>>;
+			return result as AsyncActionResponse<Response, FormData, Custom>;
 		} finally {
 			pending = false;
 		}
