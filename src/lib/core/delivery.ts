@@ -14,12 +14,15 @@ export {
 	type ISchemaError,
 	type ValidationResult,
 	type ValidationRuleResult,
-	type ValidationParams
+	type ValidationParams,
+	type ValidationMessage,
+	type ValidationErrorsMap
 } from './delivery/schema/Schema.js';
 export {
 	createRules,
 	validationMessagesRu,
 	validationMessagesI18n,
 	validationMessagesEn,
-	type ValidationRuleParams
+	type ValidationRuleParams,
+	type BaseValidationMessages
 } from './delivery/schema/rules/index.js';

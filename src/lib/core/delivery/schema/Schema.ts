@@ -3,11 +3,22 @@ import { AzureNetKitInternalError } from '../../shared/appError/AppError.js';
 
 type TransformationParams<SchemaData> = { validate?: boolean; onValidationError?: (errors: RequestErrors<SchemaData>) => void };
 
-type DeepKeys<SchemaData> = SchemaData extends object
-	? {
-			[K in keyof SchemaData & string]: SchemaData[K] extends object ? K | `${K}.${DeepKeys<SchemaData[K]>}` : K;
-		}[keyof SchemaData & string]
-	: never;
+type AtomicObject = Date | File | Blob | FileList | FormData | URL | RegExp | ArrayBuffer | DataView | Promise<unknown>;
+
+type IsAtomic<T> = T extends AtomicObject ? true : false;
+
+type DeepKeys<SchemaData> =
+	IsAtomic<SchemaData> extends true
+		? never
+		: SchemaData extends object
+			? {
+					[K in keyof SchemaData & string]: IsAtomic<SchemaData[K]> extends true
+						? K
+						: SchemaData[K] extends object
+							? K | `${K}.${DeepKeys<SchemaData[K]>}`
+							: K;
+				}[keyof SchemaData & string]
+			: never;
 
 export type ValidationParams<SchemaData = unknown, CurrentValue = unknown, CurrentKey = string> = {
 	val: CurrentValue;
@@ -30,9 +41,11 @@ export type ValidationRuleResult<CurrentValue, ListValues = unknown, CurrentKey 
 type ValidationErrors<Errors> =
 	Errors extends ReadonlyArray<infer U>
 		? ValidationErrors<U>[]
-		: Errors extends object
-			? { [K in keyof Errors]?: ValidationErrors<Errors[K]> }
-			: ValidationMessage;
+		: IsAtomic<Errors> extends true
+			? ValidationMessage
+			: Errors extends object
+				? { [K in keyof Errors]?: ValidationErrors<Errors[K]> }
+				: ValidationMessage;
 
 export type RequestErrors<SchemaData> = Partial<ValidationErrors<SchemaData>>;
 
