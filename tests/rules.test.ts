@@ -63,4 +63,18 @@ describe('Rules', () => {
 		expect(email({ val: 'bad-email' })).toBe('Invalid email address');
 		expect(email({ val: 'test@example.com' })).toBeUndefined();
 	});
+
+	it('phone rule supports international and local formats', () => {
+		const phone = rules.phone();
+
+		expect(phone({ val: '+1 (202) 555-0173' })).toBeUndefined();
+		expect(phone({ val: '+44 20 7946 0958' })).toBeUndefined();
+		expect(phone({ val: '+7 (999) 123-45-67' })).toBeUndefined();
+		expect(phone({ val: '2025550173' })).toBeUndefined();
+
+		expect(phone({ val: '+0123456789' })).toBe('Invalid phone number format');
+		expect(phone({ val: '12345' })).toBe('Invalid phone number format');
+		expect(phone({ val: '+1-800-CALL-NOW' })).toBe('Invalid phone number format');
+		expect(phone({ val: '++12025550173' })).toBe('Invalid phone number format');
+	});
 });

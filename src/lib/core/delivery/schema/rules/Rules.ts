@@ -202,34 +202,36 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 
 		return ({ val }: ValidationParams<T, D>): ValidationMessage | undefined => {
 			if (checkVal(val)) {
-				// eslint-disable-next-line
-				const cleanedVal = String(val).replace(/[\s\-\(\)\.]/g, '');
-
-				if (!cleanedVal) {
+				const rawVal = String(val).trim();
+				if (!rawVal) {
 					return message();
 				}
 
-				if (!/^\+?\d+$/.test(cleanedVal)) {
+				if (!/^[\d+\s().-]+$/.test(rawVal)) {
 					return message();
 				}
 
-				if (cleanedVal.length < 7 || cleanedVal.length > 16) {
+				const normalized = rawVal.replace(/[\s().-]/g, '');
+				if (!normalized) {
 					return message();
 				}
 
-				let hasValidCountryCode = false;
-
-				if (cleanedVal.startsWith('8')) {
-					if (cleanedVal.length === 11) {
-						hasValidCountryCode = true;
-					}
-				} else if (/^\d+$/.test(cleanedVal)) {
-					if (!hasValidCountryCode && cleanedVal.length >= 6 && cleanedVal.length <= 16) {
-						hasValidCountryCode = true;
-					}
+				const plusCount = (normalized.match(/\+/g) ?? []).length;
+				if (plusCount > 1 || (plusCount === 1 && !normalized.startsWith('+'))) {
+					return message();
 				}
 
-				return hasValidCountryCode ? undefined : message();
+				const hasInternationalPrefix = normalized.startsWith('+');
+				const digitsOnly = hasInternationalPrefix ? normalized.slice(1) : normalized;
+
+				if (!/^\d+$/.test(digitsOnly)) {
+					return message();
+				}
+
+				if (hasInternationalPrefix) {
+					return /^[1-9]\d{6,14}$/.test(digitsOnly) ? undefined : message();
+				}
+				return /^\d{7,15}$/.test(digitsOnly) ? undefined : message();
 			}
 			return undefined;
 		};

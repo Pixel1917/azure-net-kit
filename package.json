@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "4.0.0-0",
+	"version": "4.0.0-1",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
@@ -94,7 +94,6 @@
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/svelte": "^5.3.1",
-		"commander": "^13.1.0",
 		"commitizen": "^4.3.1",
 		"eslint": "^10.2.1",
 		"eslint-config-prettier": "^10.1.8",
