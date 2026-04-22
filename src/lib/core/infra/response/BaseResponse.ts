@@ -1,4 +1,5 @@
 import type { HttpServiceResponse } from '../httpService/index.js';
+import { AzureNetKitInternalError } from '../../shared/appError/AppError.js';
 
 type DeepKeys<T> = T extends object
 	? {
@@ -51,7 +52,7 @@ export class ResponseBuilder<TData = unknown, TMeta = object, TWrapper = TData> 
 		ResourceClass: new (data: ArrayElement<TData>) => { toPlainObject(): TResource }
 	): Omit<this, keyof ResponseBuilder<unknown, unknown, unknown>> & ResponseBuilder<TResource[], TMeta, TWrapper> {
 		if (!Array.isArray(this.state.data)) {
-			throw new Error('toCollection can only be used when data is an array');
+			throw new AzureNetKitInternalError('[ResponseBuilder] Method "mapCollectionUsing" can only be used when data is an array');
 		}
 		const collection = (this.state.data as ArrayElement<TData>[]).map((dataElement) => new ResourceClass(dataElement).toPlainObject());
 		const newResponse = new (this.constructor as typeof ResponseBuilder<unknown, unknown, unknown>)(this.response);
@@ -72,7 +73,7 @@ export class ResponseBuilder<TData = unknown, TMeta = object, TWrapper = TData> 
 			if (result && typeof result === 'object' && key in result) {
 				result = result[key as keyof typeof result];
 			} else {
-				throw new Error(`Path "${path}" not found in response data`);
+				throw new AzureNetKitInternalError(`[ResponseBuilder] Failed to extract: path "${path}" not found in response data`);
 			}
 		}
 

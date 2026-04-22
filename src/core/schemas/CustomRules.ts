@@ -1,5 +1,5 @@
 import type { TranslationParam } from '../translations/index.js';
-import type { ValidationParams, ValidationRuleResult } from '$lib/core/delivery/index.js';
+import type { ValidationParams, ValidationRuleResult } from '$lib/core/delivery.js';
 
 type FileExtension = 'stl' | 'png' | 'jpg' | 'jpeg' | 'dwg' | 'gif' | 'webp' | 'csv' | 'doc' | 'docx' | 'pdf' | 'txt' | 'xlsx' | 'xls';
 

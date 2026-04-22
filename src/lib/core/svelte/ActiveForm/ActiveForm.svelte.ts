@@ -1,8 +1,8 @@
 import { ObjectUtil } from '@azure-net/tools';
 import type { RequestErrors } from '../../delivery/schema/index.js';
-import type { AsyncActionResponse } from '$lib/core/index.js';
+import type { AsyncActionResponse } from '../../delivery/injectableDependencies/AsyncHelpers.js';
 
-type InitialData<FormData, Initial extends Partial<FormData>> = Initial | Promise<Initial> | (() => Initial | Promise<Initial>);
+type InitialData<FormData, Initial extends Partial<FormData>> = () => Initial | Promise<Initial>;
 
 type PathRequiredShape<T, P extends string> = P extends `${infer Head}.${infer Tail}`
 	? Head extends keyof T
@@ -16,20 +16,22 @@ type UnionToIntersection<U> = (U extends unknown ? (arg: U) => void : never) ext
 
 type RequiredByPaths<T, P extends string> = [P] extends [never] ? object : UnionToIntersection<PathRequiredShape<T, P>>;
 
+type ResetBehaviors = 'clear' | 'initial' | 'reloadInitial' | 'default';
+
 export interface FormConfig<FormData, Response, Initial extends Partial<FormData> = Partial<FormData>, RequiredPath extends string = never> {
 	initialData?: InitialData<FormData, Initial>;
 	required?: readonly RequiredPath[];
 	onSuccess?: (response: Response) => Promise<void> | void;
 	onError?: () => Promise<void> | void;
 	beforeSubmit?: (actions: { form: ActiveFormController<FormData, RequiredPath>; abort: () => void }) => Promise<void> | void;
-	waitForInitialData?: boolean;
+	successBehavior?: ResetBehaviors;
 }
 
 export interface ActiveForm<FormData, Response, Custom, RequiredPath extends string = never> {
 	data: Partial<FormData> & RequiredByPaths<FormData, RequiredPath>;
 	errors: RequestErrors<FormData>;
 	submit: () => Promise<AsyncActionResponse<Response, FormData, Custom>>;
-	reset: (toInitial?: boolean) => void;
+	reset: (behavior?: ResetBehaviors) => Promise<void>;
 	pending: boolean;
 	dirty: boolean;
 	ready: Promise<Partial<FormData>>;
@@ -38,7 +40,7 @@ export interface ActiveForm<FormData, Response, Custom, RequiredPath extends str
 export interface ActiveFormController<FormData, RequiredPath extends string = never> {
 	data: Partial<FormData> & RequiredByPaths<FormData, RequiredPath>;
 	errors: RequestErrors<FormData>;
-	reset: (toInitial?: boolean) => void;
+	reset: (behavior?: ResetBehaviors) => Promise<void>;
 }
 
 type ExtractResponse<T> = T extends AsyncActionResponse<infer R, unknown, unknown> ? R : never;
@@ -76,20 +78,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 		return typeof (value as Promise<T>)?.then === 'function';
 	};
 
-	const resolveInitialSource = () => {
-		const source = config?.initialData;
-		if (!source) {
-			return { sync: true as const, value: {} as Partial<FormData> };
-		}
-		const result = typeof source === 'function' ? source() : source;
-		if (isPromise(result)) {
-			return { sync: false as const, promise: result };
-		}
-		return { sync: true as const, value: (result ?? {}) as Partial<FormData> };
-	};
-
-	const initialSource = resolveInitialSource();
-	let initial: Partial<FormData> = initialSource.sync ? initialSource.value : {};
+	let initial: Partial<FormData> = {};
 
 	let formData = $state<FormDataState>(ObjectUtil.deepClone(initial) as FormDataState);
 	let formErrors = $state<RequestErrors<FormData>>({});
@@ -97,15 +86,27 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 
 	const dirty = $derived(!ObjectUtil.equals(formData, initial));
 
-	const ready = (async (): Promise<Partial<FormData>> => {
-		if (!initialSource.sync) {
-			initial = (await initialSource.promise) ?? {};
-			if (config?.waitForInitialData !== false) {
-				formData = ObjectUtil.deepClone(initial) as FormDataState;
-			}
+	const loadInitialData = async (): Promise<Partial<FormData>> => {
+		const source = config?.initialData;
+
+		if (!source) {
+			initial = {};
+			formData = ObjectUtil.deepClone(initial) as FormDataState;
+			formErrors = {};
+			return initial;
 		}
+
+		const value = source();
+		const nextInitial = isPromise(value) ? await value : value;
+
+		initial = (nextInitial ?? {}) as Partial<FormData>;
+		formData = ObjectUtil.deepClone(initial) as FormDataState;
+		formErrors = {};
+
 		return initial;
-	})();
+	};
+
+	const ready: Promise<Partial<FormData>> = loadInitialData();
 
 	const submit = async (): Promise<AsyncActionResponse<Response, FormData, Custom>> => {
 		pending = true;
@@ -130,10 +131,10 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 
 			if (result.success) {
 				await config?.onSuccess?.(result.response as Response);
-				formErrors = {};
+				await reset(config?.successBehavior ?? 'default');
 			} else {
-				if (result.error?.fields) {
-					formErrors = result.error.fields as RequestErrors<FormData>;
+				if (result.error?.validation) {
+					formErrors = result.error.validation as RequestErrors<FormData>;
 				}
 				await config?.onError?.();
 			}
@@ -144,8 +145,18 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 		}
 	};
 
-	const reset = (toInitial = false) => {
-		formData = toInitial ? (ObjectUtil.deepClone(initial) as FormDataState) : ({} as FormDataState);
+	const reset = async (behavior: ResetBehaviors = 'clear') => {
+		switch (behavior) {
+			case 'clear':
+				formData = {} as FormDataState;
+				break;
+			case 'initial':
+				formData = ObjectUtil.deepClone(initial) as FormDataState;
+				break;
+			case 'reloadInitial':
+				await loadInitialData();
+				break;
+		}
 		formErrors = {};
 	};
 
@@ -184,8 +195,8 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 		get pending() {
 			return pending;
 		},
-		ready,
 		submit,
+		ready,
 		reset
 	};
 };

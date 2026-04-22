@@ -1,4 +1,5 @@
 import { FormDataUtil } from '@azure-net/tools';
+import { AzureNetKitInternalError } from '../../shared/appError/AppError.js';
 
 type TransformationParams<SchemaData> = { validate?: boolean; onValidationError?: (errors: RequestErrors<SchemaData>) => void };
 
@@ -37,8 +38,24 @@ export type RequestErrors<SchemaData> = Partial<ValidationErrors<SchemaData>>;
 
 export type RequestRules<SchemaData> = Partial<Record<DeepKeys<SchemaData>, ValidationRuleResult<SchemaData>[]>>;
 
-export class SchemaFail<SchemaData> {
-	constructor(private _errors: RequestErrors<SchemaData>) {}
+export interface ISchemaError<SchemaData> extends Error {
+	message: string;
+	data: RequestErrors<SchemaData>;
+}
+
+export class SchemaFail<SchemaData> extends Error implements ISchemaError<SchemaData> {
+	data: RequestErrors<SchemaData>;
+	message: string;
+
+	constructor(private _errors: RequestErrors<SchemaData>) {
+		super('Validation failed');
+		this.message = 'Validation failed';
+		this.data = _errors;
+	}
+
+	getSelfTypedData<SelfTypedData = unknown>(): RequestErrors<SelfTypedData> {
+		return this.data as unknown as RequestErrors<SelfTypedData>;
+	}
 
 	getErrors() {
 		return this._errors;
@@ -139,7 +156,7 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 				let _isValid = true;
 
 				if (typeof _preparedData !== 'object') {
-					throw Error('Data to validate is not an object');
+					throw new AzureNetKitInternalError('[Schema] Data in "from" method can be only valid object or formData.');
 				}
 
 				const validated = (params?: {

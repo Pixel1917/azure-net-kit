@@ -52,7 +52,7 @@ describe('ResponseBuilder', () => {
 		});
 
 		expect(() => new ResponseBuilder<{ id: number; name: string }>(response).mapCollectionUsing(UserResource)).toThrow(
-			'toCollection can only be used when data is an array'
+			'[ResponseBuilder] Method "mapCollectionUsing" can only be used when data is an array'
 		);
 	});
 
@@ -67,7 +67,9 @@ describe('ResponseBuilder', () => {
 
 		const builder = new ResponseBuilder<{ user: { profile: { city: string } } }>(response);
 		expect(builder.extract('user.profile.city').getData()).toBe('Moscow');
-		expect(() => builder.extract('user.profile.country' as 'user.profile.city')).toThrow('Path "user.profile.country" not found in response data');
+		expect(() => builder.extract('user.profile.country' as 'user.profile.city')).toThrow(
+			'[ResponseBuilder] Failed to extract: path "user.profile.country" not found in response data'
+		);
 	});
 
 	it('merges metadata and supports flatten output', () => {

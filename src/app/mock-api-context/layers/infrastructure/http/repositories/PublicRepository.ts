@@ -9,4 +9,8 @@ export class PublicRepository {
 			.createRequest<IPublicEntityCollection>(({ http }) => http.get('/public-route'))
 			.then((res) => res.countElementsAndAddToMeta().get());
 	}
+
+	public async willFail() {
+		return this.datasource.createRequest<never>(({ http }) => http.get('/public-route/will-fail')).then((res) => res.get());
+	}
 }

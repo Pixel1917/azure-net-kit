@@ -1,4 +1,5 @@
-import { Cookies, EnvironmentUtil } from '@azure-net/tools';
+import { Cookies } from '@azure-net/tools';
+import { BROWSER } from '@azure-net/tools/environment';
 import { RequestContext } from '@azure-net/edges/context';
 
 export type CookieOptions = {
@@ -30,11 +31,10 @@ export class UniversalCookie {
 	 * @returns {void}
 	 */
 	public static set<T>(name: string, value: T, options?: CookieOptions): void {
-		if (EnvironmentUtil.isBrowser) {
+		if (BROWSER) {
 			Cookies.set(name, value, options);
 			return;
-		}
-		if (EnvironmentUtil.isServer) {
+		} else {
 			const event = RequestContext.current().event;
 			if (event) {
 				const encodedKey = encodeURIComponent(name);
@@ -65,7 +65,6 @@ export class UniversalCookie {
 				return;
 			}
 		}
-		throw new Error('Could not detect current environment');
 	}
 
 	/**
@@ -77,10 +76,9 @@ export class UniversalCookie {
 	 * @returns {T | undefined} The cookie value, parsed as type T or null if not found.
 	 */
 	public static get<T = string>(name: string): T | undefined {
-		if (EnvironmentUtil.isBrowser) {
+		if (BROWSER) {
 			return Cookies.get<T>(name) ?? undefined;
-		}
-		if (EnvironmentUtil.isServer) {
+		} else {
 			const event = RequestContext.current().event;
 			if (event) {
 				const encodedKey = encodeURIComponent(name);
@@ -97,7 +95,6 @@ export class UniversalCookie {
 			}
 			return undefined;
 		}
-		return undefined;
 	}
 
 	/**
@@ -108,10 +105,9 @@ export class UniversalCookie {
 	 * @returns {T | undefined} An object with all cookie keys and their values.
 	 */
 	public static getAll<T = Record<string, unknown>>(): T | undefined {
-		if (EnvironmentUtil.isBrowser) {
+		if (BROWSER) {
 			return Cookies.getAll() as T;
-		}
-		if (EnvironmentUtil.isServer) {
+		} else {
 			const event = RequestContext.current().event;
 			const result: Record<string, unknown> = {};
 			if (event) {
@@ -126,7 +122,6 @@ export class UniversalCookie {
 			}
 			return result as T;
 		}
-		return undefined;
 	}
 
 	/**

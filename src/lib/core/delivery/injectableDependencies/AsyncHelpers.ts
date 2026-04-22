@@ -1,207 +1,145 @@
-import { type AppError, createErrorParser, type ErrorType } from './ErrorHandler.js';
-import { AppEvents } from '$lib/core/index.js';
+import { createErrorHandler } from './ErrorHandler.js';
+import { type AppError, type IAppError } from '../../shared/appError/AppError.js';
 
-export interface AsyncActionResponse<T, D = unknown, CustomErrorField = never> {
+export interface AsyncActionResponse<T, D = never, ErrorResult = Record<never, never>> {
 	success: boolean;
 	response: T;
-	error?: AppError<D, CustomErrorField>;
+	error?: IAppError<D> & ErrorResult;
 }
 
-type ActionOrThunk<Res> = Promise<Res> | (() => Promise<Res>);
+export interface AsyncHelperRetry {
+	can: boolean;
+	call?: () => Promise<Error | void>;
+}
 
-export const createAsyncHelpers = <BaseError = unknown, Custom = unknown>(opts?: {
-	parseError?: ReturnType<typeof createErrorParser<BaseError, Custom>>;
-}) => {
-	const errorParser = opts?.parseError ?? createErrorParser();
+type Action<Res> = () => Promise<Res>;
 
-	const createAsyncAction = async <Res = unknown, Req = unknown>(
-		action: ActionOrThunk<Res>,
-		args?: {
-			beforeSend?: (actions: { next: () => void; abort: () => void }) => void | Promise<void>;
-			onSuccess?: (result: AsyncActionResponse<Res, undefined, Custom>) => Promise<unknown> | unknown;
-			onError?: (result: AsyncActionResponse<never, Req, Custom>) => Promise<unknown> | unknown;
-			reject?: boolean;
-			abort?: {
-				condition: boolean;
-				onAbort?: () => void;
-			};
-			fallbackResponse?: Res;
-			maxRetries?: number;
-		}
-	): Promise<AsyncActionResponse<Res, Req, Custom>> => {
-		if (args?.abort?.condition) {
-			args.abort.onAbort?.();
-			const abortError: AppError<Req, Custom> = {
-				type: 'abort',
-				message: 'aborted',
-				original: new Error('aborted')
-			};
-			if (args?.reject) throw abortError;
-			return {
-				success: false,
-				error: abortError,
-				response: args?.fallbackResponse as Res
-			};
-		}
+export interface AsyncActionSettings<Res = never, Req = never, ErrorResult = AppError<Error>> {
+	beforeSend?: (actions: { next: () => void; abort: (reason?: Error) => void }) => void | Promise<void>;
+	onSuccess?: (result: AsyncActionResponse<Res, never, ErrorResult>) => Promise<unknown> | unknown;
+	onError?: (result: AsyncActionResponse<never, Req, ErrorResult>) => Promise<unknown> | unknown;
+	fallbackResponse?: Res;
+}
 
-		if (args?.beforeSend) {
-			const beforeSendResult = await new Promise<'next' | 'abort'>((resolve) => {
-				let settled = false;
-				const settle = (value: 'next' | 'abort') => {
-					if (settled) return;
-					settled = true;
-					resolve(value);
-				};
-				const next = () => settle('next');
-				const abort = () => settle('abort');
-				Promise.resolve(args.beforeSend!({ next, abort }))
-					.then(() => {
-						settle('next');
+export interface AsyncResourceSettings<Res = never, Req = never, ErrorResult = AppError<Error>> extends AsyncActionSettings<Res, Req, ErrorResult> {
+	reject?: boolean;
+}
+
+export class AsyncHelperError extends Error {}
+
+export const createAsyncHelpers = <ErrorResult extends object>(opts?: { handler?: ReturnType<typeof createErrorHandler<ErrorResult>> }) => {
+	const errorParser = opts?.handler ?? createErrorHandler();
+
+	const normalizeError = (err: unknown): Error => (err instanceof Error ? err : new Error(String(err)));
+
+	const prepareErrors = async <Res = never, Req = never>(error: Error, retry?: () => Promise<AsyncActionResponse<Res, Req, ErrorResult>>) => {
+		let retryResult: AsyncActionResponse<Res, Req, ErrorResult> | undefined = undefined;
+		const retryFunc = async () => {
+			if (retry) {
+				return await retry()
+					.then((res) => {
+						retryResult = res;
+						return undefined;
 					})
-					.catch((err) => {
-						console.error('Error in beforeSend:', err);
-						settle('abort');
-					});
-			});
-
-			if (beforeSendResult === 'abort') {
-				const abortError: AppError<Req, Custom> = {
-					type: 'abort',
-					message: 'Aborted in beforeSend',
-					original: new Error('Aborted in beforeSend')
-				};
-				if (args?.reject) throw abortError;
-				return {
-					success: false,
-					error: abortError,
-					response: args?.fallbackResponse as Res
-				};
+					.catch((err) => normalizeError(err));
 			}
-		}
+		};
+		const parsedError = await errorParser<Req>(normalizeError(error), { can: !!retry, call: retry ? () => retryFunc() : undefined });
+		return { error: parsedError, retryResult };
+	};
 
-		const maxRetries = args?.maxRetries ?? 3;
-		let retries = 0;
-		const req = async (isRetry: boolean = false) => {
-			if (isRetry) {
-				retries++;
-				if (retries > maxRetries) {
-					return Promise.reject(Error('Max retries reached'));
+	const beforeSendResolver = async <Res = never, Req = never>(
+		settings?: AsyncActionSettings<Res, Req, ErrorResult>
+	): Promise<AsyncActionResponse<never, Req, ErrorResult> | undefined> => {
+		if (!settings?.beforeSend) return undefined;
+
+		let abortReason: Error | undefined;
+		let aborted = false;
+		await new Promise<void>((resolve) => {
+			let settled = false;
+			const beforeSend = settings.beforeSend!;
+			const guardTimer = setTimeout(() => {
+				settle(true);
+			}, 30000);
+			const settle = (isAbort: boolean, reason?: Error) => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(guardTimer);
+				aborted = isAbort;
+				abortReason = reason;
+				resolve();
+			};
+			const next = () => settle(false);
+			const abort = (reason?: Error) => settle(true, reason);
+			try {
+				const maybePromise = beforeSend({ next, abort });
+				if (maybePromise && typeof (maybePromise as PromiseLike<void>).then === 'function') {
+					(maybePromise as PromiseLike<void>).then(
+						() => settle(false),
+						(err: unknown) => settle(true, normalizeError(err))
+					);
+					return;
 				}
+				settle(false);
+			} catch (err: unknown) {
+				settle(true, normalizeError(err));
 			}
-			const response = await Promise.resolve(typeof action === 'function' ? action() : action);
-			const result = { response, success: true } as AsyncActionResponse<Res, Req, Custom>;
-			await args?.onSuccess?.(result as AsyncActionResponse<Res, undefined, Custom>);
+		});
+
+		if (!aborted) return undefined;
+
+		const { error } = await prepareErrors<Res, Req>(abortReason ?? new AsyncHelperError('Aborted in beforeSend'));
+		return {
+			success: false,
+			error,
+			response: undefined as never
+		};
+	};
+
+	const createAsyncAction = async <Res = never, Req = never>(
+		action: Action<Res>,
+		args?: AsyncActionSettings<Res, Req, ErrorResult>
+	): Promise<AsyncActionResponse<Res, Req, ErrorResult>> => {
+		const beforeSendResult = await beforeSendResolver(args);
+		if (beforeSendResult) return beforeSendResult;
+
+		const req = async () => {
+			const response = await Promise.resolve(action());
+			const result = { response, success: true } as AsyncActionResponse<Res, never, ErrorResult>;
+			await args?.onSuccess?.(result);
 			return result;
 		};
 		try {
 			return await req();
 		} catch (err) {
-			let retryResult;
-			const retry = async () =>
-				await req(true)
-					.then((res) => (retryResult = res))
-					.catch(() => undefined);
-			const error = await errorParser<Req>(err as ErrorType<BaseError>, async () => await retry());
+			const { error, retryResult } = await prepareErrors<Res, Req>(normalizeError(err), async () => await req());
 			if (retryResult) {
-				return retryResult;
+				return retryResult as AsyncActionResponse<Res, never, ErrorResult>;
 			}
-			const { bus } = AppEvents();
-			bus.publish('OnAsyncHelperError', () => error);
 			const result = { error, response: args?.fallbackResponse as Res, success: false };
-			await args?.onError?.(result as AsyncActionResponse<never, Req, Custom>);
-			if (args?.reject) throw error;
+			try {
+				await args?.onError?.(result as AsyncActionResponse<never, Req, ErrorResult>);
+			} catch (err) {
+				throw await errorParser<Req>(new AsyncHelperError('onError caught exception', { cause: normalizeError(err) }));
+			}
 			return result;
 		}
 	};
 
-	const createAsyncResource = async <Res, Req = unknown>(
-		action: ActionOrThunk<Res>,
-		args?: {
-			beforeSend?: (actions: { next: () => void; abort: () => void }) => void | Promise<void>;
-			onSuccess?: (result: Res) => Promise<unknown> | unknown;
-			onError?: (error: AppError<Req, Custom>) => Promise<unknown> | unknown;
-			reject?: boolean;
-			abort?: {
-				condition: boolean;
-				onAbort?: () => void;
-			};
-			fallbackResponse?: Res;
-			maxRetries?: number;
-		}
+	const createAsyncResource = async <Res = never, Req = never>(
+		action: Action<Res>,
+		args?: AsyncResourceSettings<Res, Req, ErrorResult>
 	): Promise<Res> => {
-		if (args?.abort?.condition) {
-			args.abort.onAbort?.();
-			return args.fallbackResponse as Res;
+		const result = await createAsyncAction(action, args);
+		if (!result.success && args?.reject) {
+			throw result.error;
 		}
-
-		if (args?.beforeSend) {
-			const beforeSendResult = await new Promise<'next' | 'abort'>((resolve) => {
-				let settled = false;
-				const settle = (value: 'next' | 'abort') => {
-					if (settled) return;
-					settled = true;
-					resolve(value);
-				};
-				const next = () => settle('next');
-				const abort = () => settle('abort');
-
-				Promise.resolve(args.beforeSend!({ next, abort }))
-					.then(() => {
-						settle('next');
-					})
-					.catch((err) => {
-						console.error('Error in beforeSend:', err);
-						settle('abort');
-					});
-			});
-
-			if (beforeSendResult === 'abort') {
-				if (args?.reject) {
-					throw {
-						type: 'abort',
-						message: 'Aborted in beforeSend',
-						original: new Error('Aborted in beforeSend')
-					};
-				}
-				return args.fallbackResponse as Res;
-			}
-		}
-
-		const maxRetries = args?.maxRetries ?? 3;
-		let retries = 0;
-		const req = async (isRetry: boolean = false) => {
-			if (isRetry) {
-				retries++;
-				if (retries > maxRetries) {
-					return Promise.reject(Error('Max retries reached'));
-				}
-			}
-			const response = await Promise.resolve(typeof action === 'function' ? action() : action);
-			await args?.onSuccess?.(response);
-			return response;
-		};
-		try {
-			return await req();
-		} catch (err) {
-			let retryResult;
-			const retry = async () =>
-				await req(true)
-					.then((res) => (retryResult = res))
-					.catch(() => undefined);
-			const error = await errorParser<Req>(err as ErrorType<BaseError>, async () => await retry());
-			if (retryResult) {
-				return retryResult;
-			}
-			const { bus } = AppEvents();
-			bus.publish('OnAsyncHelperError', () => error);
-			await args?.onError?.(error);
-			if (args?.reject) throw error;
-			return args?.fallbackResponse as Res;
-		}
+		return result.response;
 	};
 
 	return {
 		createAsyncAction,
-		createAsyncResource
+		createAsyncResource,
+		errorParser
 	};
 };

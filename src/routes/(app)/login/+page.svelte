@@ -8,11 +8,15 @@
 
 	let { data }: PageProps = $props();
 
-	const { collection } = PublicPresenter();
+	const { collection, willFail } = PublicPresenter();
 
 	const signal = createAsyncSignal(() => collection(), {
 		immediate: false,
 		initialData: () => data.collection
+	});
+
+	const failSignal = createAsyncSignal(() => willFail(), {
+		immediate: false
 	});
 </script>
 
@@ -31,6 +35,8 @@
 <!--</div>-->
 {$t('publicData')}
 <br />
+
+<button onclick={() => failSignal.execute()}>test fail signal</button>
 
 {#if signal.data && !signal.pending}
 	{$t({ key: 'count', vars: { count: signal.data.meta?.count ?? 1 } })}

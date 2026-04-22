@@ -1,3 +1,5 @@
+import { AzureNetKitInternalError } from '../../shared/appError/AppError.js';
+
 export type ArrayFormat = 'repeat' | 'brackets' | 'comma' | 'json';
 export type ObjectFormat = 'default' | 'nested-brackets';
 
@@ -45,7 +47,7 @@ const encodeArrayEntries = (key: string, values: unknown[], arrayFormat: ArrayFo
 		case 'json':
 			return [[key, JSON.stringify(cleanValues)]];
 		default:
-			throw new Error(`Unsupported array format: ${arrayFormat}`);
+			throw new AzureNetKitInternalError(`[QueryInstance] Unsupported array format: ${arrayFormat}`);
 	}
 };
 

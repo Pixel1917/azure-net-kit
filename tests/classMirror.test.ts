@@ -11,6 +11,16 @@ class Counter {
 	}
 }
 
+class CounterService extends ClassMirror {
+	constructor(counter: Counter) {
+		super(counter);
+	}
+
+	add(step: number) {
+		return step + 100;
+	}
+}
+
 describe('ClassMirror', () => {
 	it('mirrors prototype methods and keeps original context binding', () => {
 		const counter = new Counter(5);
@@ -24,7 +34,13 @@ describe('ClassMirror', () => {
 	});
 
 	it('does not expose constructor as mirrored method', () => {
-		const mirror = new ClassMirror(new Counter(1)) as Record<string, unknown>;
+		const mirror = new ClassMirror(new Counter(1)) as unknown as Record<string, unknown>;
 		expect(Object.prototype.hasOwnProperty.call(mirror, 'constructor')).toBe(false);
+	});
+
+	it('keeps service method override over mirrored repository method', () => {
+		const service = new CounterService(new Counter(5)) as unknown as { add: (step: number) => number; multiply: (step: number) => number };
+		expect(service.add(2)).toBe(102);
+		expect(service.multiply(3)).toBe(15);
 	});
 });

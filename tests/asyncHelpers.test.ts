@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 const publish = vi.fn();
 
 vi.mock('$lib/core/index.js', () => ({
 	AppEvents: () => ({ bus: { publish } })
 }));
 
-import { createAsyncHelpers } from '../src/lib/core/delivery/injectableDependencies/AsyncHelpers.js';
+import { createAsyncHelpers, type AsyncHelperRetry } from '../src/lib/core/delivery/injectableDependencies/AsyncHelpers.js';
 
 describe('AsyncHelpers', () => {
 	beforeEach(() => {
@@ -21,8 +20,8 @@ describe('AsyncHelpers', () => {
 		});
 
 		expect(result.success).toBe(false);
-		expect(result.error?.type).toBe('abort');
-		expect(result.response).toEqual({ ok: false });
+		expect(result.error?.type).toBe('AsyncHelperError');
+		expect(result.response).toBeUndefined();
 	});
 
 	it('continues action when beforeSend returns without calling next/abort', async () => {
@@ -37,13 +36,19 @@ describe('AsyncHelpers', () => {
 		expect(result.response).toEqual({ ok: true });
 	});
 
-	it('supports retry via custom parseError callback', async () => {
+	it('supports retry via custom handler callback', async () => {
 		let calls = 0;
+		const handler = async (error: Error, retry?: AsyncHelperRetry) => {
+			await retry?.call?.();
+			return {
+				type: 'Unknown',
+				message: error.message,
+				external: false,
+				appErrorConvert: true
+			} as never;
+		};
 		const { createAsyncAction } = createAsyncHelpers({
-			parseError: async (_error, retry) => {
-				await retry?.();
-				return { type: 'app', message: 'retrying' } as never;
-			}
+			handler
 		});
 
 		const result = await createAsyncAction(async () => {
@@ -66,6 +71,7 @@ describe('AsyncHelpers', () => {
 		);
 
 		expect(result.success).toBe(false);
-		expect(publish).toHaveBeenCalledTimes(1);
+		expect(result.error?.type).toBe('Unknown');
+		expect(publish).not.toHaveBeenCalled();
 	});
 });

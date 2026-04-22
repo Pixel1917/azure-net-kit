@@ -23,8 +23,13 @@ export interface IHttpServiceResponse<T = unknown> {
 	raw?: Response;
 }
 
-export interface IHttpServiceError<T = unknown> extends IHttpServiceResponse<T> {
+export interface IHttpServiceError<T = unknown> {
+	type: HttpErrorTypes;
+	response?: Response;
 	original?: Error;
+	message: string;
+	status: number;
+	data?: T;
 }
 
 export class HttpServiceResponse<T> implements IHttpServiceResponse<T> {
@@ -45,23 +50,27 @@ export class HttpServiceResponse<T> implements IHttpServiceResponse<T> {
 	}
 }
 
-export class HttpServiceError<T> implements IHttpServiceError<T> {
-	headers: Record<string, string>;
-	status: number;
-	success: boolean;
-	data: T;
-	message: string;
-	original?: Error;
-	raw?: Response;
+export enum HttpErrorTypes {
+	Internal = 'internal',
+	External = 'external'
+}
 
-	constructor({ headers, status, success, data, message, original, raw }: IHttpServiceError<T>) {
-		this.headers = headers;
+export class HttpServiceError<T> extends Error implements IHttpServiceError<T> {
+	data?: T;
+	status: number;
+	message: string;
+	type: HttpErrorTypes;
+	original?: Error;
+	response?: Response;
+
+	constructor({ status = 500, data, message = 'unknown error', original, type = HttpErrorTypes.Internal, response }: Partial<IHttpServiceError<T>>) {
+		super(message);
 		this.status = status;
-		this.success = success;
 		this.data = data;
 		this.message = message;
 		this.original = original;
-		this.raw = raw;
+		this.response = response;
+		this.type = type;
 	}
 }
 
@@ -80,10 +89,7 @@ export interface HttpInstanceNormalizedRequest {
 }
 
 export type HttpInstanceOnRequest = (request: HttpInstanceNormalizedRequest) => void | Promise<void>;
-export type HttpInstanceOnError = (
-	error: HttpServiceError<unknown>,
-	request: HttpInstanceNormalizedRequest
-) => HttpServiceError<unknown> | Promise<HttpServiceError<unknown>>;
+export type HttpInstanceOnError = (error: HttpServiceError<unknown>, request: HttpInstanceNormalizedRequest) => void | Promise<void>;
 
 export type HttpInstanceDoFetch = <T = unknown>(request: HttpInstanceNormalizedRequest) => Promise<IHttpServiceResponse<T>>;
 
@@ -268,15 +274,38 @@ const withTimeout = (signal: AbortSignal | null | undefined, timeout: number | f
 };
 
 const shouldRetryError = (error: unknown): boolean => {
-	if (error instanceof HttpServiceError) {
-		return [408, 425, 429, 500, 502, 503, 504].includes(error.status);
-	}
-	return !(error instanceof Error && error.name === 'AbortError');
+	return error instanceof HttpServiceError && error.type === HttpErrorTypes.External;
 };
 
 const normalizeUnknownError = (error: unknown): Error => {
 	if (error instanceof Error) return error;
 	return new Error(String(error));
+};
+
+const parseResponse = async <T>(response: Response, request: HttpInstanceNormalizedRequest) => {
+	const raw = request.includeRaw && typeof response?.clone === 'function' ? response?.clone() : undefined;
+	let data: T;
+	let parseError: Error | undefined;
+	try {
+		data = await parseBodyByFormat<T>(response, request.responseFormat);
+	} catch (error) {
+		parseError = normalizeUnknownError(error);
+		data = undefined as T;
+	}
+	if (!response.ok || parseError) {
+		const message = !response.ok
+			? `Request failed with status code ${response.status}. ${response.statusText}`
+			: (parseError?.message ?? 'Internal error');
+		throw new HttpServiceError({
+			status: response.status,
+			data,
+			message,
+			type: !response.ok ? HttpErrorTypes.External : HttpErrorTypes.Internal,
+			original: parseError,
+			response: raw ?? response
+		});
+	}
+	return { data, headers: Object.fromEntries(response.headers.entries()), status: response.status, raw };
 };
 
 const defaultDoFetch: HttpInstanceDoFetch = async <T = unknown>(request: HttpInstanceNormalizedRequest): Promise<IHttpServiceResponse<T>> => {
@@ -294,33 +323,15 @@ const defaultDoFetch: HttpInstanceDoFetch = async <T = unknown>(request: HttpIns
 				signal: timeoutState.signal ?? undefined
 			});
 
-			const rawResponse = request.includeRaw ? response.clone() : undefined;
-			const data = await parseBodyByFormat<T>(response, request.responseFormat);
-
-			if (!response.ok) {
-				const httpError = new HttpServiceError({
-					headers: Object.fromEntries(response.headers.entries()),
-					status: response.status,
-					success: false,
-					data,
-					message: `Request failed with status code ${response.status}`,
-					raw: rawResponse
-				});
-
-				lastError = httpError;
-				if (attempt >= maxAttempts || !shouldRetryError(httpError)) {
-					throw httpError;
-				}
-				continue;
-			}
+			const { data, headers, status, raw } = await parseResponse<T>(response, request);
 
 			return new HttpServiceResponse<T>({
-				headers: Object.fromEntries(response.headers.entries()),
-				status: response.status,
+				headers,
+				status,
 				success: true,
 				data,
 				message: 'Request completed',
-				raw: rawResponse
+				raw
 			});
 		} catch (error) {
 			lastError = error;
@@ -394,28 +405,15 @@ const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOpt
 				error instanceof HttpServiceError
 					? error
 					: new HttpServiceError({
-							headers: {},
-							status: 500,
-							success: false,
 							data: undefined,
-							message: normalizeUnknownError(error).message,
+							message: normalizeUnknownError(error).message ?? 'Unknown error',
 							original: normalizeUnknownError(error)
 						});
 
 			const onError = options.onError ?? defaults.onError;
 			if (!onError) throw normalizedError;
-			const handledError = await onError(normalizedError, normalizedRequest);
-			if (!(handledError instanceof HttpServiceError)) {
-				throw new HttpServiceError({
-					headers: normalizedError.headers,
-					status: normalizedError.status,
-					success: false,
-					data: normalizedError.data,
-					message: 'onError hook must return HttpServiceError',
-					original: new Error(normalizedError.message)
-				});
-			}
-			throw handledError;
+			await onError(normalizedError, normalizedRequest);
+			throw normalizedError;
 		}
 	};
 };

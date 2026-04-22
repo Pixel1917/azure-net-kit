@@ -18,7 +18,7 @@ export class BaseHttpDatasource {
 	}
 
 	private async _createRawRequest<T>(callback: CreateRequestCallbackType<T>): Promise<IHttpServiceResponse<T>> {
-		return await callback({ http: this.httpClient, query: this.query }).catch((err: IHttpServiceError<unknown>) => {
+		return await callback({ http: this.httpClient, query: this.query }).catch((err: IHttpServiceError) => {
 			throw err;
 		});
 	}

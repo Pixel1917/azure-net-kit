@@ -1,5 +1,6 @@
 import { RequestContext } from '../../../edges/context/index.js';
 import { BROWSER } from '@azure-net/tools/environment';
+import { AzureNetKitInternalError } from '../appError/AppError.js';
 
 type ServiceFactory<T> = () => T;
 type ServiceMap = Record<string, ServiceFactory<unknown>>;
@@ -142,17 +143,17 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 				const factories = getFactories();
 
 				if (!(key in factories)) {
-					throw new Error(`Service '${key}' not found in provider '${name}'`);
+					throw new AzureNetKitInternalError(`[BoundaryProvider] Service '${key}' not found in provider '${name}'`);
 				}
 
 				const factory = factories[key as keyof T];
 				if (typeof factory !== 'function') {
-					throw Error('Factory must be a function');
+					throw new AzureNetKitInternalError('[BoundaryProvider] Factory must be a function');
 				}
 				const instance = factory();
 
 				if (instance && typeof (instance as Promise<unknown>)?.then === 'function') {
-					throw new Error(`Service '${key}' in provider '${name}' returned Promise.`);
+					throw new AzureNetKitInternalError(`[BoundaryProvider] Service '${key}' in provider '${name}' returned Promise.`);
 				}
 
 				cache.set(key, instance);

@@ -1,10 +1,10 @@
 import { EventBus } from '@azure-net/tools';
 import { createPresenter } from '@azure-net/edges';
 
-type AppEventsList = { OnAsyncHelperError: unknown; [key: string]: unknown } & App.CustomEvents['eventNames'];
+type AppEventsList = { [key: string]: unknown } & App.CustomEvents['eventNames'];
 
 export const AppEvents = createPresenter(() => {
-	const appEventBus = new EventBus<AppEventsList>({ OnAsyncHelperError: [] });
+	const appEventBus = new EventBus<AppEventsList>({});
 	return {
 		bus: appEventBus
 	};

@@ -1,93 +1,87 @@
 import { ObjectUtil } from '@azure-net/tools';
 import { untrack } from 'svelte';
 
-export type QuerySignal = {
-	refresh: () => Promise<void>;
-};
+export interface QueryOnChangeContext<T extends Record<string, unknown>> {
+	snapshot: T;
+	changedKeys: (keyof T)[];
+	signal: AbortSignal;
+}
+
+export interface QueryOnChangeOptions<T extends Record<string, unknown>> {
+	include: (keyof T)[];
+	handler: (ctx: QueryOnChangeContext<T>) => Promise<void> | void;
+}
 
 export interface CreateQueryOptions<T extends Record<string, unknown>> {
-	initial: T;
-	signal?: QuerySignal;
-	excludeKeys?: (keyof T)[];
-	debounceMs?: number;
-	autoRefresh?: boolean;
+	onChange?: QueryOnChangeOptions<T>;
 }
 
 export interface QueryController<T extends Record<string, unknown>> {
 	data: T;
-	patch: (values: Partial<T>) => void;
-	set: <K extends keyof T>(key: K, value: T[K]) => void;
 	reset: () => void;
 	snapshot: () => T;
 	initial: () => T;
-	attachSignal: (signal?: QuerySignal) => void;
 }
 
-export const createQuery = <T extends Record<string, unknown>>(options: CreateQueryOptions<T>): QueryController<T> => {
-	const { initial: initialValue, signal: initialSignal, excludeKeys, debounceMs = 0, autoRefresh = true } = options;
-
+export const createQuery = <T extends Record<string, unknown>>(initialValue: T, options?: CreateQueryOptions<T>): QueryController<T> => {
 	const baseInitial = ObjectUtil.deepClone(initialValue);
-	let signal: QuerySignal | undefined = initialSignal;
 	let data = $state<T>(ObjectUtil.deepClone(baseInitial));
 
-	const resolveKeys = (): (keyof T)[] => {
-		const keys = (Object.keys(baseInitial) as (keyof T)[]).slice();
-		if (excludeKeys?.length) {
-			return keys.filter((key) => !excludeKeys.includes(key));
-		}
-		return keys;
-	};
-
-	const keys = resolveKeys();
-	let isFirstRun = true;
-	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+	const includeKeys = options?.onChange?.include ?? [];
+	const hasWatch = Boolean(options?.onChange?.handler) && includeKeys.length > 0;
 	const lastValues = new Map<keyof T, unknown>();
+	let onChangeController: AbortController | null = null;
+	let onChangeRunId = 0;
 
-	const scheduleRefresh = () => {
-		if (!signal) return;
-		if (debounceTimer) clearTimeout(debounceTimer);
-		if (debounceMs > 0) {
-			debounceTimer = setTimeout(() => {
-				untrack(() => {
-					void signal?.refresh();
-				});
-			}, debounceMs);
-		} else {
-			untrack(() => {
-				void signal?.refresh();
-			});
-		}
-	};
+	if (hasWatch) {
+		includeKeys.forEach((key) => {
+			lastValues.set(key, data[key]);
+		});
 
-	if (autoRefresh) {
 		$effect(() => {
-			let hasChanged = false;
-			keys.forEach((key) => {
+			const changedKeys: (keyof T)[] = [];
+			includeKeys.forEach((key) => {
 				const nextValue = data[key];
 				if (!Object.is(lastValues.get(key), nextValue)) {
-					hasChanged = true;
+					changedKeys.push(key);
 					lastValues.set(key, nextValue);
 				}
 			});
 
-			if (isFirstRun) {
-				isFirstRun = false;
-				return;
-			}
+			if (!changedKeys.length) return;
 
-			if (hasChanged) {
-				scheduleRefresh();
-			}
+			const previousController = onChangeController;
+			if (previousController) previousController.abort();
+
+			const localController = new AbortController();
+			onChangeController = localController;
+			const localRunId = ++onChangeRunId;
+
+			const run = async () => {
+				await options!.onChange!.handler({
+					changedKeys,
+					signal: localController.signal,
+					snapshot: ObjectUtil.deepClone(data)
+				});
+			};
+
+			untrack(() => {
+				void run()
+					.catch(() => undefined)
+					.finally(() => {
+						if (onChangeRunId === localRunId && onChangeController === localController) {
+							onChangeController = null;
+						}
+					});
+			});
+		});
+
+		$effect(() => {
+			return () => {
+				if (onChangeController) onChangeController.abort();
+			};
 		});
 	}
-
-	const patch = (values: Partial<T>) => {
-		data = { ...data, ...values };
-	};
-
-	const set = <K extends keyof T>(key: K, value: T[K]) => {
-		data = { ...data, [key]: value };
-	};
 
 	const reset = () => {
 		data = ObjectUtil.deepClone(baseInitial);
@@ -97,10 +91,6 @@ export const createQuery = <T extends Record<string, unknown>>(options: CreateQu
 
 	const initial = () => ObjectUtil.deepClone(baseInitial);
 
-	const attachSignal = (nextSignal?: QuerySignal) => {
-		signal = nextSignal;
-	};
-
 	return {
 		get data() {
 			return data;
@@ -108,11 +98,8 @@ export const createQuery = <T extends Record<string, unknown>>(options: CreateQu
 		set data(value: T) {
 			data = value;
 		},
-		patch,
-		set,
 		reset,
 		snapshot,
-		initial,
-		attachSignal
+		initial
 	};
 };

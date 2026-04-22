@@ -214,11 +214,33 @@ describe('HttpServiceInstance', () => {
 		expect(result.data).toBe('plain-text');
 	});
 
+	it('keeps external error type for non-ok response even when json parsing fails', async () => {
+		const fetchMock = vi.fn(async () => new Response('not-json', { status: 500, statusText: 'Server Error' }));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+
+		const instance = createHttpServiceInstance();
+		await expect(instance.get('/broken-json')).rejects.toMatchObject({
+			type: 'external',
+			status: 500
+		});
+	});
+
+	it('uses internal error type for parse failure on successful status', async () => {
+		const fetchMock = vi.fn(async () => new Response('not-json', { status: 200 }));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+
+		const instance = createHttpServiceInstance();
+		await expect(instance.get('/parse-failed')).rejects.toMatchObject({
+			type: 'internal',
+			status: 200
+		});
+	});
+
 	it('normalizes unknown errors and passes HttpServiceError to onError', async () => {
 		const doFetch = vi.fn(async () => {
 			throw new Error('network failed');
 		});
-		const onError = vi.fn(async (error: HttpServiceError<unknown>) => error);
+		const onError = vi.fn(async () => {});
 
 		const instance = createHttpServiceInstance({
 			doFetch,
@@ -227,22 +249,23 @@ describe('HttpServiceInstance', () => {
 
 		await expect(instance.get('/oops')).rejects.toBeInstanceOf(HttpServiceError);
 		expect(onError).toHaveBeenCalledTimes(1);
-		expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(HttpServiceError);
-		expect(onError.mock.calls[0]?.[0].status).toBe(500);
+		const firstCallError = (onError.mock.calls[0] as unknown as [HttpServiceError<unknown>, HttpInstanceNormalizedRequest])[0];
+		expect(firstCallError).toBeInstanceOf(HttpServiceError);
+		expect(firstCallError.status).toBe(500);
 	});
 
-	it('throws explicit contract error when onError returns non-HttpServiceError', async () => {
+	it('keeps original normalized error when onError is side-effect only', async () => {
 		const doFetch = vi.fn(async () => {
 			throw new Error('boom');
 		});
 
 		const instance = createHttpServiceInstance({
 			doFetch,
-			onError: async () => ({}) as HttpServiceError<unknown>
+			onError: async () => {}
 		});
 
 		await expect(instance.get('/bad-on-error')).rejects.toMatchObject({
-			message: 'onError hook must return HttpServiceError',
+			message: 'boom',
 			status: 500
 		});
 	});

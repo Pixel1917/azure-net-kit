@@ -6,5 +6,7 @@ export const PublicPresenter = AppPresenter('MockContextPublicPresenter', ({ cre
 
 	const collection = () => createAsyncResource(() => PublicService.collection());
 
-	return { collection };
+	const willFail = () => createAsyncResource(() => PublicService.willFail());
+
+	return { collection, willFail };
 });

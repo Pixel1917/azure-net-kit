@@ -1,4 +1,5 @@
 export {
+	clearCache,
 	createPresenter,
 	createPresenterFactory,
 	createStore,

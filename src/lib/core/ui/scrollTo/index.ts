@@ -1,7 +1,7 @@
-import { EnvironmentUtil } from '@azure-net/tools';
+import { BROWSER } from '@azure-net/tools/environment';
 
 export const scrollTo = (nodeOrName: string | Element, offset = 220) => {
-	if (EnvironmentUtil.isBrowser) {
+	if (BROWSER) {
 		setTimeout(() => {}, 1);
 		let element: Element;
 		if (typeof nodeOrName === 'string') {
