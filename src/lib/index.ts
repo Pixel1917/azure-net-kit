@@ -1,2 +1,2 @@
 export * from './core/index.js';
-export * from './edges/index.js';
+export { __withEdgesUniversalLoad } from './edges/index.js';

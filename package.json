@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "3.9.3",
+	"version": "4.0.0-0",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
@@ -32,10 +32,6 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"svelte": "./dist/index.js"
-		},
-		"./constants": {
-			"types": "./dist/core/constants/index.d.ts",
-			"svelte": "./dist/core/constants/index.js"
 		},
 		"./infra": {
 			"types": "./dist/core/infra.d.ts",

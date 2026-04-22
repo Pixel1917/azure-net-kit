@@ -1,6 +1,5 @@
 import type { BaseValidationMessages } from './messages/types.js';
 import type { ValidationErrorsMap, ValidationMessage, ValidationParams, ValidationRuleResult } from '../index.js';
-import { masks } from '../../../constants/masks.js';
 
 export type ValidationRuleParams<T extends keyof BaseValidationMessages, D = object> = D & { message?: BaseValidationMessages[T] };
 
@@ -198,7 +197,6 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 	 * @returns ValidationRuleResult<T, D>
 	 * @description Checks if the value is a phone number and if it is valid.
 	 */
-	const countryCodes = new Set(Object.values(masks).map((country) => country.cc)).add('8');
 	const phone = <T = unknown, D = unknown>(params?: ValidationRuleParams<'phone'>): ValidationRuleResult<T, D> => {
 		const { message } = { ...params, message: params?.message ?? validationMessages.phone };
 
@@ -221,41 +219,12 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 
 				let hasValidCountryCode = false;
 
-				if (cleanedVal.startsWith('+')) {
-					const sortedCodes = Array.from(countryCodes)
-						.filter((code) => code.startsWith('+'))
-						.sort((a, b) => b.length - a.length);
-
-					for (const code of sortedCodes) {
-						if (cleanedVal.startsWith(code)) {
-							const remainingDigits = cleanedVal.slice(code.length);
-							if (remainingDigits.length >= 4) {
-								hasValidCountryCode = true;
-								break;
-							}
-						}
-					}
-				} else if (cleanedVal.startsWith('8')) {
+				if (cleanedVal.startsWith('8')) {
 					if (cleanedVal.length === 11) {
 						hasValidCountryCode = true;
 					}
 				} else if (/^\d+$/.test(cleanedVal)) {
-					const codesWithoutPlus = Array.from(countryCodes)
-						.filter((code) => !code.startsWith('+') && code !== 'N/A')
-						.map((code) => code.replace('+', ''))
-						.sort((a, b) => b.length - a.length);
-
-					for (const code of codesWithoutPlus) {
-						if (cleanedVal.startsWith(code)) {
-							const remainingDigits = cleanedVal.slice(code.length);
-							if (remainingDigits.length >= 4) {
-								hasValidCountryCode = true;
-								break;
-							}
-						}
-					}
-
-					if (!hasValidCountryCode && cleanedVal.length >= 7 && cleanedVal.length <= 10) {
+					if (!hasValidCountryCode && cleanedVal.length >= 6 && cleanedVal.length <= 16) {
 						hasValidCountryCode = true;
 					}
 				}

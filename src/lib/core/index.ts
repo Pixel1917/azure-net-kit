@@ -1,5 +1,3 @@
-export { event, stop, prevent, once, immediate, type EventHandler, onClickOutside, scrollTo, Mask, masked } from './ui/index.js';
-
 export {
 	createQuery,
 	createAsyncSignal,
