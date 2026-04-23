@@ -18,6 +18,7 @@ export interface CreateQueryOptions<T extends Record<string, unknown>> {
 
 export interface QueryController<T extends Record<string, unknown>> {
 	data: T;
+	patch: (value: Partial<T>) => void;
 	reset: () => void;
 	snapshot: () => T;
 	initial: () => T;
@@ -87,6 +88,10 @@ export const createQuery = <T extends Record<string, unknown>>(initialValue: T, 
 		data = ObjectUtil.deepClone(baseInitial);
 	};
 
+	const patch = (value: Partial<T>) => {
+		data = { ...data, ...value };
+	};
+
 	const snapshot = () => ObjectUtil.deepClone(data);
 
 	const initial = () => ObjectUtil.deepClone(baseInitial);
@@ -98,6 +103,7 @@ export const createQuery = <T extends Record<string, unknown>>(initialValue: T, 
 		set data(value: T) {
 			data = value;
 		},
+		patch,
 		reset,
 		snapshot,
 		initial

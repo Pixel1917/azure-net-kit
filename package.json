@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "4.0.0-1",
+	"version": "4.0.0",
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
@@ -127,8 +127,8 @@
 	},
 	"packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
 	"dependencies": {
-		"@azure-net/edges": "^1.2.2",
-		"@azure-net/edges-translations": "^1.2.2",
-		"@azure-net/tools": "^1.2.2"
+		"@azure-net/edges": "^1.2.5",
+		"@azure-net/edges-translations": "^1.2.5",
+		"@azure-net/tools": "^1.2.5"
 	}
 }

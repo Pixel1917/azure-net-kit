@@ -8,7 +8,6 @@ export const DatasourceProvider = createBoundaryProvider('CoreDatasourceProvider
 			new MockApiDatasource({
 				http: createHttpServiceInstance({
 					prefixUrl: 'https://cb784374e7b649a4b5ced37b17042896.fake-api.io',
-					retry: 3,
 					onRequest: (request) => {
 						request.headers.set('X-Custom', 'Custom');
 						const token = UniversalCookie.get('mock-token');

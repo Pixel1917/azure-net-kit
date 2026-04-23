@@ -24,5 +24,5 @@
 		<p>privateData: {dataEl.privateData}</p>
 		<hr />
 	{/each}
-	<button onclick={() => signal.refresh()}>refresh</button>
+	<button onclick={() => signal.refresh()}>refresh private data</button>
 {/if}

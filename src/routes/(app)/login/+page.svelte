@@ -20,19 +20,19 @@
 	});
 </script>
 
-<!--<div class="login-page">-->
-<!--	{@html ObjectUtil.renderAsString(user.value)}-->
-<!--	<div class="login-window">-->
-<!--		<form class="form-container" method="POST" action="?/login" use:enhance={onSubmit}>-->
-<!--			<h1 class="title">{$t('login.title')}</h1>-->
-<!--			<p class="text-default subtitle">{$t('login.subtitle')}</p>-->
-<!--			<input type="email" name="email" placeholder="email" />-->
-<!--			<input type="password" name="password" placeholder="password" />-->
-<!--			<button type="submit">Submit</button>-->
-<!--			{@html ObjectUtil.renderAsString(form?.errors ?? {})}-->
-<!--		</form>-->
-<!--	</div>-->
-<!--</div>-->
+<div class="login-page">
+	<!--	{@html ObjectUtil.renderAsString(user.value)}-->
+	<div class="login-window">
+		<form class="form-container">
+			<h1 class="title">{$t('login.title')}</h1>
+			<!--			<p class="text-default subtitle">{$t('login.subtitle')}</p>-->
+			<!--			<input type="email" name="email" placeholder="email" />-->
+			<!--			<input type="password" name="password" placeholder="password" />-->
+			<!--			<button type="submit">Submit</button>-->
+			<!--			{@html ObjectUtil.renderAsString(form?.errors ?? {})}-->
+		</form>
+	</div>
+</div>
 {$t('publicData')}
 <br />
 
