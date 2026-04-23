@@ -1,6 +1,22 @@
 {
 	"name": "@azure-net/kit",
 	"version": "4.0.0",
+	"license": "MIT",
+	"author": "Pixel1917",
+	"description": "Universal toolkit and library collection, developed as part of the Azure-net ecosystem",
+	"homepage": "https://github.com/Pixel1917/azure-net-kit",
+	"bugs": {
+		"url": "https://github.com/Pixel1917/azure-net-kit/issues",
+		"email": "sank195951@gmail.com"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Pixel1917/azure-net-kit.git"
+	},
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org/"
+	},
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build && npm run prepack",
@@ -118,7 +134,14 @@
 		}
 	},
 	"keywords": [
-		"svelte"
+		"sveltekit",
+		"svelte",
+		"toolkit",
+		"library",
+		"azure-net",
+		"store",
+		"i18n",
+		"utils"
 	],
 	"pnpm": {
 		"onlyBuiltDependencies": [
