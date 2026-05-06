@@ -95,13 +95,17 @@ describe('AzureNetPlugin', () => {
 		const clientHooks = await runLoad(String(clientId), plugin);
 
 		expect(serverHooks).toContain('__AZURE_NET_KIT_VIRTUAL_HOOK__');
-		expect(serverHooks).toContain("import { edgesHandle } from 'virtual:azure-net-kit/server-utils';");
-		expect(serverHooks).toContain("import { register } from 'virtual:azure-net-kit/program';");
-		expect(serverHooks).toContain('export const init = register.serverInit;');
-		expect(serverHooks).toContain('export const handleError = register.serverError;');
+		expect(serverHooks).toContain("import { edgesHandle, edgesHandleRaw } from 'virtual:azure-net-kit/server-utils';");
+		expect(serverHooks).toContain("await import('virtual:azure-net-kit/program')");
+		expect(serverHooks).not.toContain("import { register } from 'virtual:azure-net-kit/program';");
+		expect(serverHooks).toContain('export const init = () => undefined;');
+		expect(serverHooks).toContain('await register.serverInit?.();');
+		expect(serverHooks).toContain('export const handleError = async');
+		expect(serverHooks).toContain('await edgesHandleRaw(event');
 		expect(serverHooks).toContain(', false);');
-		expect(clientHooks).toContain('export const init = register.clientInit;');
-		expect(clientHooks).toContain('export const handleError = register.clientError;');
+		expect(clientHooks).toContain("await import('virtual:azure-net-kit/program')");
+		expect(clientHooks).toContain('export const init = async');
+		expect(clientHooks).toContain('export const handleError = async');
 	});
 
 	it('injects virtual server hooks into SvelteKit generated server internals', async () => {

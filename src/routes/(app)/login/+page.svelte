@@ -23,6 +23,7 @@
 	});
 </script>
 
+<a href="/">kra</a>
 {storeValue.value}
 <button onclick={() => setNewVal()}>new val</button>
 <button onclick={() => switchLocale($locale === 'ru' ? 'en' : 'ru')}>changeLocale</button>

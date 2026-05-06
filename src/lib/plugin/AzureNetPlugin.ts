@@ -228,13 +228,17 @@ const wrapUniversalRouteModuleAst = (sourceCode: string) => {
 };
 
 const createVirtualServerHooks = (silentChromeDevtools: boolean) => `// ${GENERATED_MARKER}
-import { edgesHandle } from '${VIRTUAL_SERVER_UTILS_ID}';
-import { register } from '${VIRTUAL_PROGRAM_ID}';
+import { edgesHandle, edgesHandleRaw } from '${VIRTUAL_SERVER_UTILS_ID}';
 
-export const init = register.serverInit;
+const getRegister = async () => (await import('${VIRTUAL_PROGRAM_ID}')).register;
 
-export const handle = edgesHandle(({ serialize, edgesEvent, resolve }) =>
-	register.handle({
+export const init = () => undefined;
+
+export const handle = edgesHandle(async ({ serialize, edgesEvent, resolve }) => {
+	const register = await getRegister();
+	await register.serverInit?.();
+
+	return register.handle({
 		event: edgesEvent,
 		resolve: (event, options) =>
 			resolve(event, {
@@ -244,14 +248,19 @@ export const handle = edgesHandle(({ serialize, edgesEvent, resolve }) =>
 					return serialize(html);
 				}
 			})
-	})
+	});
+}
 ${silentChromeDevtools ? ')' : ', false)'};
 
-export const handleError = register.serverError;
+export const handleError = async ({ error, event, status, message }) => {
+	const register = await edgesHandleRaw(event, async () => await getRegister());
+
+	return register.serverError({ error, event, status, message });
+};
 `;
 
 const createVirtualServerUtils = () =>
-	"export { edgesHandle, edgesHandleRaw, __autoWrapHandle, __withEdgesServerLoad, __withEdgesActions } from '@azure-net/edges/server';";
+	"export { edgesHandle, edgesHandleRaw, __autoWrapHandle, __withEdgesServerLoad, __withEdgesActions } from '@azure-net/kit/edges/internal-package/utils';";
 
 const createVirtualUniversalUtils = () => `const EDGES_STATE_FIELD = '__edges_state__';
 const EDGES_REV_FIELD = '__edges_rev__';
@@ -291,10 +300,10 @@ export const __withEdgesUniversalLoad = (load) => {
 `;
 
 const createVirtualClientHooks = () => `// ${GENERATED_MARKER}
-import { register } from '${VIRTUAL_PROGRAM_ID}';
+const getRegister = async () => (await import('${VIRTUAL_PROGRAM_ID}')).register;
 
-export const init = register.clientInit;
-export const handleError = register.clientError;
+export const init = async () => (await getRegister()).clientInit();
+export const handleError = async (input) => (await getRegister()).clientError(input);
 `;
 
 const createVirtualProgram = (root: string) => {
@@ -306,7 +315,7 @@ const createVirtualProgram = (root: string) => {
 
 	return `import { createApp } from '@azure-net/kit';
 
-export const { register, App } = createApp((app) => app);
+export const { register, Container } = createApp((app) => app);
 `;
 };
 
