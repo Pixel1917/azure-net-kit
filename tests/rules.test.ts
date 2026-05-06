@@ -77,4 +77,16 @@ describe('Rules', () => {
 		expect(phone({ val: '+1-800-CALL-NOW' })).toBe('Invalid phone number format');
 		expect(phone({ val: '++12025550173' })).toBe('Invalid phone number format');
 	});
+
+	it('date rule validates Date instances and date strings', () => {
+		const date = rules.date();
+
+		expect(date({ val: new Date('2024-05-23T00:00:00Z') })).toBeUndefined();
+		expect(date({ val: '2024-05-23' })).toBeUndefined();
+		expect(date({ val: '2024-05-23T15:30:00Z' })).toBeUndefined();
+
+		expect(date({ val: new Date('invalid') })).toBe('Invalid date format');
+		expect(date({ val: '05/23/2024' })).toBe('Invalid date format');
+		expect(date({ val: 1716422400000 })).toBe('Invalid date format');
+	});
 });

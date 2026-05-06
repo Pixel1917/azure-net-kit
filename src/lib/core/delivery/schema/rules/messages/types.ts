@@ -1,6 +1,7 @@
 import type { ValidationMessage } from '../../index.js';
 
 export type BaseValidationMessages = {
+	date: () => ValidationMessage;
 	phone: () => ValidationMessage;
 	email: () => ValidationMessage;
 	required: () => ValidationMessage;

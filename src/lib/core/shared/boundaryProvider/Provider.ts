@@ -27,6 +27,7 @@ export interface ProviderSettings<T extends ServiceMap, D extends Record<string,
 const clientCache = new Map<string, Map<string, unknown>>();
 const factoriesCache = new WeakMap<ProviderFactory<ServiceMap, Record<string, ProviderWithType<ServiceMap>>>, ServiceMap>();
 const providerProxyCache = new Map<string, ResolvedServices<ServiceMap>>();
+const clientConstructionStack: string[] = [];
 
 const clientBootFlags = new Map<string, boolean>();
 
@@ -79,6 +80,29 @@ const setBootFlag = (providerName: string, value: boolean): void => {
 		}
 		const bootFlags = context.data.bootFlags as Map<string, boolean>;
 		bootFlags.set(providerName, value);
+	}
+};
+
+const getConstructionStack = (): string[] => {
+	if (BROWSER) return clientConstructionStack;
+	const context = RequestContext.current();
+	return (context.data.boundaryProviderConstructionStack ??= []) as string[];
+};
+
+const runWithCycleGuard = <T>(key: string, callback: () => T): T => {
+	const stack = getConstructionStack();
+	if (stack.includes(key)) {
+		const cycleStart = stack.indexOf(key);
+		const cyclePath = [...stack.slice(cycleStart), key].join(' -> ');
+		throw new AzureNetKitInternalError(`[BoundaryProvider] Circular provider dependency detected: ${cyclePath}`);
+	}
+
+	stack.push(key);
+	try {
+		return callback();
+	} finally {
+		const idx = stack.lastIndexOf(key);
+		if (idx !== -1) stack.splice(idx, 1);
 	}
 };
 
@@ -150,7 +174,7 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 				if (typeof factory !== 'function') {
 					throw new AzureNetKitInternalError('[BoundaryProvider] Factory must be a function');
 				}
-				const instance = factory();
+				const instance = runWithCycleGuard(`${name}.${key}`, () => factory());
 
 				if (instance && typeof (instance as Promise<unknown>)?.then === 'function') {
 					throw new AzureNetKitInternalError(`[BoundaryProvider] Service '${key}' in provider '${name}' returned Promise.`);

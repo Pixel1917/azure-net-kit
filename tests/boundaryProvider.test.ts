@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RequestContext } from '@azure-net/edges/context';
 import { cleanupProvider, createBoundaryProvider } from '../src/lib/core/shared/boundaryProvider/Provider.js';
+import type { ProviderWithType } from '../src/lib/core/shared/boundaryProvider/Provider.js';
 
 describe('createBoundaryProvider', () => {
 	let context: { event: unknown; data: unknown };
@@ -76,5 +77,29 @@ describe('createBoundaryProvider', () => {
 
 		await Promise.resolve();
 		expect(dispose).toHaveBeenCalledTimes(1);
+	});
+
+	it('throws a readable error for circular service dependencies', () => {
+		type ProviderAType = ProviderWithType<{ svcA: () => { label: string } }>;
+		type ProviderBType = ProviderWithType<{ svcB: () => { label: string } }>;
+		const providers = {} as { ProviderA: ProviderAType; ProviderB: ProviderBType };
+		const getProviderA = (): ReturnType<ProviderAType> => providers.ProviderA();
+		const getProviderB = (): ReturnType<ProviderBType> => providers.ProviderB();
+
+		providers.ProviderA = createBoundaryProvider('CycleProviderA', {
+			register: () => ({
+				svcA: () => getProviderB().svcB
+			})
+		});
+
+		providers.ProviderB = createBoundaryProvider('CycleProviderB', {
+			register: () => ({
+				svcB: () => getProviderA().svcA
+			})
+		});
+
+		expect(() => providers.ProviderA().svcA).toThrow(
+			'[BoundaryProvider] Circular provider dependency detected: CycleProviderA.svcA -> CycleProviderB.svcB -> CycleProviderA.svcA'
+		);
 	});
 });

@@ -36,9 +36,10 @@ describe('ErrorHandler', () => {
 	});
 
 	it('custom handler receives retry metadata and must return appErrorConvert payload', async () => {
-		const parser = createErrorHandler<{ code: string }>(async (appError, retry) => {
+		const parser = createErrorHandler<{ code: string }>(async (appError, retry, context) => {
 			expect(retry.can).toBe(true);
 			expect(typeof retry.call).toBe('function');
+			expect(typeof context.AppEvents).toBe('function');
 			return appError.toPlainObject({ code: 'E_CUSTOM' }) as never;
 		});
 

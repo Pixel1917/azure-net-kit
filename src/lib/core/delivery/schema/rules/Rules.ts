@@ -1,5 +1,6 @@
 import type { BaseValidationMessages } from './messages/types.js';
 import type { ValidationErrorsMap, ValidationMessage, ValidationParams, ValidationRuleResult } from '../index.js';
+import { DateUtil } from '@azure-net/tools';
 
 export type ValidationRuleParams<T extends keyof BaseValidationMessages, D = object> = D & { message?: BaseValidationMessages[T] };
 
@@ -239,6 +240,23 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 
 	/**
 	 *
+	 * @param params - ValidationRuleParams<'date'>
+	 * @returns ValidationRuleResult<T, D>
+	 * @description Checks if the value is a valid date.
+	 */
+	const date = <T = unknown, D = unknown>(params?: ValidationRuleParams<'date'>): ValidationRuleResult<T, D> => {
+		const { message } = { ...params, message: params?.message ?? validationMessages.date };
+
+		return ({ val }: ValidationParams<T, D>): ValidationMessage | undefined => {
+			if (checkVal(val)) {
+				return val instanceof Date || typeof val === 'string' ? (DateUtil.isDate(val) ? undefined : message()) : message();
+			}
+			return undefined;
+		};
+	};
+
+	/**
+	 *
 	 * @param params - ValidationRuleParams<'email'>
 	 * @returns ValidationRuleResult<T, D>
 	 * @description Checks if the value is a valid email address.
@@ -435,5 +453,5 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		};
 	};
 
-	return { string, number, required, password, notSameAs, sameAs, array, boolean, email, finite, lettersOnly, phone, allowedOnly };
+	return { string, number, required, password, notSameAs, sameAs, array, boolean, email, finite, lettersOnly, phone, date, allowedOnly };
 };

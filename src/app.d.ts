@@ -17,7 +17,7 @@ declare global {
 		// interface PageState {}
 		// interface Platform {}
 		interface CustomEvents {
-			eventNames: '';
+			list: '';
 		}
 	}
 }

@@ -1,6 +1,7 @@
 import type { BaseValidationMessages } from './types.js';
 
 export const validationMessagesEn: BaseValidationMessages = {
+	date: () => 'Invalid date format',
 	phone: () => 'Invalid phone number format',
 	email: () => 'Invalid email address',
 	required: () => 'This field is required',

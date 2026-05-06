@@ -1,6 +1,7 @@
 import type { BaseValidationMessages } from './types.js';
 
 export const validationMessagesRu: BaseValidationMessages = {
+	date: () => 'Неверный формат даты',
 	phone: () => 'Неверный формат номера телефона',
 	email: () => 'Невалидный email',
 	required: () => 'Поле обязательно к заполнению',

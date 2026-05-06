@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "4.0.0",
+	"version": "4.1.0",
 	"license": "MIT",
 	"author": "Pixel1917",
 	"description": "Universal toolkit and library collection, developed as part of the Azure-net ecosystem",
@@ -150,8 +150,8 @@
 	},
 	"packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
 	"dependencies": {
-		"@azure-net/edges": "^1.2.5",
-		"@azure-net/edges-translations": "^1.2.5",
-		"@azure-net/tools": "^1.2.5"
+		"@azure-net/edges": "^1.2.7",
+		"@azure-net/edges-translations": "^1.2.7",
+		"@azure-net/tools": "^1.2.7"
 	}
 }

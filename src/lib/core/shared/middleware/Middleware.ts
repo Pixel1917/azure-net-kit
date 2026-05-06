@@ -4,6 +4,7 @@ import { beforeNavigate, goto } from '$app/navigation';
 import { page } from '$app/state';
 import { BROWSER } from '@azure-net/tools/environment';
 import { UniversalCookie } from '../cookie/index.js';
+import { AppEvents } from '../appEventBus/index.js';
 
 type RedirectStatus = 300 | 301 | 302 | 303 | 304 | 305 | 306 | 307 | 308;
 
@@ -14,6 +15,7 @@ export type IMiddleware = (middlewareData: {
 	next: (location?: string | URL, status?: RedirectStatus) => void;
 	isServer: boolean;
 	cookies: typeof UniversalCookie;
+	AppEvents: typeof AppEvents;
 	event?: RequestEvent;
 	page: Page;
 }) => Promise<void> | void;
@@ -54,6 +56,7 @@ export const createMiddlewareManager = (middlewares: IMiddleware[]) => {
 				event,
 				page,
 				cookies: UniversalCookie,
+				AppEvents,
 				isServer: !BROWSER,
 				to,
 				from,
