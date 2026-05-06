@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createQueryInstance } from '../src/lib/core/infra/query/QueryBuilder.js';
+import { createQueryInstance } from '../src/lib/infra/query/QueryBuilder.js';
 
 describe('createQueryInstance base behavior', () => {
 	it('builds repeat arrays by default', () => {

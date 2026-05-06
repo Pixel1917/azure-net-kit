@@ -1,4 +1,3 @@
-import { createSchemaFactory } from '$lib/core/delivery.js';
-import { createRules, validationMessagesI18n } from '$lib/core/delivery/schema/rules/index.js';
+import { createRules, validationMessagesI18n, createSchemaFactory } from '$lib/delivery.js';
 
 export const Schema = createSchemaFactory(createRules(validationMessagesI18n));

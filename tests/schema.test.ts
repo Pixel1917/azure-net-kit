@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createRules } from '../src/lib/core/delivery/schema/rules/Rules.js';
-import { validationMessagesEn } from '../src/lib/core/delivery/schema/rules/messages/En.js';
-import { createSchemaFactory, schema, SchemaFail } from '../src/lib/core/delivery/schema/Schema.js';
+import { createRules } from '../src/lib/delivery/schema/rules/Rules.js';
+import { validationMessagesEn } from '../src/lib/delivery/schema/rules/messages/En.js';
+import { createSchemaFactory, schema, SchemaFail } from '../src/lib/delivery/schema/Schema.js';
 
 describe('Schema', () => {
 	const rulesFactory = createRules(validationMessagesEn);

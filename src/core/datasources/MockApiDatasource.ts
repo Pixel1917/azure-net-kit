@@ -1,4 +1,4 @@
-import { BaseHttpDatasource, type CreateRequestCallbackType } from '$lib/core/infra/index.js';
+import { BaseHttpDatasource, type CreateRequestCallbackType } from '$lib/infra.js';
 import { MockApiResponse } from '../responses/index.js';
 
 export class MockApiDatasource extends BaseHttpDatasource {

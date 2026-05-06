@@ -1,6 +1,6 @@
 import { MockApiDatasource } from '../datasources/index.js';
-import { createHttpServiceInstance } from '$lib/core/infra/index.js';
-import { createBoundaryProvider, UniversalCookie } from '$lib/core/index.js';
+import { createHttpServiceInstance } from '$lib/infra.js';
+import { createBoundaryProvider, UniversalCookie } from '$lib/index.js';
 
 export const DatasourceProvider = createBoundaryProvider('CoreDatasourceProvider', {
 	register: () => ({

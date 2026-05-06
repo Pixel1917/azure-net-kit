@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClassMirror } from '../src/lib/core/shared/classMirror/ClassMirror.js';
+import { ClassMirror } from '../src/lib/shared/class-mirror/ClassMirror.js';
 
 class Counter {
 	constructor(private readonly value: number) {}

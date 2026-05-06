@@ -1,9 +1,8 @@
 <script lang="ts">
+	import { register } from '../program.js';
 	import type { Snippet } from 'svelte';
-	import { clientMiddleware } from '../core/middleware/index.js';
-	import '$lib/edges/dev/index.js';
 
-	clientMiddleware();
+	register();
 	const { children }: { children: Snippet } = $props();
 </script>
 
@@ -12,20 +11,3 @@
 		{@render children()}
 	</div>
 </div>
-
-<style>
-	.layout {
-		display: flex;
-		height: 100vh;
-	}
-	.page {
-		min-height: calc(100% - 104px);
-		height: fit-content;
-		width: 100%;
-		display: flex;
-		flex-direction: column;
-		padding: 24px 24px 40px;
-		margin-left: 236px;
-		margin-top: 104px;
-	}
-</style>

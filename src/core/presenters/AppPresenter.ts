@@ -1,4 +1,4 @@
-import { createErrorHandler, createAsyncHelpers, createPresenterFactory } from '$lib/core/delivery.js';
+import { createErrorHandler, createAsyncHelpers, createPresenterFactory } from '$lib/delivery.js';
 
 export type MyKeys = {
 	myKey: string;

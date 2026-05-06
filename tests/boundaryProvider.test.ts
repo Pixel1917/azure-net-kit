@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RequestContext } from '@azure-net/edges/context';
-import { cleanupProvider, createBoundaryProvider } from '../src/lib/core/shared/boundaryProvider/Provider.js';
-import type { ProviderWithType } from '../src/lib/core/shared/boundaryProvider/Provider.js';
+import { cleanupProvider, createBoundaryProvider } from '../src/lib/shared/boundary-provider/Provider.js';
+import type { ProviderWithType } from '../src/lib/shared/boundary-provider/Provider.js';
 
 describe('createBoundaryProvider', () => {
 	let context: { event: unknown; data: unknown };

@@ -1,2 +1,2 @@
-export * from './core/index.js';
-export { __withEdgesUniversalLoad } from './edges/index.js';
+export * from './shared/index.js';
+export * from './svelte/index.js';

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { PrivatePresenter } from '../../app/mock-api-context/layers/delivery/private/index.js';
-	import { createAsyncSignal } from '$lib/core/svelte/index.js';
+	import { createAsyncSignal } from '$lib/svelte/index.js';
 	import { TranslationManager } from '../../core/translations/index.js';
 	import type { PageProps } from '../../../.svelte-kit/types/src/routes/(app)/$types.js';
 

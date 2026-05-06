@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "4.1.0",
+	"version": "5.0.0-1",
 	"license": "MIT",
 	"author": "Pixel1917",
 	"description": "Universal toolkit and library collection, developed as part of the Azure-net ecosystem",
@@ -11,7 +11,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/Pixel1917/azure-net-kit.git"
+		"url": "git+https://github.com/Pixel1917/azure-net-kit.git"
 	},
 	"publishConfig": {
 		"access": "public",
@@ -50,49 +50,42 @@
 			"svelte": "./dist/index.js"
 		},
 		"./infra": {
-			"types": "./dist/core/infra.d.ts",
-			"svelte": "./dist/core/infra.js"
+			"types": "./dist/infra.d.ts",
+			"svelte": "./dist/infra.js"
 		},
 		"./delivery": {
-			"types": "./dist/core/delivery.d.ts",
-			"svelte": "./dist/core/delivery.js"
+			"types": "./dist/delivery.d.ts",
+			"svelte": "./dist/delivery.js"
 		},
 		"./errors": {
-			"types": "./dist/core/errors.d.ts",
-			"svelte": "./dist/core/errors.js"
+			"types": "./dist/errors.d.ts",
+			"svelte": "./dist/errors.js"
 		},
-		"./edges": {
-			"types": "./dist/edges/index.d.ts",
-			"svelte": "./dist/edges/index.js"
+		"./plugin": {
+			"types": "./dist/plugin/index.d.ts",
+			"svelte": "./dist/plugin/index.js",
+			"import": "./dist/plugin/index.js"
 		},
-		"./edges/server": {
-			"types": "./dist/edges/server/index.d.ts",
-			"svelte": "./dist/edges/server/index.js"
-		},
-		"./edges/state": {
-			"types": "./dist/edges/state/index.d.ts",
-			"svelte": "./dist/edges/state/index.js"
-		},
-		"./edges/context": {
-			"types": "./dist/edges/context/index.d.ts",
-			"svelte": "./dist/edges/context/index.js"
+		"./server-context": {
+			"types": "./dist/external/edges/ServerContext.d.ts",
+			"svelte": "./dist/external/edges/ServerContext.js"
 		},
 		"./edges/dev": {
-			"types": "./dist/edges/dev/index.d.ts",
-			"svelte": "./dist/edges/dev/index.js"
-		},
-		"./edges/plugin": {
-			"types": "./dist/edges/plugin/index.d.ts",
-			"svelte": "./dist/edges/plugin/index.js",
-			"import": "./dist/edges/plugin/index.js"
+			"types": "./dist/external/edges/Dev.d.ts",
+			"svelte": "./dist/external/edges/Dev.js"
 		},
 		"./tools": {
-			"types": "./dist/tools/index.d.ts",
-			"svelte": "./dist/tools/index.js"
+			"types": "./dist/external/tools/index.d.ts",
+			"svelte": "./dist/external/tools/index.js"
 		},
 		"./i18n": {
-			"types": "./dist/i18n/index.d.ts",
-			"svelte": "./dist/i18n/index.js"
+			"types": "./dist/external/i18n/index.d.ts",
+			"svelte": "./dist/external/i18n/index.js"
+		},
+		"./edges/internal-package/utils": {
+			"types": "./dist/external/edges/_edges.d.ts",
+			"svelte": "./dist/external/edges/_edges.js",
+			"import": "./dist/external/edges/_edges.js"
 		}
 	},
 	"peerDependencies": {

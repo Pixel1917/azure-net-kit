@@ -5,7 +5,7 @@ vi.mock('$lib/core/index.js', () => ({
 	AppEvents: () => ({ bus: { publish } })
 }));
 
-import { createAsyncHelpers, type AsyncHelperRetry } from '../src/lib/core/delivery/injectableDependencies/AsyncHelpers.js';
+import { createAsyncHelpers, type AsyncHelperRetry } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
 
 describe('AsyncHelpers', () => {
 	beforeEach(() => {

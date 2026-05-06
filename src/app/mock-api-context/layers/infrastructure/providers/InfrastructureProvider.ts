@@ -1,5 +1,5 @@
 import { PrivateRepository, PublicRepository } from '../http/repositories/index.js';
-import { createBoundaryProvider } from '$lib/core/index.js';
+import { createBoundaryProvider } from '$lib/index.js';
 import { DatasourceProvider } from '../../../../../core/providers/index.js';
 
 export const InfrastructureProvider = createBoundaryProvider('Shared-kernelInfrastructureProvider', {

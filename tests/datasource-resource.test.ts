@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BaseHttpDatasource } from '../src/lib/core/infra/datasource/BaseDatasource.js';
-import { HttpServiceResponse } from '../src/lib/core/infra/httpService/HttpServiceInstance.js';
-import { DTOMapper } from '../src/lib/core/infra/resource/BaseResource.js';
+import { BaseHttpDatasource } from '../src/lib/infra/datasource/BaseDatasource.js';
+import { HttpServiceResponse } from '../src/lib/infra/http-service/HttpServiceInstance.js';
+import { DTOMapper } from '../src/lib/infra/resource/BaseResource.js';
 
 class UserDTO extends DTOMapper {
 	id = 1;

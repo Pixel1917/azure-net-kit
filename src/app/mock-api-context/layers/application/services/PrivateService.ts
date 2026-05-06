@@ -1,4 +1,4 @@
-import { ClassMirror } from '$lib/core/index.js';
+import { ClassMirror } from '$lib/index.js';
 import { PrivateRepository } from '../../infrastructure/http/repositories/index.js';
 
 export class PrivateService extends ClassMirror {

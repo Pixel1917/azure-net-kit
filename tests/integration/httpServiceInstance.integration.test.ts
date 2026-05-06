@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RequestContext } from '@azure-net/edges/context';
-import { createHttpServiceInstance } from '../../src/lib/core/infra/httpService/HttpServiceInstance.js';
+import { createHttpServiceInstance } from '../../src/lib/infra/http-service/HttpServiceInstance.js';
 
 describe('HttpServiceInstance integration', () => {
 	it('calls external fake-api route and parses payload', async () => {

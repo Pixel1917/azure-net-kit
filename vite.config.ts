@@ -1,11 +1,9 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
-import { createEdgesPluginFactory } from '@azure-net/edges/plugin';
-
-export const edgesPlugin = createEdgesPluginFactory('$lib', '$lib/edges/server');
+import { AzureNetPlugin } from './src/lib/plugin/index.js';
 
 export default defineConfig({
-	plugins: [sveltekit(), edgesPlugin()],
+	plugins: [sveltekit(), AzureNetPlugin()],
 	server: {
 		port: 5178
 	}

@@ -5,8 +5,8 @@ import {
 	HttpInstanceFetchMethods,
 	type HttpInstanceDoFetch,
 	type HttpInstanceNormalizedRequest
-} from '../src/lib/core/infra/httpService/HttpServiceInstance.js';
-import { HttpServiceError, HttpServiceResponse } from '../src/lib/core/infra/httpService/HttpServiceInstance.js';
+} from '../src/lib/infra/http-service/HttpServiceInstance.js';
+import { HttpServiceError, HttpServiceResponse } from '../src/lib/infra/http-service/HttpServiceInstance.js';
 
 const setRequestContextFetch = (fetchImpl: typeof fetch) => {
 	RequestContext.init(

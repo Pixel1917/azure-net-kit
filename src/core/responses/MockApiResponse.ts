@@ -1,4 +1,4 @@
-import { ResponseBuilder } from '$lib/core/infra/index.js';
+import { ResponseBuilder } from '$lib/infra.js';
 export class MockApiResponse<TData = unknown, TMeta = unknown> extends ResponseBuilder<TData, TMeta> {
 	countElementsAndAddToMeta() {
 		return this.addMeta({

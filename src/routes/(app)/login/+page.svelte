@@ -1,10 +1,13 @@
 <script lang="ts">
-	import { TranslationManager } from '../../../core/translations/index.js';
-	import { createAsyncSignal } from '$lib/core/svelte/index.js';
-	import { PublicPresenter } from '../../../app/mock-api-context/layers/delivery/public/index.js';
+	import { createAsyncSignal } from '$lib/svelte/index.js';
+	import { PublicPresenter, PublicStore } from '../../../app/mock-api-context/layers/delivery/public/index.js';
 	import type { PageProps } from '../../../../.svelte-kit/types/src/routes/(app)/login/$types.js';
+	import { Container } from '../../../program.js';
 
-	const { t } = TranslationManager();
+	const { storeValue, translationManager } = Container;
+
+	const { setNewVal } = PublicStore();
+	const { t, switchLocale, locale } = translationManager;
 
 	let { data }: PageProps = $props();
 
@@ -20,6 +23,9 @@
 	});
 </script>
 
+{storeValue.value}
+<button onclick={() => setNewVal()}>new val</button>
+<button onclick={() => switchLocale($locale === 'ru' ? 'en' : 'ru')}>changeLocale</button>
 <div class="login-page">
 	<!--	{@html ObjectUtil.renderAsString(user.value)}-->
 	<div class="login-window">

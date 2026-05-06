@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createRules } from '../src/lib/core/delivery/schema/rules/Rules.js';
-import { validationMessagesEn } from '../src/lib/core/delivery/schema/rules/messages/En.js';
+import { createRules } from '../src/lib/delivery/schema/rules/Rules.js';
+import { validationMessagesEn } from '../src/lib/delivery/schema/rules/messages/En.js';
 
 describe('Rules', () => {
 	const rules = createRules(validationMessagesEn);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createQuery } from '../src/lib/core/svelte/Query/Query.svelte.js';
+import { createQuery } from '../src/lib/svelte/query/Query.svelte.js';
 
 describe('createQuery.patch', () => {
 	it('merges only provided keys and keeps others unchanged', () => {

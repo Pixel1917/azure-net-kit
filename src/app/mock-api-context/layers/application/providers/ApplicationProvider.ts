@@ -1,5 +1,5 @@
 import { PrivateService, PublicService } from '../services/index.js';
-import { createBoundaryProvider } from '$lib/core/index.js';
+import { createBoundaryProvider } from '$lib/index.js';
 import { InfrastructureProvider } from '../../infrastructure/providers/index.js';
 
 export const ApplicationProvider = createBoundaryProvider('Shared-kernelApplicationProvider', {

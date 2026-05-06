@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { HttpServiceResponse } from '../src/lib/core/infra/httpService/HttpServiceInstance.js';
-import { ResponseBuilder } from '../src/lib/core/infra/response/BaseResponse.js';
+import { HttpServiceResponse } from '../src/lib/infra/http-service/HttpServiceInstance.js';
+import { ResponseBuilder } from '../src/lib/infra/response/BaseResponse.js';
 
 class UserResource {
 	constructor(private readonly data: { id: number; name: string }) {}

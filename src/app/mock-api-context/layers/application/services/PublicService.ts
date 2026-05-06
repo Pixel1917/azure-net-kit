@@ -1,4 +1,4 @@
-import { ClassMirror } from '$lib/core/index.js';
+import { ClassMirror } from '$lib/index.js';
 import { PublicRepository } from '../../infrastructure/http/repositories/index.js';
 
 export class PublicService extends ClassMirror {
@@ -7,7 +7,6 @@ export class PublicService extends ClassMirror {
 	}
 
 	async collection() {
-		console.log('collection call');
 		return this.publicRepository.collection();
 	}
 

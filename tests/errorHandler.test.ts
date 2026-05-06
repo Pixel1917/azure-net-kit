@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createErrorHandler } from '../src/lib/core/delivery/injectableDependencies/ErrorHandler.js';
-import { HttpErrorTypes, HttpServiceError } from '../src/lib/core/infra/httpService/HttpServiceInstance.js';
-import { SchemaFail } from '../src/lib/core/delivery/schema/Schema.js';
+import { createErrorHandler } from '../src/lib/delivery/injectable-dependencies/ErrorHandler.js';
+import { HttpErrorTypes, HttpServiceError } from '../src/lib/infra/http-service/HttpServiceInstance.js';
+import { SchemaFail } from '../src/lib/delivery/schema/Schema.js';
 
 describe('ErrorHandler', () => {
 	it('default handler maps http error to app error', async () => {

@@ -24,7 +24,7 @@ describe('AsyncSignal', () => {
 
 	it('global refresh overrides in-flight manual request and keeps latest data', async () => {
 		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: true }));
-		const { createAsyncSignal, refreshAsyncSignal } = await import('../src/lib/core/svelte/AsyncSignal/AsyncSignal.svelte.js');
+		const { createAsyncSignal, refreshAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
 
 		const req1 = createDeferred<string>();
 		const req2 = createDeferred<string>();
@@ -56,7 +56,7 @@ describe('AsyncSignal', () => {
 
 	it('stale error from old run does not overwrite latest successful state', async () => {
 		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: true }));
-		const { createAsyncSignal, refreshAsyncSignal } = await import('../src/lib/core/svelte/AsyncSignal/AsyncSignal.svelte.js');
+		const { createAsyncSignal, refreshAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
 
 		const req1 = createDeferred<string>();
 		const req2 = createDeferred<string>();

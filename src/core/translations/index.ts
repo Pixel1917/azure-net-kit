@@ -1,5 +1,5 @@
 import { messages } from './locales/index.js';
-import { createTranslations, type Path } from '$lib/i18n/index.js';
+import { createTranslations, type Path } from '$lib/external/i18n/index.js';
 
 export const TranslationManager = createTranslations({
 	messages,
