@@ -1,5 +1,7 @@
 import { createErrorHandler } from './ErrorHandler.js';
 import { type AppError, type IAppError } from '../../shared/app-error/AppError.js';
+import { BROWSER } from '../../external/tools/index.js';
+import { RequestContext } from '../../external/edges/ServerContext.js';
 
 export interface AsyncActionResponse<T, D = never, ErrorResult = Record<never, never>> {
 	success: boolean;
@@ -13,6 +15,9 @@ export interface AsyncHelperRetry {
 }
 
 type Action<Res> = () => Promise<Res>;
+type ErrorParser<ErrorResult extends object> = ReturnType<typeof createErrorHandler<ErrorResult>>;
+
+const HANDLER_CONTEXT_KEY = '__azureNetAsyncHelperErrorParser__';
 
 export interface AsyncActionSettings<Res = never, Req = never, ErrorResult = AppError<Error>> {
 	beforeSend?: (actions: { next: () => void; abort: (reason?: Error) => void }) => void | Promise<void>;
@@ -27,8 +32,31 @@ export interface AsyncResourceSettings<Res = never, Req = never, ErrorResult = A
 
 export class AsyncHelperError extends Error {}
 
-export const createAsyncHelpers = <ErrorResult extends object>(opts?: { handler?: ReturnType<typeof createErrorHandler<ErrorResult>> }) => {
-	const errorParser = opts?.handler ?? createErrorHandler();
+export const createAsyncHelpers = <ErrorResult extends object>() => {
+	const defaultErrorParser = createErrorHandler<ErrorResult>();
+	let clientErrorParser: ErrorParser<ErrorResult> | undefined;
+
+	const getErrorParser = (): ErrorParser<ErrorResult> => {
+		if (BROWSER) return clientErrorParser ?? defaultErrorParser;
+
+		try {
+			return (RequestContext.current().data[HANDLER_CONTEXT_KEY] as ErrorParser<ErrorResult> | undefined) ?? defaultErrorParser;
+		} catch {
+			return defaultErrorParser;
+		}
+	};
+
+	const errorParser: ErrorParser<ErrorResult> = async <T = unknown>(error: Error, asyncHelperRetry?: AsyncHelperRetry) =>
+		await getErrorParser()<T>(error, asyncHelperRetry);
+
+	const useHandler = (parser: ErrorParser<ErrorResult>) => {
+		if (BROWSER) {
+			clientErrorParser = parser;
+			return;
+		}
+
+		RequestContext.current().data[HANDLER_CONTEXT_KEY] = parser;
+	};
 
 	const normalizeError = (err: unknown): Error => (err instanceof Error ? err : new Error(String(err)));
 
@@ -140,6 +168,7 @@ export const createAsyncHelpers = <ErrorResult extends object>(opts?: { handler?
 	return {
 		createAsyncAction,
 		createAsyncResource,
-		errorParser
+		errorParser,
+		useHandler
 	};
 };
