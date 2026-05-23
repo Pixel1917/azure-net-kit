@@ -1,5 +1,5 @@
 import { type BeforeNavigate } from '@sveltejs/kit';
-import type { RedirectStatus } from './Shared.js';
+import { ensureRoute, type EnsureRoute, type RedirectStatus } from './Shared.js';
 import { page } from '$app/state';
 import { goto } from '$app/navigation';
 
@@ -7,6 +7,7 @@ export type IClientMiddleware = (middlewareData: {
 	to: URL;
 	from?: URL;
 	next: (location?: string | URL, status?: RedirectStatus) => void;
+	ensureRoute: EnsureRoute;
 }) => Promise<void> | void;
 
 export const executeClientMiddlewares = async (middlewares: IClientMiddleware[], navigation?: BeforeNavigate) => {
@@ -27,7 +28,8 @@ export const executeClientMiddlewares = async (middlewares: IClientMiddleware[],
 		await middleware({
 			to,
 			from,
-			next
+			next,
+			ensureRoute
 		});
 
 		if (!shouldContinue) {

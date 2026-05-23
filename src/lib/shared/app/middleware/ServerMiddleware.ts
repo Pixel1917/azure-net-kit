@@ -1,5 +1,5 @@
 import { error, redirect, type RequestEvent } from '@sveltejs/kit';
-import type { RedirectStatus } from './Shared.js';
+import { ensureRoute, type EnsureRoute, type RedirectStatus } from './Shared.js';
 import { BROWSER } from '../../../external/tools/index.js';
 import { RequestContext } from '../../../external/edges/ServerContext.js';
 
@@ -8,6 +8,7 @@ export type IServerMiddleware = (middlewareData: {
 	from?: RequestEvent['url'];
 	next: (location?: string | URL, status?: RedirectStatus) => void;
 	event?: RequestEvent;
+	ensureRoute: EnsureRoute;
 }) => Promise<void> | void;
 
 export const executeServerMiddlewares = async (middlewares: IServerMiddleware[]) => {
@@ -30,7 +31,8 @@ export const executeServerMiddlewares = async (middlewares: IServerMiddleware[])
 					event,
 					to,
 					from,
-					next
+					next,
+					ensureRoute
 				});
 
 				if (!shouldContinue) {

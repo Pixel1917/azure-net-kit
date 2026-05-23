@@ -1,6 +1,7 @@
 import { RequestContext } from '@azure-net/edges/context';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/lib/shared/app/index.js';
+import { ensureRoute } from '../src/lib/shared/app/middleware/Shared.js';
 import type { IServerMiddleware } from '../src/lib/shared/app/index.js';
 
 const createServerContext = () => ({
@@ -17,6 +18,18 @@ const createServerContext = () => ({
 });
 
 describe('createApp', () => {
+	it('matches static and dynamic routes exactly', () => {
+		expect(ensureRoute('/', '/')).toBe(true);
+		expect(ensureRoute('/', '/app/products')).toBe(false);
+		expect(ensureRoute('/app/products/{id}', '/app/products/12')).toBe(true);
+		expect(ensureRoute('/app/products/{id}', '/app/products/12/details')).toBe(false);
+		expect(ensureRoute('/app/products/{id}/details/{detailId}', '/app/products/12/details/99')).toBe(true);
+		expect(ensureRoute('/app/products/{id}/details/{detailId}', '/app/products/12/details')).toBe(false);
+		expect(ensureRoute(['/login', '/app/products/{id}'], '/app/products/12')).toBe(true);
+		expect(ensureRoute(['/login', '/app/products/{id}'], '/app/products')).toBe(false);
+		expect(ensureRoute('/profile/{id}', new URL('https://example.com/profile/42'))).toBe(true);
+	});
+
 	it('resolves dependencies through boundary provider lazily', () => {
 		const context = createServerContext();
 		RequestContext.init(() => context as never);
@@ -291,8 +304,8 @@ describe('createApp', () => {
 		RequestContext.init(() => context as never);
 
 		const calls: string[] = [];
-		const first: IServerMiddleware = ({ to, from, event, next }) => {
-			calls.push(`first:${to.pathname}:${from?.pathname}:${event === context.event}`);
+		const first: IServerMiddleware = ({ to, from, event, ensureRoute, next }) => {
+			calls.push(`first:${to.pathname}:${from?.pathname}:${event === context.event}:${ensureRoute('/dashboard', to.pathname)}`);
 			next();
 		};
 		const second: IServerMiddleware = async ({ next }) => {
@@ -312,7 +325,7 @@ describe('createApp', () => {
 			resolve: () => new Response('ok')
 		} as never);
 
-		expect(calls).toEqual(['first:/dashboard:/login:true', 'second']);
+		expect(calls).toEqual(['first:/dashboard:/login:true:true', 'second']);
 	});
 
 	it('rejects server request when middleware chain is not continued', async () => {
