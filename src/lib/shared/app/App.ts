@@ -6,6 +6,7 @@ import { executeServerMiddlewares, type IServerMiddleware } from './middleware/S
 import type { Handle, HandleClientError, HandleServerError, RequestEvent, ServerInit } from '@sveltejs/kit';
 import { beforeNavigate } from '$app/navigation';
 import { executeClientMiddlewares, type IClientMiddleware } from './middleware/ClientMiddleware.js';
+import { useLogger } from '../logger/index.js';
 
 type MaybePromise<T> = T | Promise<T>;
 type HandleInput = Parameters<Handle>[0];
@@ -74,6 +75,7 @@ export interface AppServerErrorContext<TDependencies extends Record<string, unkn
 	event: RequestEvent;
 	status: number;
 	message: string;
+	useLogger: typeof useLogger;
 }
 
 export type AppUniversalLifecycleCallback<TDependencies extends Record<string, unknown>> = (
@@ -393,7 +395,8 @@ export const createApp = <TBuilder>(
 			error,
 			event,
 			status,
-			message
+			message,
+			useLogger
 		});
 	};
 

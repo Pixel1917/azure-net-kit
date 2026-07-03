@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "5.0.0",
+	"version": "5.0.1",
 	"license": "MIT",
 	"author": "Pixel1917",
 	"description": "Universal toolkit and library collection, developed as part of the Azure-net ecosystem",
@@ -104,6 +104,7 @@
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/svelte": "^5.3.1",
 		"commitizen": "^4.3.1",
+		"env-cmd": "^11.0.0",
 		"eslint": "^10.2.1",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.17.0",

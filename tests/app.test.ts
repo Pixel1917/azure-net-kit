@@ -1,6 +1,8 @@
 import { RequestContext } from '@azure-net/edges/context';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/lib/shared/app/index.js';
+import { AzureNetKitInternalError } from '../src/lib/shared/app-error/index.js';
+import { LoggerErrors, useLogger } from '../src/lib/shared/logger/index.js';
 import { ensureRoute } from '../src/lib/shared/app/middleware/Shared.js';
 import type { IServerMiddleware } from '../src/lib/shared/app/index.js';
 
@@ -262,6 +264,7 @@ describe('createApp', () => {
 		app.register.serverInit();
 
 		expect(callback).toHaveBeenCalledTimes(1);
+		expect(callback).toHaveBeenCalledWith({ Container: app.Container });
 	});
 
 	it('runs server error callback with request context and error data', () => {
@@ -285,8 +288,61 @@ describe('createApp', () => {
 			error,
 			event: context.event,
 			status: 500,
-			message: 'Internal error'
+			message: 'Internal error',
+			useLogger
 		});
+	});
+
+	it('logs internal errors and can use request fetch collector', async () => {
+		const requestFetch = vi.fn(() => Promise.resolve(new Response('ok')));
+		const context = {
+			...createServerContext(),
+			event: {
+				...createServerContext().event,
+				fetch: requestFetch
+			}
+		};
+		RequestContext.init(() => context as never);
+
+		const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+		const onError = vi.fn();
+		const error = new AzureNetKitInternalError('boom');
+
+		useLogger(error, {
+			includeOnly: [LoggerErrors.AzureNetKitInternal],
+			collector: {
+				request: () => new Request('https://example.com/loki', { method: 'POST' }),
+				onError
+			}
+		});
+
+		await Promise.resolve();
+
+		expect(log).toHaveBeenCalledWith('[Logger][AzureNetInternalError] boom');
+		expect(requestFetch).toHaveBeenCalledTimes(1);
+		expect(onError).not.toHaveBeenCalled();
+
+		log.mockRestore();
+	});
+
+	it('does not throw when logger collector request creation fails', () => {
+		const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+		const onError = vi.fn();
+		const collectorError = new Error('collector failed');
+
+		expect(() =>
+			useLogger(new Error('boom'), {
+				collector: {
+					request: () => {
+						throw collectorError;
+					},
+					onError
+				}
+			})
+		).not.toThrow();
+
+		expect(onError).toHaveBeenCalledWith(collectorError);
+		log.mockRestore();
 	});
 
 	it('throws when the same lifecycle callback is registered twice at runtime', () => {

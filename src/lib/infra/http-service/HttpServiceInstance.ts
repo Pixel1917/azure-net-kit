@@ -295,7 +295,7 @@ const parseResponse = async <T>(response: Response, request: HttpInstanceNormali
 	if (!response.ok || parseError) {
 		const message = !response.ok
 			? `Request failed with status code ${response.status}. ${response.statusText}`
-			: (parseError?.message ?? 'Internal error');
+			: (parseError?.message ?? `Internal error. Request failed. ${response?.status ?? ''} ${response?.statusText ?? ''}`);
 		throw new HttpServiceError({
 			status: response.status,
 			data,
