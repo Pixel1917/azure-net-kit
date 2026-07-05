@@ -93,7 +93,7 @@ export type HttpInstanceOnError = (error: HttpServiceError<unknown>, request: Ht
 
 export type HttpInstanceDoFetch = <T = unknown>(request: HttpInstanceNormalizedRequest) => Promise<IHttpServiceResponse<T>>;
 
-export interface IHttpInstanceOptions extends Omit<RequestInit, 'headers' | 'method'> {
+export interface IHttpInstanceOptions<T = unknown> extends Omit<RequestInit, 'headers' | 'method'> {
 	headers?: NonNullable<RequestInit['headers']> | Record<string, string | undefined>;
 	json?: unknown;
 	stringifyJson?: (data: unknown) => string | undefined;
@@ -105,10 +105,11 @@ export interface IHttpInstanceOptions extends Omit<RequestInit, 'headers' | 'met
 	responseFormat?: 'json' | 'blob' | 'text' | 'arrayBuffer' | 'body';
 	onRequest?: HttpInstanceOnRequest;
 	onError?: HttpInstanceOnError;
+	onResponse?: (response: IHttpServiceResponse<T>) => void | Promise<void>;
 	doFetch?: HttpInstanceDoFetch;
 }
 
-export type HttpInstanceRequestMethod = <T = unknown>(url: string | URL, options?: IHttpInstanceOptions) => Promise<IHttpServiceResponse<T>>;
+export type HttpInstanceRequestMethod = <T = unknown>(url: string | URL, options?: IHttpInstanceOptions<T>) => Promise<IHttpServiceResponse<T>>;
 
 export interface IHttpServiceInstance {
 	get: HttpInstanceRequestMethod;
@@ -167,7 +168,7 @@ const mergeSearchParams = (base?: SearchParamsOption, extra?: SearchParamsOption
 	return result;
 };
 
-const mergeOptions = (base: IHttpInstanceOptions = {}, extra: IHttpInstanceOptions = {}): IHttpInstanceOptions => {
+const mergeOptions = <T = unknown>(base: IHttpInstanceOptions = {}, extra: IHttpInstanceOptions<T> = {}): IHttpInstanceOptions<T> => {
 	const mergedHeaders = new Headers(normalizeHeaders(base.headers));
 	for (const [key, value] of normalizeHeaders(extra.headers).entries()) {
 		mergedHeaders.set(key, value);
@@ -182,6 +183,7 @@ const mergeOptions = (base: IHttpInstanceOptions = {}, extra: IHttpInstanceOptio
 		searchParams: mergedSearchParams,
 		stringifyJson: extra.stringifyJson ?? base.stringifyJson,
 		onRequest: extra.onRequest ?? base.onRequest,
+		onResponse: extra.onResponse ?? base.onResponse,
 		onError: extra.onError ?? base.onError,
 		doFetch: extra.doFetch ?? base.doFetch
 	};
@@ -347,8 +349,8 @@ const defaultDoFetch: HttpInstanceDoFetch = async <T = unknown>(request: HttpIns
 };
 
 const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOptions): HttpInstanceRequestMethod => {
-	return async <T = unknown>(url: string | URL, options: IHttpInstanceOptions = {}) => {
-		const merged = mergeOptions(defaults, options);
+	return async <T = unknown>(url: string | URL, options: IHttpInstanceOptions<T> = {}): Promise<IHttpServiceResponse<T>> => {
+		const merged = mergeOptions<T>(defaults, options);
 		const stringifyJson = merged.stringifyJson ?? stringifyJsonFunc;
 		const fetcher = !BROWSER ? (RequestContext.current()?.event?.fetch ?? fetch) : fetch;
 
@@ -399,7 +401,12 @@ const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOpt
 
 		const doFetch = merged.doFetch ?? defaults.doFetch ?? defaultDoFetch;
 		try {
-			return await doFetch<T>(normalizedRequest);
+			const fetched = await doFetch<T>(normalizedRequest);
+			const onResponse = options.onResponse ?? defaults.onResponse;
+			if (onResponse) {
+				await onResponse(fetched);
+			}
+			return fetched;
 		} catch (error) {
 			const normalizedError =
 				error instanceof HttpServiceError
