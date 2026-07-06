@@ -163,4 +163,11 @@ export class UniversalCookie {
 			}
 		}
 	}
+
+	public static toCredentials() {
+		const all = this.getAll<Record<string, string>>() ?? {};
+		return Object.entries(all)
+			.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+			.join('; ');
+	}
 }
