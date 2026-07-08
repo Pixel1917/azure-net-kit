@@ -1,5 +1,3 @@
-export type RedirectStatus = 300 | 301 | 302 | 303 | 304 | 305 | 306 | 307 | 308;
-
 export type EnsureRouteSource = string | readonly string[];
 export type EnsureRouteTarget = string | URL;
 export type EnsureRoute = (route: EnsureRouteSource, target: EnsureRouteTarget) => boolean;

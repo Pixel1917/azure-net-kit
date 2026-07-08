@@ -1,7 +1,8 @@
 import { type BeforeNavigate } from '@sveltejs/kit';
-import { ensureRoute, type EnsureRoute, type RedirectStatus } from './Shared.js';
+import { ensureRoute, type EnsureRoute } from './Shared.js';
 import { page } from '$app/state';
 import { goto } from '$app/navigation';
+import type { RedirectStatus } from '../../redirect/index.js';
 
 export type IClientMiddleware = (middlewareData: {
 	to: URL;

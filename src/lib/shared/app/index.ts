@@ -20,4 +20,4 @@ export {
 } from './App.js';
 export type { IClientMiddleware } from './middleware/ClientMiddleware.js';
 export type { IServerMiddleware } from './middleware/ServerMiddleware.js';
-export type { EnsureRoute, EnsureRouteSource, EnsureRouteTarget, RedirectStatus } from './middleware/Shared.js';
+export type { EnsureRoute, EnsureRouteSource, EnsureRouteTarget } from './middleware/Shared.js';
