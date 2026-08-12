@@ -56,9 +56,7 @@ export interface AppClientErrorContext<TDependencies extends Record<string, unkn
 	message: string;
 }
 
-export interface AppServerInitLifecycleContext<TDependencies extends Record<string, unknown>> {
-	Container: AppContainer<TDependencies>;
-}
+export type AppServerInitLifecycleContext = void;
 
 export interface AppServerLifecycleContext<TDependencies extends Record<string, unknown>> {
 	Container: AppContainer<TDependencies>;
@@ -90,9 +88,7 @@ export type AppClientInitLifecycleCallback<TDependencies extends Record<string, 
 export type AppClientErrorCallback<TDependencies extends Record<string, unknown>> = (
 	context: AppClientErrorContext<TDependencies>
 ) => ReturnType<HandleClientError>;
-export type AppServerInitLifecycleCallback<TDependencies extends Record<string, unknown>> = (
-	context: AppServerInitLifecycleContext<TDependencies>
-) => ReturnType<ServerInit>;
+export type AppServerInitLifecycleCallback = ServerInit;
 export type AppServerLifecycleCallback<TDependencies extends Record<string, unknown>> = (
 	context: AppServerLifecycleContext<TDependencies>
 ) => MaybePromise<Response | void>;
@@ -133,7 +129,7 @@ export type CreateAppBuilder<TDependencies extends Record<string, unknown>, TFla
 		TFlags,
 		'useServerInit',
 		{
-			useServerInit(callback: AppServerInitLifecycleCallback<TDependencies>): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useServerInit'>>;
+			useServerInit(callback: AppServerInitLifecycleCallback): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useServerInit'>>;
 		}
 	> &
 	OnceMethod<
@@ -172,14 +168,13 @@ interface AppCallbacks {
 	useClient?: AppClientLifecycleCallback<Record<string, unknown>>;
 	useClientInit?: AppClientInitLifecycleCallback<Record<string, unknown>>;
 	useClientError?: AppClientErrorCallback<Record<string, unknown>>;
-	useServerInit?: AppServerInitLifecycleCallback<Record<string, unknown>>;
+	useServerInit?: AppServerInitLifecycleCallback;
 	useServer?: AppServerLifecycleCallback<Record<string, unknown>>;
 	useServerError?: AppServerErrorCallback<Record<string, unknown>>;
 }
 
 const DEFAULT_APP_NAME = '__AzureNetKitGlobalAppContainer__';
 const clientLifecycleFlags = new WeakMap<object, LifecycleFlags>();
-const serverInitLifecycleFlags = new WeakMap<object, LifecycleFlags>();
 
 const getRequestContext = (): ContextData | undefined => {
 	try {
@@ -189,13 +184,9 @@ const getRequestContext = (): ContextData | undefined => {
 	}
 };
 
-const getServerRequestContext = (event?: RequestEvent): ContextData => {
+const getServerRequestContext = (): ContextData => {
 	const requestContext = getRequestContext();
 	if (requestContext) return requestContext;
-
-	if (event) {
-		return { data: {}, event } as ContextData;
-	}
 
 	throw new AzureNetKitInternalError('[createApp] RequestContext is not initialized on server.');
 };
@@ -255,7 +246,7 @@ const createBuilder = (dependencies: Map<string, UntypedDependencyFactory>, call
 			return builder;
 		},
 
-		useServerInit(callback: AppServerInitLifecycleCallback<Record<string, unknown>>) {
+		useServerInit(callback: AppServerInitLifecycleCallback) {
 			setCallback(callbacks, 'useServerInit', callback);
 			return builder;
 		},
@@ -290,6 +281,7 @@ export const createApp = <TBuilder>(
 	const dependencies = new Map<string, UntypedDependencyFactory>();
 	const callbacks: AppCallbacks = {};
 	let clientInitialized = false;
+	let serverInitPromise: Promise<void> | undefined;
 
 	callback(createBuilder(dependencies, callbacks));
 
@@ -374,16 +366,8 @@ export const createApp = <TBuilder>(
 
 	const runServerInit: ServerInit = () => {
 		if (BROWSER) return undefined;
-
-		let flags = serverInitLifecycleFlags.get(appKey);
-		if (!flags) {
-			flags = {};
-			serverInitLifecycleFlags.set(appKey, flags);
-		}
-		if (flags.serverInit) return undefined;
-		flags.serverInit = true;
-
-		return callbacks.useServerInit?.({ Container });
+		serverInitPromise ??= Promise.resolve().then(() => callbacks.useServerInit?.());
+		return serverInitPromise;
 	};
 
 	const runServerError: HandleServerError = ({ error, event, status, message }) => {
@@ -391,7 +375,7 @@ export const createApp = <TBuilder>(
 
 		return callbacks.useServerError?.({
 			Container,
-			requestContext: getServerRequestContext(event),
+			requestContext: getServerRequestContext(),
 			error,
 			event,
 			status,
@@ -413,7 +397,7 @@ export const createApp = <TBuilder>(
 	};
 
 	const handle: Handle = async ({ event, resolve }) => {
-		const requestContext = getServerRequestContext(event);
+		const requestContext = getServerRequestContext();
 		const flags = getLifecycleFlags(appKey, requestContext);
 
 		if (!flags.server) {

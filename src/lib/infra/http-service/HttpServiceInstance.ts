@@ -276,7 +276,11 @@ const withTimeout = (signal: AbortSignal | null | undefined, timeout: number | f
 };
 
 const shouldRetryError = (error: unknown): boolean => {
-	return error instanceof HttpServiceError && error.type === HttpErrorTypes.External;
+	if (error instanceof Error && error.name === 'AbortError') return false;
+	if (error instanceof TypeError) return true;
+	if (!(error instanceof HttpServiceError) || error.type !== HttpErrorTypes.External) return false;
+
+	return error.status === 408 || error.status === 425 || error.status === 429 || error.status >= 500;
 };
 
 const normalizeUnknownError = (error: unknown): Error => {
@@ -286,13 +290,15 @@ const normalizeUnknownError = (error: unknown): Error => {
 
 const parseResponse = async <T>(response: Response, request: HttpInstanceNormalizedRequest) => {
 	const raw = request.includeRaw && typeof response?.clone === 'function' ? response?.clone() : undefined;
-	let data: T;
+	const hasNoBody = request.method === HttpInstanceFetchMethods.HEAD || response.status === 204 || response.status === 205;
+	let data = undefined as T;
 	let parseError: Error | undefined;
-	try {
-		data = await parseBodyByFormat<T>(response, request.responseFormat);
-	} catch (error) {
-		parseError = normalizeUnknownError(error);
-		data = undefined as T;
+	if (!hasNoBody) {
+		try {
+			data = await parseBodyByFormat<T>(response, request.responseFormat);
+		} catch (error) {
+			parseError = normalizeUnknownError(error);
+		}
 	}
 	if (!response.ok || parseError) {
 		const message = !response.ok

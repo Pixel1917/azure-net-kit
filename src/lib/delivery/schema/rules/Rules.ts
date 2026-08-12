@@ -1,6 +1,6 @@
 import type { BaseValidationMessages } from './messages/Types.js';
 import type { ValidationErrorsMap, ValidationMessage, ValidationParams, ValidationRuleResult } from '../index.js';
-import { DateUtil } from '../../../external/tools/index.js';
+import { DateUtil, ObjectUtil } from '../../../external/tools/index.js';
 
 export type ValidationRuleParams<T extends keyof BaseValidationMessages, D = object> = D & { message?: BaseValidationMessages[T] };
 
@@ -330,22 +330,10 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 	const sameAs = <T = unknown, D = unknown>(params: ValidationRuleParams<'sameAs', { key: keyof T | string }>): ValidationRuleResult<T, D> => {
 		const { message, key } = { ...params, message: params?.message ?? validationMessages.sameAs };
 		return ({ val, listValues }: ValidationParams<T, D>): ValidationMessage | undefined => {
-			if (checkVal(val)) {
-				switch (true) {
-					case typeof val === 'object':
-						if (!listValues?.[key as keyof T] || typeof listValues[key as keyof T] !== 'object') {
-							return message(String(key));
-						}
-						try {
-							return JSON.stringify(val) === JSON.stringify(listValues[key as keyof T]) ? undefined : message(String(key));
-						} catch {
-							return 'Parsing error';
-						}
-					default:
-						return String(val ?? '') === String(listValues?.[key as keyof T] ?? '') ? undefined : message(String(key));
-				}
-			}
-			return undefined;
+			if (!checkVal(val)) return undefined;
+
+			const comparedValue = (listValues as Record<PropertyKey, unknown> | undefined)?.[key as PropertyKey];
+			return ObjectUtil.equals(val, comparedValue) ? undefined : message(String(key));
 		};
 	};
 
@@ -358,22 +346,10 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 	const notSameAs = <T = unknown, D = unknown>(params: ValidationRuleParams<'sameAs', { key: keyof T | string }>): ValidationRuleResult<T, D> => {
 		const { message, key } = { ...params, message: params?.message ?? validationMessages.notSameAs };
 		return ({ val, listValues }: ValidationParams<T, D>): ValidationMessage | undefined => {
-			if (checkVal(val)) {
-				switch (true) {
-					case typeof val === 'object':
-						if (!listValues?.[key as keyof T] || typeof listValues[key as keyof T] !== 'object') {
-							return message(String(key));
-						}
-						try {
-							return JSON.stringify(val) !== JSON.stringify(listValues[key as keyof T]) ? undefined : message(String(key));
-						} catch {
-							return 'Parsing error';
-						}
-					default:
-						return String(val) === String(listValues?.[key as keyof T]) ? undefined : message(String(key));
-				}
-			}
-			return undefined;
+			if (!checkVal(val)) return undefined;
+
+			const comparedValue = (listValues as Record<PropertyKey, unknown> | undefined)?.[key as PropertyKey];
+			return ObjectUtil.equals(val, comparedValue) ? message(String(key)) : undefined;
 		};
 	};
 

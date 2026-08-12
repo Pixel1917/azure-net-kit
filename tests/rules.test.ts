@@ -89,4 +89,22 @@ describe('Rules', () => {
 		expect(date({ val: '05/23/2024' })).toBe('Invalid date format');
 		expect(date({ val: 1716422400000 })).toBe('Invalid date format');
 	});
+
+	it('sameAs and notSameAs compare primitives and objects deeply', () => {
+		type Values = { password: string; confirmation: string; current: object; next: object };
+		const sameAs = rules.sameAs<Values, string>({ key: 'password' });
+		const notSameAs = rules.notSameAs<Values, string>({ key: 'password' });
+
+		expect(sameAs({ val: 'secret', listValues: { password: 'secret' } })).toBeUndefined();
+		expect(sameAs({ val: 'other', listValues: { password: 'secret' } })).toBe('This field must match the password field');
+		expect(notSameAs({ val: 'secret', listValues: { password: 'secret' } })).toBe('This field must not match the password field');
+		expect(notSameAs({ val: 'other', listValues: { password: 'secret' } })).toBeUndefined();
+
+		const value = { nested: { id: 1 }, enabled: true };
+		const reordered = { enabled: true, nested: { id: 1 } };
+		const sameObject = rules.sameAs<Values, typeof value>({ key: 'current' });
+		const notSameObject = rules.notSameAs<Values, typeof value>({ key: 'current' });
+		expect(sameObject({ val: value, listValues: { current: reordered } })).toBeUndefined();
+		expect(notSameObject({ val: value, listValues: { current: reordered } })).toBe('This field must not match the current field');
+	});
 });

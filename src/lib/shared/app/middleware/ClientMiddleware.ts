@@ -16,29 +16,30 @@ export const executeClientMiddlewares = async (middlewares: IClientMiddleware[],
 	const to = navigation?.to?.url ?? page?.url;
 	for (const middleware of middlewares) {
 		let shouldContinue = false;
+		let redirectTo: string | URL | undefined;
 		const next = (location?: string | URL) => {
 			shouldContinue = true;
-			if (location) {
-				if (navigation) {
-					navigation?.cancel();
-				}
-				return goto(location);
-			}
+			redirectTo = location;
 		};
 
-		await middleware({
+		const result = middleware({
 			to,
 			from,
 			next,
 			ensureRoute
 		});
+		if (result && typeof result.then === 'function') await result;
+
+		if (redirectTo) {
+			navigation?.cancel();
+			await goto(redirectTo);
+			return;
+		}
 
 		if (!shouldContinue) {
 			navigation?.cancel();
-			if (from) {
-				void goto(from.pathname);
-				console.warn('Navigation blocked: middleware chain stopped (next() not called).');
-			}
+			console.warn('Navigation blocked: middleware chain stopped (next() not called).');
+			return;
 		}
 	}
 };

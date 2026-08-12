@@ -25,7 +25,6 @@ export interface ProviderSettings<T extends ServiceMap, D extends Record<string,
 }
 
 const clientCache = new Map<string, Map<string, unknown>>();
-const factoriesCache = new WeakMap<ProviderFactory<ServiceMap, Record<string, ProviderWithType<ServiceMap>>>, ServiceMap>();
 const providerProxyCache = new Map<string, ResolvedServices<ServiceMap>>();
 const clientConstructionStack: string[] = [];
 
@@ -121,15 +120,8 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 		const cache = getProviderCache(name);
 		let factories: T | null = null;
 
-		type UntypedFactoryCache = ProviderFactory<ServiceMap, Record<string, ProviderWithType<ServiceMap>>>;
-
 		const getFactories = (): T => {
 			if (factories) return factories;
-
-			if (factoriesCache.has(register as UntypedFactoryCache)) {
-				factories = factoriesCache.get(register as UntypedFactoryCache) as T;
-				return factories;
-			}
 
 			const deps: Record<string, unknown> = {};
 			const depInstances = new Map<string, ResolvedServices<ServiceMap>>();
@@ -150,10 +142,6 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 			}
 
 			factories = register(deps as Deps);
-
-			if (BROWSER) {
-				factoriesCache.set(register as UntypedFactoryCache, factories);
-			}
 
 			return factories;
 		};

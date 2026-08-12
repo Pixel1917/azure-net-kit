@@ -86,4 +86,66 @@ describe('AsyncSignal', () => {
 		expect(signal.status).toBe('success');
 		expect(signal.error).toBeUndefined();
 	});
+
+	it('handles beforeSend failures and remains executable', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const error = new Error('before-send failed');
+		const onError = vi.fn();
+		let shouldFail = true;
+		const handler = vi.fn(async () => 'ok');
+		const signal = createAsyncSignal(handler, {
+			immediate: false,
+			beforeSend: () => {
+				if (shouldFail) throw error;
+			},
+			onError
+		});
+
+		await signal.execute();
+		expect(signal.status).toBe('error');
+		expect(signal.error).toBe(error);
+		expect(signal.pending).toBe(false);
+		expect(onError).toHaveBeenCalledWith(error);
+
+		shouldFail = false;
+		await signal.execute();
+		expect(signal.status).toBe('success');
+		expect(signal.data).toBe('ok');
+	});
+
+	it('reset invalidates an in-flight handler even when it ignores AbortSignal', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const request = createDeferred<string>();
+		const signal = createAsyncSignal(() => request.promise, { immediate: false });
+
+		const execution = signal.execute();
+		expect(signal.pending).toBe(true);
+		signal.reset();
+		request.resolve('stale');
+		await execution;
+
+		expect(signal.data).toBeUndefined();
+		expect(signal.error).toBeUndefined();
+		expect(signal.status).toBe('idle');
+		expect(signal.pending).toBe(false);
+	});
+
+	it('abort clears pending state and prevents stale writes', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const request = createDeferred<string>();
+		const signal = createAsyncSignal(() => request.promise, { immediate: false });
+
+		const execution = signal.execute();
+		signal.abort();
+		expect(signal.status).toBe('idle');
+		expect(signal.pending).toBe(false);
+
+		request.resolve('stale');
+		await execution;
+		expect(signal.data).toBeUndefined();
+		expect(signal.status).toBe('idle');
+	});
 });

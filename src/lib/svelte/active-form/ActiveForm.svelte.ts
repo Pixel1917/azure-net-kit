@@ -83,10 +83,13 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	let formData = $state<FormDataState>(ObjectUtil.deepClone(initial) as FormDataState);
 	let formErrors = $state<RequestErrors<FormData>>({});
 	let pending = $state(false);
+	let submitRunId = 0;
+	let initialLoadRunId = 0;
 
 	const dirty = $derived(!ObjectUtil.equals(formData, initial));
 
 	const loadInitialData = async (): Promise<Partial<FormData>> => {
+		const runId = ++initialLoadRunId;
 		const source = config?.initialData;
 
 		if (!source) {
@@ -98,6 +101,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 
 		const value = source();
 		const nextInitial = isPromise(value) ? await value : value;
+		if (runId !== initialLoadRunId) return initial;
 
 		initial = (nextInitial ?? {}) as Partial<FormData>;
 		formData = ObjectUtil.deepClone(initial) as FormDataState;
@@ -107,45 +111,19 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	};
 
 	const ready: Promise<Partial<FormData>> = loadInitialData();
+	const abortedResponse = () =>
+		({
+			success: false,
+			response: undefined as Response
+		}) as AsyncActionResponse<Response, FormData, Custom>;
 
-	const submit = async (): Promise<AsyncActionResponse<Response, FormData, Custom>> => {
-		pending = true;
-
-		try {
-			if (config?.beforeSubmit) {
-				let aborted = false;
-				const abort = () => {
-					aborted = true;
-					pending = false;
-				};
-				await config.beforeSubmit({ form: formApi, abort: () => abort() });
-				if (aborted) {
-					return {
-						success: false,
-						response: undefined as Response
-					} as AsyncActionResponse<Response, FormData, Custom>;
-				}
-			}
-
-			const result = await onSubmit($state.snapshot(formData) as Partial<ExtractFromSubmit<SubmitReturn>['formData']>);
-
-			if (result.success) {
-				await config?.onSuccess?.(result.response as Response);
-				await reset(config?.successBehavior ?? 'default');
-			} else {
-				if (result.error?.validation) {
-					formErrors = result.error.validation as RequestErrors<FormData>;
-				}
-				await config?.onError?.();
-			}
-
-			return result as AsyncActionResponse<Response, FormData, Custom>;
-		} finally {
+	const resetForm = async (behavior: ResetBehaviors = 'clear', invalidateSubmission = true) => {
+		if (invalidateSubmission) {
+			submitRunId += 1;
 			pending = false;
 		}
-	};
+		if (behavior !== 'reloadInitial') initialLoadRunId += 1;
 
-	const reset = async (behavior: ResetBehaviors = 'clear') => {
 		switch (behavior) {
 			case 'clear':
 				formData = {} as FormDataState;
@@ -158,6 +136,45 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 				break;
 		}
 		formErrors = {};
+	};
+
+	const reset = async (behavior: ResetBehaviors = 'clear') => resetForm(behavior, true);
+
+	const submit = async (): Promise<AsyncActionResponse<Response, FormData, Custom>> => {
+		const runId = ++submitRunId;
+		pending = true;
+
+		try {
+			await ready;
+			if (runId !== submitRunId) return abortedResponse();
+
+			if (config?.beforeSubmit) {
+				let aborted = false;
+				const abort = () => {
+					aborted = true;
+				};
+				await config.beforeSubmit({ form: formApi, abort: () => abort() });
+				if (aborted || runId !== submitRunId) return abortedResponse();
+			}
+
+			const result = await onSubmit($state.snapshot(formData) as Partial<ExtractFromSubmit<SubmitReturn>['formData']>);
+			if (runId !== submitRunId) return result as AsyncActionResponse<Response, FormData, Custom>;
+
+			if (result.success) {
+				await config?.onSuccess?.(result.response as Response);
+				if (runId !== submitRunId) return result as AsyncActionResponse<Response, FormData, Custom>;
+				await resetForm(config?.successBehavior ?? 'default', false);
+			} else {
+				if (result.error?.validation) {
+					formErrors = result.error.validation as RequestErrors<FormData>;
+				}
+				await config?.onError?.();
+			}
+
+			return result as AsyncActionResponse<Response, FormData, Custom>;
+		} finally {
+			if (runId === submitRunId) pending = false;
+		}
 	};
 
 	const formApi: ActiveFormController<FormData, RequiredPath> = {

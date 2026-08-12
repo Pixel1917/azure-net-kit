@@ -256,15 +256,32 @@ describe('createApp', () => {
 		expect(calls).toEqual(['universal', 'server']);
 	});
 
-	it('runs server init only once per app instance', () => {
+	it('runs server init only once per app instance', async () => {
 		const callback = vi.fn();
 		const app = createApp((app) => app.useServerInit(callback));
 
-		app.register.serverInit();
-		app.register.serverInit();
+		await Promise.all([app.register.serverInit(), app.register.serverInit()]);
 
 		expect(callback).toHaveBeenCalledTimes(1);
-		expect(callback).toHaveBeenCalledWith({ Container: app.Container });
+		expect(callback).toHaveBeenCalledWith();
+	});
+
+	it('shares one pending server init between concurrent callers', async () => {
+		let release!: () => void;
+		const pending = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const callback = vi.fn(() => pending);
+		const app = createApp((app) => app.useServerInit(callback));
+
+		const first = app.register.serverInit();
+		const second = app.register.serverInit();
+
+		expect(first).toBe(second);
+		expect(callback).not.toHaveBeenCalled();
+		release();
+		await first;
+		expect(callback).toHaveBeenCalledTimes(1);
 	});
 
 	it('runs server error callback with request context and error data', () => {

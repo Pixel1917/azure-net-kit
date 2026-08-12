@@ -105,6 +105,27 @@ describe('AsyncHelpers', () => {
 		expect(currentResult.error?.marker).toBe('current');
 	});
 
+	it('keeps handlers from different helper factories isolated in one request', async () => {
+		const context = createServerContext();
+		RequestContext.init(() => context as never);
+		const first = createAsyncHelpers<{ marker: string }>();
+		const second = createAsyncHelpers<{ marker: string }>();
+		first.useHandler(createErrorHandler(async (error) => error.toPlainObject({ marker: 'first' })));
+		second.useHandler(createErrorHandler(async (error) => error.toPlainObject({ marker: 'second' })));
+
+		const [firstResult, secondResult] = await Promise.all([
+			first.createAsyncAction(async () => {
+				throw new Error('first');
+			}),
+			second.createAsyncAction(async () => {
+				throw new Error('second');
+			})
+		]);
+
+		expect(firstResult.error?.marker).toBe('first');
+		expect(secondResult.error?.marker).toBe('second');
+	});
+
 	it('publishes app event on unrecovered error', async () => {
 		const { createAsyncAction } = createAsyncHelpers();
 		const result = await createAsyncAction(

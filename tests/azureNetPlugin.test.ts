@@ -6,10 +6,11 @@ import { AzureNetPlugin } from '../src/lib/plugin/index.js';
 
 const tempRoots: string[] = [];
 
-const createTempRoot = () => {
+const createTempRoot = (withProgram = true) => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'azure-net-plugin-'));
 	tempRoots.push(root);
 	fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+	if (withProgram) fs.writeFileSync(path.join(root, 'src/program.ts'), 'export const register = {};\n');
 	return root;
 };
 
@@ -46,11 +47,10 @@ afterEach(() => {
 });
 
 describe('AzureNetPlugin', () => {
-	it('does not create physical hooks or program files', () => {
-		const root = createTempRoot();
+	it('requires program.ts without creating physical files', () => {
+		const root = createTempRoot(false);
 
-		runConfig(root);
-
+		expect(() => runConfig(root)).toThrow('src/program.ts is required');
 		expect(fs.existsSync(path.join(root, 'src/hooks.server.ts'))).toBe(false);
 		expect(fs.existsSync(path.join(root, 'src/hooks.client.ts'))).toBe(false);
 		expect(fs.existsSync(path.join(root, 'src/program.ts'))).toBe(false);
@@ -98,10 +98,12 @@ describe('AzureNetPlugin', () => {
 		expect(serverHooks).toContain("import { edgesHandle, edgesHandleRaw } from 'virtual:azure-net-kit/server-utils';");
 		expect(serverHooks).toContain("await import('virtual:azure-net-kit/program')");
 		expect(serverHooks).not.toContain("import { register } from 'virtual:azure-net-kit/program';");
-		expect(serverHooks).toContain('export const init = () => undefined;');
-		expect(serverHooks).toContain('await register.serverInit?.();');
+		expect(serverHooks).toContain('export const init = async () => (await getRegister()).serverInit();');
+		expect(serverHooks).not.toContain('await register.serverInit?.();');
 		expect(serverHooks).toContain('export const handleError = async');
-		expect(serverHooks).toContain('await edgesHandleRaw(event');
+		expect(serverHooks).toContain('await edgesHandleRaw(event, async () => {');
+		expect(serverHooks).toContain('result = await register.serverError');
+		expect(serverHooks).toContain('return new Response(null, { status: 204 });');
 		expect(serverHooks).toContain(', false);');
 		expect(clientHooks).toContain("await import('virtual:azure-net-kit/program')");
 		expect(clientHooks).toContain('export const init = async');
@@ -148,11 +150,8 @@ export async function get_hooks() {
 
 	it('injects virtual client hooks into SvelteKit generated client app', async () => {
 		const code = `
-import * as client_hooks from '../../../src/hooks.client.ts';
-
 export const hooks = {
-\thandleError: client_hooks.handleError || (({ error }) => { console.error(error) }),
-\tinit: client_hooks.init,
+\thandleError: (({ error }) => { console.error(error) }),
 \treroute: (() => {}),
 \ttransport: {}
 };
@@ -161,42 +160,71 @@ export const hooks = {
 		const transformed = await runTransform(code, '/app/.svelte-kit/generated/client/app.js');
 
 		expect(transformed).toContain("import * as __azureNetClientHooks from 'virtual:azure-net-kit/hooks.client';");
-		expect(transformed).not.toContain('client_hooks');
 		expect(transformed).toContain('handleError: __azureNetClientHooks.handleError');
 		expect(transformed).toContain('init: __azureNetClientHooks.init');
 	});
 
-	it('wraps server load and actions through kit server exports', async () => {
+	it('rejects generated server internals that include user hooks', async () => {
 		const code = `
-export const load = async () => ({ ok: true });
-export const actions = { default: async () => ({ ok: true }) };
+export async function get_hooks() {
+\t({ handle } = await import('../../../src/hooks.server.ts'));
+\treturn { handle };
+}
 `;
 
-		const transformed = await runTransform(code, '/tmp/routes/+page.server.ts');
-
-		expect(transformed).toContain("from 'virtual:azure-net-kit/server-utils';");
-		expect(transformed).toContain('__withEdgesServerLoad');
-		expect(transformed).toContain('__withEdgesActions');
-		expect(transformed).toContain('export { __edgesServerLoad as load };');
-		expect(transformed).toContain('export { __edgesServerActions as actions };');
+		await expect(runTransform(code, '/app/.svelte-kit/generated/server/internal.js')).rejects.toThrow(
+			'SvelteKit detected a user-managed hooks.server file'
+		);
 	});
 
-	it('wraps universal load through kit exports', async () => {
-		const transformed = await runTransform('export const load = () => ({ ok: true });', '/tmp/routes/+page.ts');
-
-		expect(transformed).toContain("from 'virtual:azure-net-kit/universal-utils';");
-		expect(transformed).toContain('__withEdgesUniversalLoad');
-		expect(transformed).toContain('export { __edgesUniversalLoad as load };');
-	});
-
-	it('does not wrap modules twice', async () => {
+	it('rejects generated client code that includes user hooks', async () => {
 		const code = `
-void '__EDGES_SYNC_WRAPPED__';
-import { __withEdgesUniversalLoad } from 'virtual:azure-net-kit/universal-utils';
-const load = () => ({ ok: true });
-export const load = __withEdgesUniversalLoad(load);
+import * as client_hooks from '../../../src/hooks.client.ts';
+export const hooks = {
+\thandleError: client_hooks.handleError || (({ error }) => { console.error(error) })
+};
 `;
 
-		await expect(runTransform(code, '/tmp/routes/+page.ts')).resolves.toBeNull();
+		await expect(runTransform(code, '/app/.svelte-kit/generated/client/app.js')).rejects.toThrow(
+			'SvelteKit detected a user-managed hooks.client file'
+		);
+	});
+
+	it('fails fast when generated server internals are unsupported', async () => {
+		await expect(runTransform('export const hooks = {};', '/app/.svelte-kit/generated/server/internal.js')).rejects.toThrow(
+			'Unsupported SvelteKit generated server internals'
+		);
+	});
+
+	it('fails fast when generated client internals are unsupported', async () => {
+		await expect(runTransform('export const hooks = {};', '/app/.svelte-kit/generated/client/app.js')).rejects.toThrow(
+			'Unsupported SvelteKit generated client app'
+		);
+	});
+
+	it('transforms generated internals in test mode', async () => {
+		const root = createTempRoot();
+		const plugin = AzureNetPlugin();
+		runConfig(root, plugin);
+		const code = `export const hooks = { handleError: (({ error }) => { console.error(error) }) };`;
+
+		const transformed = await runTransform(code, '/app/.svelte-kit/generated/client/app.js', plugin);
+
+		expect(transformed).toContain('handleError: __azureNetClientHooks.handleError');
+		expect(transformed).toContain('init: __azureNetClientHooks.init');
+	});
+
+	it('never transforms route modules', async () => {
+		const cases = [
+			['/tmp/routes/+page.ts', 'export const load = () => ({ ok: true });'],
+			['/tmp/routes/+layout.ts?v=1', 'export const load = () => ({ ok: true });'],
+			['/tmp/routes/+page.server.ts', 'export const load = async () => ({ ok: true });'],
+			['/tmp/routes/+layout.server.js', 'export const load = async () => ({ ok: true });'],
+			['/tmp/routes/+page.server.ts', 'export const actions = { default: async () => ({ ok: true }) };']
+		] as const;
+
+		for (const [id, code] of cases) {
+			await expect(runTransform(code, id)).resolves.toBeNull();
+		}
 	});
 });

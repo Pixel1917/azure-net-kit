@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "5.0.4",
+	"version": "5.1.0",
 	"license": "MIT",
 	"author": "Pixel1917",
 	"description": "Universal toolkit and library collection, developed as part of the Azure-net ecosystem",
@@ -31,7 +31,7 @@
 		"test:integration": "vitest --config vitest.integration.config.ts --run",
 		"test": "npm run test:unit -- --run && npm run test:e2e",
 		"test:e2e": "playwright test --pass-with-no-tests",
-		"commit": "pnpm format && git add . && git-cz && git push"
+		"commit": "pnpm format && git add ."
 	},
 	"files": [
 		"dist",
@@ -93,7 +93,6 @@
 		"svelte": ">=5.0.0"
 	},
 	"devDependencies": {
-		"@commitlint/cli": "^20.5.0",
 		"@eslint/compat": "^2.0.5",
 		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.59.1",
@@ -103,14 +102,11 @@
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/svelte": "^5.3.1",
-		"commitizen": "^4.3.1",
 		"env-cmd": "^11.0.0",
 		"eslint": "^10.2.1",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.17.0",
-		"git-cz": "^4.9.0",
 		"globals": "^17.5.0",
-		"husky": "^9.1.7",
 		"jsdom": "^29.0.2",
 		"prettier": "^3.8.3",
 		"prettier-plugin-svelte": "^3.5.1",
@@ -121,11 +117,6 @@
 		"typescript-eslint": "^8.58.2",
 		"vite": "^8.0.8",
 		"vitest": "^4.1.4"
-	},
-	"config": {
-		"commitizen": {
-			"path": "git-cz"
-		}
 	},
 	"keywords": [
 		"sveltekit",
@@ -144,8 +135,8 @@
 	},
 	"packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
 	"dependencies": {
-		"@azure-net/edges": "^1.2.7",
-		"@azure-net/edges-translations": "^1.2.7",
-		"@azure-net/tools": "^1.2.7"
+		"@azure-net/edges": "^2.0.0",
+		"@azure-net/edges-translations": "^2.0.0",
+		"@azure-net/tools": "^2.0.0"
 	}
 }

@@ -17,8 +17,6 @@ export interface AsyncHelperRetry {
 type Action<Res> = () => Promise<Res>;
 type ErrorParser<ErrorResult extends object> = ReturnType<typeof createErrorHandler<ErrorResult>>;
 
-const HANDLER_CONTEXT_KEY = '__azureNetAsyncHelperErrorParser__';
-
 export interface AsyncActionSettings<Res = never, Req = never, ErrorResult = AppError<Error>> {
 	beforeSend?: (actions: { next: () => void; abort: (reason?: Error) => void }) => void | Promise<void>;
 	onSuccess?: (result: AsyncActionResponse<Res, never, ErrorResult>) => Promise<unknown> | unknown;
@@ -34,13 +32,15 @@ export class AsyncHelperError extends Error {}
 
 export const createAsyncHelpers = <ErrorResult extends object>() => {
 	const defaultErrorParser = createErrorHandler<ErrorResult>();
+	const handlerContextKey = Symbol('azureNetAsyncHelperErrorParser');
 	let clientErrorParser: ErrorParser<ErrorResult> | undefined;
 
 	const getErrorParser = (): ErrorParser<ErrorResult> => {
 		if (BROWSER) return clientErrorParser ?? defaultErrorParser;
 
 		try {
-			return (RequestContext.current().data[HANDLER_CONTEXT_KEY] as ErrorParser<ErrorResult> | undefined) ?? defaultErrorParser;
+			const data = RequestContext.current().data as Record<PropertyKey, unknown>;
+			return (data[handlerContextKey] as ErrorParser<ErrorResult> | undefined) ?? defaultErrorParser;
 		} catch {
 			return defaultErrorParser;
 		}
@@ -55,7 +55,8 @@ export const createAsyncHelpers = <ErrorResult extends object>() => {
 			return;
 		}
 
-		RequestContext.current().data[HANDLER_CONTEXT_KEY] = parser;
+		const data = RequestContext.current().data as Record<PropertyKey, unknown>;
+		data[handlerContextKey] = parser;
 	};
 
 	const normalizeError = (err: unknown): Error => (err instanceof Error ? err : new Error(String(err)));

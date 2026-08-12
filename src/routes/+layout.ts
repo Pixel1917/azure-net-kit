@@ -3,9 +3,9 @@ import { BROWSER } from '$lib/external/tools/index.js';
 import type { LayoutLoad } from './$types.js';
 
 export const load: LayoutLoad = async ({ data }) => {
-	const { syncTranslation } = TranslationManager();
+	const { initializeClient } = TranslationManager();
 	if (BROWSER) {
-		await syncTranslation({ lang: data.lang }, false);
+		await initializeClient();
 	}
 
 	return { ...data };

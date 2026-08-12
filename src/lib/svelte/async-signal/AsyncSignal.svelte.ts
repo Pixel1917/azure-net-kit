@@ -108,18 +108,19 @@ export const createAsyncSignal = <TData, TError = Error>(
 		const localController = new AbortController();
 		abortController = localController;
 
-		if (options.beforeSend) {
-			await options.beforeSend({ initial, source });
-		}
-
-		if (runId !== currentRunId || abortController !== localController || localController.signal.aborted) {
-			return undefined;
-		}
-
 		status = 'pending';
 		error = undefined;
 
 		try {
+			if (options.beforeSend) {
+				const beforeSendResult = options.beforeSend({ initial, source });
+				if (beforeSendResult && typeof beforeSendResult.then === 'function') await beforeSendResult;
+			}
+
+			if (runId !== currentRunId || abortController !== localController || localController.signal.aborted) {
+				return undefined;
+			}
+
 			const result = await handler(localController.signal);
 
 			if (runId !== currentRunId || abortController !== localController || localController.signal.aborted) {
@@ -134,6 +135,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 			return result;
 		} catch (err) {
 			if (err instanceof Error && err.name === 'AbortError') {
+				if (runId === currentRunId) status = 'idle';
 				return undefined;
 			}
 			if (runId !== currentRunId || abortController !== localController || localController.signal.aborted) {
@@ -149,6 +151,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 		} finally {
 			if (currentRunId === runId) {
 				currentPromise = null;
+				if (abortController === localController) abortController = null;
 			}
 		}
 	};
@@ -209,19 +212,21 @@ export const createAsyncSignal = <TData, TError = Error>(
 		execute,
 		refresh: execute,
 		reset: () => {
+			currentRunId += 1;
+			abortController?.abort();
+			abortController = null;
+			currentPromise = null;
 			data = undefined;
 			error = undefined;
 			status = 'idle';
-			currentPromise = null;
-			if (abortController) {
-				abortController.abort();
-				abortController = null;
-			}
 		},
 		abort: () => {
-			if (abortController) {
-				abortController.abort();
-			}
+			currentRunId += 1;
+			abortController?.abort();
+			abortController = null;
+			currentPromise = null;
+			error = undefined;
+			status = 'idle';
 		}
 	};
 };

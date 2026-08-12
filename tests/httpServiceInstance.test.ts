@@ -166,6 +166,29 @@ describe('HttpServiceInstance', () => {
 		expect(result.data).toEqual({ ok: true });
 	});
 
+	it('does not retry non-transient HTTP errors', async () => {
+		const fetchMock = vi.fn(async () => jsonResponse(404, { reason: 'missing' }));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+
+		const instance = createHttpServiceInstance({ retry: 3 });
+		await expect(instance.get('/missing')).rejects.toMatchObject({ status: 404, type: 'external' });
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('retries fetch network failures', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockRejectedValueOnce(new TypeError('network failed'))
+			.mockResolvedValueOnce(jsonResponse(200, { ok: true }));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+
+		const instance = createHttpServiceInstance({ retry: 1 });
+		const result = await instance.get<{ ok: boolean }>('/network');
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(result.data).toEqual({ ok: true });
+	});
+
 	it('does not retry abort errors even when retry > 0', async () => {
 		const abortError = new Error('aborted');
 		abortError.name = 'AbortError';
@@ -212,6 +235,26 @@ describe('HttpServiceInstance', () => {
 		const result = await instance.get<string>('/doc', { responseFormat: 'text' });
 
 		expect(result.data).toBe('plain-text');
+	});
+
+	it('accepts successful 204 responses without attempting json parsing', async () => {
+		const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+
+		const result = await createHttpServiceInstance().delete('/resource');
+
+		expect(result.status).toBe(204);
+		expect(result.data).toBeUndefined();
+	});
+
+	it('accepts empty HEAD responses without attempting json parsing', async () => {
+		const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+
+		const result = await createHttpServiceInstance().head('/resource');
+
+		expect(result.status).toBe(200);
+		expect(result.data).toBeUndefined();
 	});
 
 	it('keeps external error type for non-ok response even when json parsing fails', async () => {
