@@ -1,9 +1,34 @@
 import type { ValidationMessage } from '../../index.js';
 
 export type BaseValidationMessages = {
-	date: () => ValidationMessage;
-	phone: () => ValidationMessage;
-	email: () => ValidationMessage;
+	pattern: () => ValidationMessage;
+	url: {
+		base: () => ValidationMessage;
+		protocol: (value: string) => ValidationMessage;
+	};
+	file: {
+		base: () => ValidationMessage;
+		maxSize: (value: number) => ValidationMessage;
+		mimeType: (value: string) => ValidationMessage;
+		extension: (value: string) => ValidationMessage;
+	};
+	date: {
+		base: () => ValidationMessage;
+		min: (value: Date | string) => ValidationMessage;
+		max: (value: Date | string) => ValidationMessage;
+	};
+	phone: {
+		base: () => ValidationMessage;
+		countryCode: () => ValidationMessage;
+		minDigits: (value: number) => ValidationMessage;
+		maxDigits: (value: number) => ValidationMessage;
+	};
+	email: {
+		base: () => ValidationMessage;
+		maxLength: (value: number) => ValidationMessage;
+		allowedDomain: (value: string) => ValidationMessage;
+		blockedDomain: (value: string) => ValidationMessage;
+	};
 	required: () => ValidationMessage;
 	lettersOnly: (whiteSpaces: boolean) => ValidationMessage;
 	allowedOnly: (allowed: string) => ValidationMessage;

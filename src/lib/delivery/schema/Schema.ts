@@ -28,11 +28,14 @@ export type ValidationParams<SchemaData = unknown, CurrentValue = unknown, Curre
 
 export type ValidationMessage = string | { key: string; vars?: Record<string, unknown> };
 
+export const SKIP_REMAINING_VALIDATION = Symbol('skipRemainingValidation');
+export type ValidationControl = typeof SKIP_REMAINING_VALIDATION;
+
 export interface ValidationErrorsMap {
 	[key: string]: ValidationMessage | ValidationErrorsMap;
 }
 
-export type ValidationResult = ValidationMessage | ValidationErrorsMap | ValidationErrorsMap[] | undefined;
+export type ValidationResult = ValidationMessage | ValidationErrorsMap | ValidationErrorsMap[] | ValidationControl | undefined;
 
 export type ValidationRuleResult<CurrentValue, ListValues = unknown, CurrentKey = string> = (
 	params: ValidationParams<CurrentValue, ListValues, CurrentKey>
@@ -189,6 +192,7 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 									listValues: _preparedData,
 									key: key as DeepKeys<SchemaData>
 								});
+								if (failMessage === SKIP_REMAINING_VALIDATION) break;
 
 								if (failMessage) {
 									setByPath(_errors, key as DeepKeys<SchemaData>, failMessage);

@@ -1,9 +1,34 @@
 import type { BaseValidationMessages } from './Types.js';
 
 export const validationMessagesEn: BaseValidationMessages = {
-	date: () => 'Invalid date format',
-	phone: () => 'Invalid phone number format',
-	email: () => 'Invalid email address',
+	pattern: () => 'Invalid field format',
+	url: {
+		base: () => 'Invalid URL format',
+		protocol: (value) => `URL protocol must be one of: ${value}`
+	},
+	file: {
+		base: () => 'This field must contain a file',
+		maxSize: (value) => `File size must not exceed ${value} bytes`,
+		mimeType: (value) => `File type must be one of: ${value}`,
+		extension: (value) => `File extension must be one of: ${value}`
+	},
+	date: {
+		base: () => 'Invalid date format',
+		min: (value) => `The date must be on or after ${value instanceof Date ? value.toISOString() : value}`,
+		max: (value) => `The date must be on or before ${value instanceof Date ? value.toISOString() : value}`
+	},
+	phone: {
+		base: () => 'Invalid phone number format',
+		countryCode: () => 'Phone number must include an international country code',
+		minDigits: (value) => `Phone number must contain at least ${value} digits`,
+		maxDigits: (value) => `Phone number must contain at most ${value} digits`
+	},
+	email: {
+		base: () => 'Invalid email address',
+		maxLength: (value) => `Email address must not exceed ${value} characters`,
+		allowedDomain: (value) => `Email domain must be one of: ${value}`,
+		blockedDomain: (value) => `Email domain is not allowed: ${value}`
+	},
 	required: () => 'This field is required',
 	lettersOnly: (whiteSpaces: boolean) => `This field may contain letters only${whiteSpaces ? '' : ' and must not contain spaces'}`,
 	allowedOnly: (value) =>

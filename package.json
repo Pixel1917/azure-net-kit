@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "5.1.0",
+	"version": "5.1.1",
 	"license": "MIT",
 	"author": "Pixel1917",
 	"description": "Universal toolkit and library collection, developed as part of the Azure-net ecosystem",

@@ -66,4 +66,49 @@ describe('Schema', () => {
 		expect(formData.get('name')).toBe('Kate');
 		expect(formData.get('age')).toBe('21');
 	});
+
+	it('condition skips the remaining field rules when predicate is false', () => {
+		const userSchema = schema<{ validateNickname: boolean; nickname?: string }>()
+			.rules(() => ({
+				nickname: [
+					rulesFactory.condition(({ listValues }) => listValues?.validateNickname === true),
+					rulesFactory.required(),
+					rulesFactory.string({ length: { min: 3 } })
+				]
+			}))
+			.create();
+
+		expect(userSchema.from({ validateNickname: false }).validated()).toMatchObject({ valid: true, errors: {} });
+		expect(userSchema.from({ validateNickname: true }).validated()).toMatchObject({
+			valid: false,
+			errors: { nickname: 'This field is required' }
+		});
+		expect(userSchema.from({ validateNickname: true, nickname: 'valid' }).validated()).toMatchObject({ valid: true, errors: {} });
+	});
+
+	it('condition also skips remaining nested array field rules', () => {
+		const listSchema = schema<{ items: Array<{ enabled: boolean; name?: string }> }>()
+			.rules(() => ({
+				items: [
+					rulesFactory.array({
+						schema: {
+							name: [
+								rulesFactory.condition(({ listValues, key }) => {
+									const index = Number(String(key).match(/\[(\d+)\]/)?.[1]);
+									return listValues?.items?.[index]?.enabled === true;
+								}),
+								rulesFactory.required()
+							]
+						}
+					})
+				]
+			}))
+			.create();
+
+		expect(listSchema.from({ items: [{ enabled: false }] }).validated()).toMatchObject({ valid: true, errors: {} });
+		expect(listSchema.from({ items: [{ enabled: true }] }).validated()).toMatchObject({
+			valid: false,
+			errors: { items: [{ name: 'This field is required' }] }
+		});
+	});
 });

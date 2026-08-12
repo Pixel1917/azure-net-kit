@@ -1,9 +1,34 @@
 import type { BaseValidationMessages } from './Types.js';
 
 export const validationMessagesI18n: BaseValidationMessages = {
-	date: () => 'validation.date',
-	phone: () => 'validation.phone',
-	email: () => 'validation.email',
+	pattern: () => 'validation.pattern',
+	url: {
+		base: () => 'validation.url',
+		protocol: (value) => ({ key: 'validation.urlProtocol', vars: { value } })
+	},
+	file: {
+		base: () => 'validation.file',
+		maxSize: (value) => ({ key: 'validation.fileMaxSize', vars: { value } }),
+		mimeType: (value) => ({ key: 'validation.fileMimeType', vars: { value } }),
+		extension: (value) => ({ key: 'validation.fileExtension', vars: { value } })
+	},
+	date: {
+		base: () => 'validation.date',
+		min: (value) => ({ key: 'validation.dateMin', vars: { value: value instanceof Date ? value.toISOString() : value } }),
+		max: (value) => ({ key: 'validation.dateMax', vars: { value: value instanceof Date ? value.toISOString() : value } })
+	},
+	phone: {
+		base: () => 'validation.phone',
+		countryCode: () => 'validation.phoneCountryCode',
+		minDigits: (value) => ({ key: 'validation.phoneMinDigits', vars: { value } }),
+		maxDigits: (value) => ({ key: 'validation.phoneMaxDigits', vars: { value } })
+	},
+	email: {
+		base: () => 'validation.email',
+		maxLength: (value) => ({ key: 'validation.emailMaxLength', vars: { value } }),
+		allowedDomain: (value) => ({ key: 'validation.emailAllowedDomain', vars: { value } }),
+		blockedDomain: (value) => ({ key: 'validation.emailBlockedDomain', vars: { value } })
+	},
 	required: () => 'validation.required',
 	lettersOnly: (whiteSpaces) => (whiteSpaces ? 'validation.lettersOnlyWithWhiteSpaces' : 'validation.lettersOnly'),
 	allowedOnly: (value) => ({ key: value && value.length ? 'validation.allowedOnly.base' : 'validation.allowedOnly.nothing', vars: { value } }),

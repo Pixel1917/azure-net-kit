@@ -1,9 +1,34 @@
 import type { BaseValidationMessages } from './Types.js';
 
 export const validationMessagesRu: BaseValidationMessages = {
-	date: () => 'Неверный формат даты',
-	phone: () => 'Неверный формат номера телефона',
-	email: () => 'Невалидный email',
+	pattern: () => 'Значение не соответствует требуемому формату',
+	url: {
+		base: () => 'Неверный формат URL',
+		protocol: (value) => `Протокол URL должен быть одним из: ${value}`
+	},
+	file: {
+		base: () => 'Поле должно содержать файл',
+		maxSize: (value) => `Размер файла не должен превышать ${value} байт`,
+		mimeType: (value) => `Тип файла должен быть одним из: ${value}`,
+		extension: (value) => `Расширение файла должно быть одним из: ${value}`
+	},
+	date: {
+		base: () => 'Неверный формат даты',
+		min: (value) => `Дата должна быть не раньше ${value instanceof Date ? value.toISOString() : value}`,
+		max: (value) => `Дата должна быть не позже ${value instanceof Date ? value.toISOString() : value}`
+	},
+	phone: {
+		base: () => 'Неверный формат номера телефона',
+		countryCode: () => 'Номер телефона должен содержать международный код страны',
+		minDigits: (value) => `Номер телефона должен содержать не менее ${value} цифр`,
+		maxDigits: (value) => `Номер телефона должен содержать не более ${value} цифр`
+	},
+	email: {
+		base: () => 'Невалидный email',
+		maxLength: (value) => `Email не должен быть длиннее ${value} символов`,
+		allowedDomain: (value) => `Домен email должен быть одним из: ${value}`,
+		blockedDomain: (value) => `Домен email запрещен: ${value}`
+	},
 	required: () => 'Поле обязательно к заполнению',
 	lettersOnly: (whiteSpaces: boolean) => `Поле может содержать только буквы ${whiteSpaces ? '' : 'и не должно содержать пробелы'}`,
 	allowedOnly: (value) =>
