@@ -70,7 +70,7 @@ export class ResponseBuilder<TData = unknown, TMeta = object, TWrapper = TData> 
 		let result: unknown = this.state.data;
 
 		for (const key of keys) {
-			if (result && typeof result === 'object' && key in result) {
+			if (result && typeof result === 'object' && Object.hasOwn(result, key)) {
 				result = result[key as keyof typeof result];
 			} else {
 				throw new AzureNetKitInternalError(`[ResponseBuilder] Failed to extract: path "${path}" not found in response data`);

@@ -28,13 +28,11 @@ describe('BaseHttpDatasource and DTOMapper', () => {
 		expect(result.status).toBe(200);
 	});
 
-	it('createRawRequest rethrows HttpServiceError', async () => {
+	it('createRawRequest preserves the original error instance', async () => {
 		const datasource = new BaseHttpDatasource({});
-		await expect(
-			datasource.createRawRequest(async () => {
-				throw new Error('network');
-			})
-		).rejects.toThrow('network');
+		const error = new Error('network');
+
+		await expect(datasource.createRawRequest(async () => Promise.reject(error))).rejects.toBe(error);
 	});
 
 	it('DTOMapper.toPlainObject excludes methods', () => {

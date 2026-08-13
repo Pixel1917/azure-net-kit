@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/lib/shared/app/index.js';
 import { AzureNetKitInternalError } from '../src/lib/shared/app-error/index.js';
 import { LoggerErrors, useLogger } from '../src/lib/shared/logger/index.js';
+import { BackgroundTask } from '../src/lib/shared/background-task/index.js';
 import { ensureRoute } from '../src/lib/shared/app/middleware/Shared.js';
 import type { IServerMiddleware } from '../src/lib/shared/app/index.js';
 
@@ -310,6 +311,98 @@ describe('createApp', () => {
 		});
 	});
 
+	it('runs handleFetch with app dependencies and request context', async () => {
+		const context = createServerContext();
+		RequestContext.init(() => context as never);
+
+		const upstream = vi.fn(() => Promise.resolve(new Response('upstream')));
+		const request = new Request('https://api.example.com/items');
+		const app = createApp((app) =>
+			app
+				.dependencies({ Marker: () => 'app' })
+				.useServerFetch(({ Container, requestContext, event, request: receivedRequest, fetch: receivedFetch }) => {
+					expect(Container.Marker).toBe('app');
+					expect(requestContext).toBe(context);
+					expect(event).toBe(context.event);
+					expect(receivedRequest).toBe(request);
+					expect(receivedFetch).toBe(upstream);
+					return new Response('intercepted');
+				})
+		);
+
+		const response = await app.register.serverFetch({ event: context.event, request, fetch: upstream } as never);
+		expect(await response.text()).toBe('intercepted');
+		expect(upstream).not.toHaveBeenCalled();
+	});
+
+	it('uses the native handleFetch fallback when no callback is configured', async () => {
+		const request = new Request('https://api.example.com/items');
+		const response = new Response('native');
+		const upstream = vi.fn(() => Promise.resolve(response));
+		const app = createApp((app) => app);
+
+		await expect(app.register.serverFetch({ event: createServerContext().event, request, fetch: upstream } as never)).resolves.toBe(response);
+		expect(upstream).toHaveBeenCalledWith(request);
+	});
+
+	it('runs handleValidationError with app dependencies and request context', async () => {
+		const context = createServerContext();
+		RequestContext.init(() => context as never);
+		const issues = [{ message: 'Invalid value' }];
+		const app = createApp((app) =>
+			app.dependencies({ Marker: () => 'app' }).useServerValidationError(({ Container, requestContext, event, issues: receivedIssues }) => {
+				expect(Container.Marker).toBe('app');
+				expect(requestContext).toBe(context);
+				expect(event).toBe(context.event);
+				expect(receivedIssues).toBe(issues);
+				return { message: 'Custom validation error' };
+			})
+		);
+
+		await expect(Promise.resolve(app.register.serverValidationError({ event: context.event, issues } as never))).resolves.toEqual({
+			message: 'Custom validation error'
+		});
+	});
+
+	it('uses the SvelteKit validation fallback when no callback is configured', () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		const issues = [{ message: 'Invalid value' }];
+		const app = createApp((app) => app);
+
+		expect(app.register.serverValidationError({ event: createServerContext().event, issues } as never)).toEqual({ message: 'Bad Request' });
+		expect(error).toHaveBeenCalledWith('Remote function schema validation failed:', issues);
+		error.mockRestore();
+	});
+
+	it('exposes reroute and transport hooks without altering their native contracts', async () => {
+		const transport = {
+			Date: {
+				encode: (value: unknown) => value instanceof Date && value.toISOString(),
+				decode: (value: string) => new Date(value)
+			}
+		};
+		const reroute = vi.fn(({ url }: { url: URL }) => (url.pathname === '/old' ? '/new' : undefined));
+		const app = createApp((app) => app.useReroute(reroute).useTransport(transport));
+
+		await expect(Promise.resolve(app.register.reroute({ url: new URL('https://example.com/old'), fetch }))).resolves.toBe('/new');
+		expect(app.register.transport).toBe(transport);
+	});
+
+	it.each(['useServerFetch', 'useServerValidationError', 'useReroute', 'useTransport'] as const)(
+		'throws when %s is registered twice at runtime',
+		(method) => {
+			expect(() =>
+				createApp((app) => {
+					const callback = () => undefined;
+					const value = method === 'useTransport' ? {} : callback;
+					(app[method] as (input: never) => unknown)(value as never);
+					(app as unknown as Record<typeof method, (input: never) => unknown>)[method](value as never);
+					return app;
+				})
+			).toThrow(`[createApp] '${method}' can be registered only once.`);
+		}
+	);
+
 	it('logs internal errors and can use request fetch collector', async () => {
 		const requestFetch = vi.fn(() => Promise.resolve(new Response('ok')));
 		const context = {
@@ -325,7 +418,7 @@ describe('createApp', () => {
 		const onError = vi.fn();
 		const error = new AzureNetKitInternalError('boom');
 
-		useLogger(error, {
+		const task = useLogger(error, {
 			includeOnly: [LoggerErrors.AzureNetKitInternal],
 			collector: {
 				request: () => new Request('https://example.com/loki', { method: 'POST' }),
@@ -333,7 +426,8 @@ describe('createApp', () => {
 			}
 		});
 
-		await Promise.resolve();
+		expect(task).toBeInstanceOf(BackgroundTask);
+		await task;
 
 		expect(log).toHaveBeenCalledWith('[Logger][AzureNetInternalError] boom');
 		expect(requestFetch).toHaveBeenCalledTimes(1);
@@ -342,23 +436,43 @@ describe('createApp', () => {
 		log.mockRestore();
 	});
 
-	it('does not throw when logger collector request creation fails', () => {
+	it('does not reject when logger collector request creation fails', async () => {
 		const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 		const onError = vi.fn();
 		const collectorError = new Error('collector failed');
 
-		expect(() =>
-			useLogger(new Error('boom'), {
-				collector: {
-					request: () => {
-						throw collectorError;
-					},
-					onError
-				}
-			})
-		).not.toThrow();
+		const task = useLogger(new Error('boom'), {
+			collector: {
+				request: () => {
+					throw collectorError;
+				},
+				onError
+			}
+		});
 
+		await expect(task).resolves.toBeUndefined();
 		expect(onError).toHaveBeenCalledWith(collectorError);
+		log.mockRestore();
+	});
+
+	it('allows the logger task to be registered in a runtime waitUntil hook', async () => {
+		const context = createServerContext();
+		const requestFetch = vi.fn(() => Promise.resolve(new Response('ok')));
+		context.event.fetch = requestFetch;
+		RequestContext.init(() => context as never);
+		const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+		const waitUntil = vi.fn<(promise: Promise<unknown>) => void>();
+
+		const task = useLogger(new Error('boom'), {
+			collector: {
+				request: () => new Request('https://example.com/loki', { method: 'POST' })
+			}
+		}).waitUntil(waitUntil);
+
+		expect(waitUntil).toHaveBeenCalledTimes(1);
+		await expect(waitUntil.mock.calls[0][0]).resolves.toBeUndefined();
+		await task;
+		expect(requestFetch).toHaveBeenCalledTimes(1);
 		log.mockRestore();
 	});
 

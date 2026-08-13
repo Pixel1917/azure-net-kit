@@ -5,7 +5,7 @@ vi.mock('@azure-net/tools/environment', async (importOriginal) => ({
 	BROWSER: true
 }));
 
-import { createBoundaryProvider } from '../src/lib/shared/boundary-provider/Provider.js';
+import { cleanupProvider, createBoundaryProvider } from '../src/lib/shared/boundary-provider/Provider.js';
 
 describe('createBoundaryProvider in browser', () => {
 	it('does not share factories between providers that reuse the same register callback', () => {
@@ -29,5 +29,31 @@ describe('createBoundaryProvider in browser', () => {
 
 		expect(ProviderA().value).toBe('A');
 		expect(ProviderB().value).toBe('B');
+	});
+
+	it('awaits asynchronous disposal and drops the cached browser instance', async () => {
+		let finishDispose!: () => void;
+		const dispose = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					finishDispose = resolve;
+				})
+		);
+		let instance = 0;
+		const Provider = createBoundaryProvider('BrowserCleanupProvider', {
+			register: () => ({ service: () => ({ id: ++instance, dispose }) })
+		});
+
+		expect(Provider().service.id).toBe(1);
+		let completed = false;
+		const cleanup = cleanupProvider('BrowserCleanupProvider').then(() => {
+			completed = true;
+		});
+		await Promise.resolve();
+		expect(completed).toBe(false);
+
+		finishDispose();
+		await cleanup;
+		expect(Provider().service.id).toBe(2);
 	});
 });

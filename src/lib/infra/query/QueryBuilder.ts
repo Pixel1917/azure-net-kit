@@ -35,8 +35,19 @@ const normalizeSettings = <TTransformInput extends object = object>(
 const encodeQuery = (entries: Array<[string, string]>) =>
 	entries.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join('&');
 
+const stringifyQueryValue = (value: object): string => {
+	try {
+		return JSON.stringify(value);
+	} catch (error) {
+		const circular = error instanceof TypeError && /circular|cyclic/i.test(error.message);
+		throw new AzureNetKitInternalError(`[QueryInstance] Query value could not be serialized${circular ? ': circular reference detected' : ''}`);
+	}
+};
+
 const encodeArrayEntries = (key: string, values: unknown[], arrayFormat: ArrayFormat): Array<[string, string]> => {
-	const cleanValues = values.filter((v) => v !== null && v !== undefined).map((v) => String(v));
+	const cleanValues = values
+		.filter((value) => value !== null && value !== undefined)
+		.map((value) => (typeof value === 'object' && !(value instanceof Date) ? stringifyQueryValue(value) : String(value)));
 	switch (arrayFormat) {
 		case 'repeat':
 			return cleanValues.map((v) => [key, v]);
@@ -51,27 +62,42 @@ const encodeArrayEntries = (key: string, values: unknown[], arrayFormat: ArrayFo
 	}
 };
 
-const serializeEntries = (obj: object, arrayFormat: ArrayFormat, objectFormat: ObjectFormat, prefix = ''): Array<[string, string]> => {
+const serializeEntries = (
+	obj: object,
+	arrayFormat: ArrayFormat,
+	objectFormat: ObjectFormat,
+	prefix = '',
+	ancestors = new WeakSet<object>()
+): Array<[string, string]> => {
+	if (ancestors.has(obj)) {
+		throw new AzureNetKitInternalError('[QueryInstance] Query value could not be serialized: circular reference detected');
+	}
+	ancestors.add(obj);
+
 	const entries: Array<[string, string]> = [];
-	for (const [key, value] of Object.entries(obj)) {
-		if (value === null || value === undefined) continue;
+	try {
+		for (const [key, value] of Object.entries(obj)) {
+			if (value === null || value === undefined) continue;
 
-		const fullKey = prefix ? (objectFormat === 'nested-brackets' ? `${prefix}[${key}]` : `${prefix}.${key}`) : key;
-		if (Array.isArray(value)) {
-			entries.push(...encodeArrayEntries(fullKey, value, arrayFormat));
-			continue;
-		}
-
-		if (typeof value === 'object' && !(value instanceof Date)) {
-			if (objectFormat === 'nested-brackets') {
-				entries.push(...serializeEntries(value as object, arrayFormat, objectFormat, fullKey));
-			} else {
-				entries.push([fullKey, JSON.stringify(value)]);
+			const fullKey = prefix ? (objectFormat === 'nested-brackets' ? `${prefix}[${key}]` : `${prefix}.${key}`) : key;
+			if (Array.isArray(value)) {
+				entries.push(...encodeArrayEntries(fullKey, value, arrayFormat));
+				continue;
 			}
-			continue;
-		}
 
-		entries.push([fullKey, String(value)]);
+			if (typeof value === 'object' && !(value instanceof Date)) {
+				if (objectFormat === 'nested-brackets') {
+					entries.push(...serializeEntries(value as object, arrayFormat, objectFormat, fullKey, ancestors));
+				} else {
+					entries.push([fullKey, stringifyQueryValue(value)]);
+				}
+				continue;
+			}
+
+			entries.push([fullKey, String(value)]);
+		}
+	} finally {
+		ancestors.delete(obj);
 	}
 	return entries;
 };

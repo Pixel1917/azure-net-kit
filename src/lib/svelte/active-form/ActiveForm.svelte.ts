@@ -1,6 +1,7 @@
 import { ObjectUtil } from '../../external/tools/index.js';
 import type { RequestErrors } from '../../delivery/schema/index.js';
 import type { AsyncActionResponse } from '../../delivery/injectable-dependencies/AsyncHelpers.js';
+import { cloneStateValue } from '../shared/cloneStateValue.js';
 
 type InitialData<FormData, Initial extends Partial<FormData>> = () => Initial | Promise<Initial>;
 
@@ -80,7 +81,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 
 	let initial: Partial<FormData> = {};
 
-	let formData = $state<FormDataState>(ObjectUtil.deepClone(initial) as FormDataState);
+	let formData = $state<FormDataState>(cloneStateValue(initial) as FormDataState);
 	let formErrors = $state<RequestErrors<FormData>>({});
 	let pending = $state(false);
 	let submitRunId = 0;
@@ -94,20 +95,20 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 
 		if (!source) {
 			initial = {};
-			formData = ObjectUtil.deepClone(initial) as FormDataState;
+			formData = cloneStateValue(initial) as FormDataState;
 			formErrors = {};
-			return initial;
+			return cloneStateValue(initial);
 		}
 
 		const value = source();
 		const nextInitial = isPromise(value) ? await value : value;
-		if (runId !== initialLoadRunId) return initial;
+		if (runId !== initialLoadRunId) return cloneStateValue(initial);
 
-		initial = (nextInitial ?? {}) as Partial<FormData>;
-		formData = ObjectUtil.deepClone(initial) as FormDataState;
+		initial = cloneStateValue((nextInitial ?? {}) as Partial<FormData>);
+		formData = cloneStateValue(initial) as FormDataState;
 		formErrors = {};
 
-		return initial;
+		return cloneStateValue(initial);
 	};
 
 	const ready: Promise<Partial<FormData>> = loadInitialData();
@@ -129,7 +130,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 				formData = {} as FormDataState;
 				break;
 			case 'initial':
-				formData = ObjectUtil.deepClone(initial) as FormDataState;
+				formData = cloneStateValue(initial) as FormDataState;
 				break;
 			case 'reloadInitial':
 				await loadInitialData();
@@ -157,7 +158,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 				if (aborted || runId !== submitRunId) return abortedResponse();
 			}
 
-			const result = await onSubmit($state.snapshot(formData) as Partial<ExtractFromSubmit<SubmitReturn>['formData']>);
+			const result = await onSubmit(cloneStateValue(formData) as Partial<ExtractFromSubmit<SubmitReturn>['formData']>);
 			if (runId !== submitRunId) return result as AsyncActionResponse<Response, FormData, Custom>;
 
 			if (result.success) {

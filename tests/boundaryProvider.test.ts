@@ -73,10 +73,33 @@ describe('createBoundaryProvider', () => {
 		});
 
 		void AppProvider().svc;
-		cleanupProvider('CleanupProvider');
-
-		await Promise.resolve();
+		await cleanupProvider('CleanupProvider');
 		expect(dispose).toHaveBeenCalledTimes(1);
+	});
+
+	it('cleanupProvider resolves only after asynchronous disposal finishes', async () => {
+		let finishDispose!: () => void;
+		const dispose = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					finishDispose = resolve;
+				})
+		);
+		const AppProvider = createBoundaryProvider('AwaitCleanupProvider', {
+			register: () => ({ svc: () => ({ dispose }) })
+		});
+
+		void AppProvider().svc;
+		let completed = false;
+		const cleanup = cleanupProvider('AwaitCleanupProvider').then(() => {
+			completed = true;
+		});
+		await Promise.resolve();
+		expect(completed).toBe(false);
+
+		finishDispose();
+		await cleanup;
+		expect(completed).toBe(true);
 	});
 
 	it('throws a readable error for circular service dependencies', () => {

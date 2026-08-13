@@ -33,14 +33,6 @@ export class ClassMirror {
 
 			has(proxyTarget, prop) {
 				return Reflect.has(proxyTarget, prop) || Reflect.has(proxyTarget[MIRROR_TARGET] as object, prop);
-			},
-
-			ownKeys(proxyTarget) {
-				return [...new Set([...Reflect.ownKeys(proxyTarget), ...Reflect.ownKeys(proxyTarget[MIRROR_TARGET] as object)])];
-			},
-
-			getOwnPropertyDescriptor(proxyTarget, prop) {
-				return Reflect.getOwnPropertyDescriptor(proxyTarget, prop) ?? Reflect.getOwnPropertyDescriptor(proxyTarget[MIRROR_TARGET] as object, prop);
 			}
 		});
 	}

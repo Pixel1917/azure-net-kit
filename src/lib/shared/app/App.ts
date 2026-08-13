@@ -3,7 +3,17 @@ import { RequestContext, type ContextData } from '../../external/edges/ServerCon
 import { createBoundaryProvider } from '../boundary-provider/Provider.js';
 import { AzureNetKitInternalError } from '../app-error/AppError.js';
 import { executeServerMiddlewares, type IServerMiddleware } from './middleware/ServerMiddleware.js';
-import type { Handle, HandleClientError, HandleServerError, RequestEvent, ServerInit } from '@sveltejs/kit';
+import type {
+	Handle,
+	HandleClientError,
+	HandleFetch,
+	HandleServerError,
+	HandleValidationError,
+	RequestEvent,
+	Reroute,
+	ServerInit,
+	Transport
+} from '@sveltejs/kit';
 import { beforeNavigate } from '$app/navigation';
 import { executeClientMiddlewares, type IClientMiddleware } from './middleware/ClientMiddleware.js';
 import { useLogger } from '../logger/index.js';
@@ -20,7 +30,20 @@ type ResolvedDependencies<T> = {
 	[K in keyof T]: T[K] extends (...args: never[]) => infer TReturn ? TReturn : never;
 };
 type BuilderFlags = Partial<
-	Record<'use' | 'useClient' | 'useClientInit' | 'useClientError' | 'useServerInit' | 'useServer' | 'useServerError', true>
+	Record<
+		| 'use'
+		| 'useClient'
+		| 'useClientInit'
+		| 'useClientError'
+		| 'useServerInit'
+		| 'useServer'
+		| 'useServerError'
+		| 'useServerFetch'
+		| 'useServerValidationError'
+		| 'useReroute'
+		| 'useTransport',
+		true
+	>
 >;
 type WithFlag<TFlags extends BuilderFlags, TKey extends keyof BuilderFlags> = TFlags & Record<TKey, true>;
 type BuilderDependencies<TBuilder> = TBuilder extends { readonly __types__?: infer TDependencies } ? TDependencies : never;
@@ -76,6 +99,16 @@ export interface AppServerErrorContext<TDependencies extends Record<string, unkn
 	useLogger: typeof useLogger;
 }
 
+export type AppServerFetchContext<TDependencies extends Record<string, unknown>> = Parameters<HandleFetch>[0] & {
+	Container: AppContainer<TDependencies>;
+	requestContext: ContextData;
+};
+
+export type AppServerValidationErrorContext<TDependencies extends Record<string, unknown>> = Parameters<HandleValidationError>[0] & {
+	Container: AppContainer<TDependencies>;
+	requestContext: ContextData;
+};
+
 export type AppUniversalLifecycleCallback<TDependencies extends Record<string, unknown>> = (
 	context: AppUniversalLifecycleContext<TDependencies>
 ) => MaybePromise<void>;
@@ -95,6 +128,13 @@ export type AppServerLifecycleCallback<TDependencies extends Record<string, unkn
 export type AppServerErrorCallback<TDependencies extends Record<string, unknown>> = (
 	context: AppServerErrorContext<TDependencies>
 ) => ReturnType<HandleServerError>;
+export type AppServerFetchCallback<TDependencies extends Record<string, unknown>> = (
+	context: AppServerFetchContext<TDependencies>
+) => ReturnType<HandleFetch>;
+export type AppServerValidationErrorCallback<TDependencies extends Record<string, unknown>> = (
+	context: AppServerValidationErrorContext<TDependencies>
+) => ReturnType<HandleValidationError>;
+export type AppRerouteCallback = Reroute;
 
 export type CreateAppBuilder<TDependencies extends Record<string, unknown>, TFlags extends BuilderFlags = object> = {
 	readonly __types__?: TDependencies;
@@ -143,7 +183,25 @@ export type CreateAppBuilder<TDependencies extends Record<string, unknown>, TFla
 		{
 			useServerError(callback: AppServerErrorCallback<TDependencies>): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useServerError'>>;
 		}
-	>;
+	> &
+	OnceMethod<
+		TFlags,
+		'useServerFetch',
+		{
+			useServerFetch(callback: AppServerFetchCallback<TDependencies>): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useServerFetch'>>;
+		}
+	> &
+	OnceMethod<
+		TFlags,
+		'useServerValidationError',
+		{
+			useServerValidationError(
+				callback: AppServerValidationErrorCallback<TDependencies>
+			): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useServerValidationError'>>;
+		}
+	> &
+	OnceMethod<TFlags, 'useReroute', { useReroute(callback: AppRerouteCallback): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useReroute'>> }> &
+	OnceMethod<TFlags, 'useTransport', { useTransport(transport: Transport): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useTransport'>> }>;
 
 export interface AppRegistrar {
 	(): MaybePromise<void>;
@@ -151,7 +209,11 @@ export interface AppRegistrar {
 	clientError: HandleClientError;
 	serverInit: ServerInit;
 	serverError: HandleServerError;
+	serverFetch: HandleFetch;
+	serverValidationError: HandleValidationError;
 	handle: Handle;
+	reroute: Reroute;
+	transport: Transport;
 }
 
 export interface CreateAppInstance<TDependencies extends Record<string, unknown>> {
@@ -171,6 +233,10 @@ interface AppCallbacks {
 	useServerInit?: AppServerInitLifecycleCallback;
 	useServer?: AppServerLifecycleCallback<Record<string, unknown>>;
 	useServerError?: AppServerErrorCallback<Record<string, unknown>>;
+	useServerFetch?: AppServerFetchCallback<Record<string, unknown>>;
+	useServerValidationError?: AppServerValidationErrorCallback<Record<string, unknown>>;
+	useReroute?: AppRerouteCallback;
+	useTransport?: Transport;
 }
 
 const DEFAULT_APP_NAME = '__AzureNetKitGlobalAppContainer__';
@@ -258,6 +324,26 @@ const createBuilder = (dependencies: Map<string, UntypedDependencyFactory>, call
 
 		useServerError(callback: AppServerErrorCallback<Record<string, unknown>>) {
 			setCallback(callbacks, 'useServerError', callback);
+			return builder;
+		},
+
+		useServerFetch(callback: AppServerFetchCallback<Record<string, unknown>>) {
+			setCallback(callbacks, 'useServerFetch', callback);
+			return builder;
+		},
+
+		useServerValidationError(callback: AppServerValidationErrorCallback<Record<string, unknown>>) {
+			setCallback(callbacks, 'useServerValidationError', callback);
+			return builder;
+		},
+
+		useReroute(callback: AppRerouteCallback) {
+			setCallback(callbacks, 'useReroute', callback);
+			return builder;
+		},
+
+		useTransport(transport: Transport) {
+			setCallback(callbacks, 'useTransport', transport);
 			return builder;
 		},
 
@@ -396,6 +482,31 @@ export const createApp = <TBuilder>(
 		});
 	};
 
+	const runServerFetch: HandleFetch = (input) => {
+		if (!callbacks.useServerFetch) return input.fetch(input.request);
+
+		return callbacks.useServerFetch({
+			...input,
+			Container,
+			requestContext: getServerRequestContext()
+		});
+	};
+
+	const runServerValidationError: HandleValidationError = (input) => {
+		if (!callbacks.useServerValidationError) {
+			console.error('Remote function schema validation failed:', input.issues);
+			return { message: 'Bad Request' };
+		}
+
+		return callbacks.useServerValidationError({
+			...input,
+			Container,
+			requestContext: getServerRequestContext()
+		});
+	};
+
+	const reroute: Reroute = (input) => callbacks.useReroute?.(input);
+
 	const handle: Handle = async ({ event, resolve }) => {
 		const requestContext = getServerRequestContext();
 		const flags = getLifecycleFlags(appKey, requestContext);
@@ -434,7 +545,11 @@ export const createApp = <TBuilder>(
 		clientError: runClientError,
 		serverInit: runServerInit,
 		serverError: runServerError,
-		handle
+		serverFetch: runServerFetch,
+		serverValidationError: runServerValidationError,
+		handle,
+		reroute,
+		transport: callbacks.useTransport ?? {}
 	}) as AppRegistrar;
 
 	return {

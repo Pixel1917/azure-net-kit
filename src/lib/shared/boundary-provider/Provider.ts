@@ -208,15 +208,17 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 	return providerFn as ProviderWithType<T>;
 };
 
-export function cleanupProvider(name: string): void {
+export async function cleanupProvider(name: string): Promise<void> {
 	const cleanupCache = async (cache: Map<string, unknown>) => {
 		const promises: Promise<void>[] = [];
 
 		for (const [key, service] of cache.entries()) {
 			if (service && typeof service === 'object' && 'dispose' in service) {
-				const disposeResult = (service as { dispose: () => Promise<void> | void }).dispose();
-				if (disposeResult instanceof Promise) {
-					promises.push(disposeResult.catch((err) => console.error(`Error disposing ${name}.${key}:`, err)));
+				try {
+					const disposeResult = (service as { dispose: () => Promise<void> | void }).dispose();
+					promises.push(Promise.resolve(disposeResult).catch((err) => console.error(`Error disposing ${name}.${key}:`, err)));
+				} catch (err) {
+					console.error(`Error disposing ${name}.${key}:`, err);
 				}
 			}
 		}
@@ -227,17 +229,17 @@ export function cleanupProvider(name: string): void {
 
 	if (BROWSER) {
 		const cache = clientCache.get(name);
-		if (cache) {
-			void cleanupCache(cache);
-		}
+		clientCache.delete(name);
 		providerProxyCache.delete(name);
 		clientBootFlags.delete(name);
+		if (cache) await cleanupCache(cache);
 	} else {
 		const context = RequestContext.current();
 		const providers = context.data.providers as Map<string, Map<string, unknown>> | undefined;
 		if (providers?.has(name)) {
 			const cache = providers.get(name)!;
-			void cleanupCache(cache);
+			providers.delete(name);
+			await cleanupCache(cache);
 		}
 	}
 }

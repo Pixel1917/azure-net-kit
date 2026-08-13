@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "5.1.1",
+	"version": "5.2.0",
 	"license": "MIT",
 	"author": "Pixel1917",
 	"description": "Universal toolkit and library collection, developed as part of the Azure-net ecosystem",
@@ -29,8 +29,8 @@
 		"lint": "prettier --check . && eslint .",
 		"test:unit": "vitest --config vitest.config.ts",
 		"test:integration": "vitest --config vitest.integration.config.ts --run",
-		"test": "npm run test:unit -- --run && npm run test:e2e",
-		"test:e2e": "playwright test --pass-with-no-tests",
+		"test": "pnpm test:unit -- --run && pnpm test:integration && pnpm test:e2e",
+		"test:e2e": "playwright test",
 		"commit": "pnpm format && git add ."
 	},
 	"files": [
@@ -89,15 +89,15 @@
 		}
 	},
 	"peerDependencies": {
-		"@sveltejs/kit": ">=2.16.0",
-		"svelte": ">=5.0.0"
+		"@sveltejs/kit": ">=2.57.1",
+		"svelte": ">=5.55.4"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.5",
 		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.59.1",
 		"@sveltejs/adapter-auto": "^7.0.1",
-		"@sveltejs/kit": "^2.57.1",
+		"@sveltejs/kit": "^2.70.2",
 		"@sveltejs/package": "^2.5.7",
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@testing-library/jest-dom": "^6.9.1",
@@ -111,7 +111,7 @@
 		"prettier": "^3.8.3",
 		"prettier-plugin-svelte": "^3.5.1",
 		"publint": "^0.3.18",
-		"svelte": "^5.55.4",
+		"svelte": "^5.56.9",
 		"svelte-check": "^4.4.6",
 		"typescript": "^5.0.0",
 		"typescript-eslint": "^8.58.2",

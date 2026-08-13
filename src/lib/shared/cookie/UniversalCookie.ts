@@ -19,6 +19,35 @@ export type CookieOptions = {
  * All methods are static and operate without creating instances.
  */
 export class UniversalCookie {
+	private static serialize<T>(value: T): string {
+		if (typeof value === 'string') return value;
+
+		const serialized = JSON.stringify(value);
+		if (serialized === undefined) throw new TypeError('Cookie value is not JSON-serializable.');
+		return serialized;
+	}
+
+	private static deserialize<T>(value: string, decodeLegacy = false): T {
+		try {
+			return JSON.parse(value) as T;
+		} catch {
+			if (!decodeLegacy) return value as T;
+		}
+
+		let decodedValue: string;
+		try {
+			decodedValue = decodeURIComponent(value);
+		} catch {
+			return value as T;
+		}
+
+		try {
+			return JSON.parse(decodedValue) as T;
+		} catch {
+			return decodedValue as T;
+		}
+	}
+
 	/**
 	 * Sets a cookie with the specified key, value, and options.
 	 * Serializes non-string values as JSON.
@@ -30,20 +59,14 @@ export class UniversalCookie {
 	 * @returns {void}
 	 */
 	public static set<T>(name: string, value: T, options?: CookieOptions): void {
+		const serializedValue = this.serialize(value);
+
 		if (BROWSER) {
-			Cookies.set(name, value, options);
+			Cookies.set(name, serializedValue, options);
 			return;
 		} else {
 			const event = RequestContext.current().event;
 			if (event) {
-				const encodedKey = encodeURIComponent(name);
-
-				let serializedValue: string;
-				if (typeof value === 'string') {
-					serializedValue = encodeURIComponent(value);
-				} else {
-					serializedValue = encodeURIComponent(JSON.stringify(value));
-				}
 				let expires: Date | undefined;
 				if (options?.expires !== undefined) {
 					if (typeof options.expires === 'number') {
@@ -54,7 +77,7 @@ export class UniversalCookie {
 						expires = options.expires;
 					}
 				}
-				event.cookies.set(encodedKey, serializedValue, {
+				event.cookies.set(name, serializedValue, {
 					...options,
 					path: options?.path ?? '/',
 					httpOnly: options?.httpOnly ?? false,
@@ -76,20 +99,13 @@ export class UniversalCookie {
 	 */
 	public static get<T = string>(name: string): T | undefined {
 		if (BROWSER) {
-			return Cookies.get<T>(name) ?? undefined;
+			const value = Cookies.get<string>(name, { parse: false });
+			return value === null ? undefined : this.deserialize<T>(value);
 		} else {
 			const event = RequestContext.current().event;
 			if (event) {
-				const encodedKey = encodeURIComponent(name);
-				const cookieValue = event.cookies.get(encodedKey);
-				if (cookieValue) {
-					const decodedValue = decodeURIComponent(cookieValue);
-					try {
-						return JSON.parse(decodedValue) as T;
-					} catch {
-						return decodedValue as T;
-					}
-				}
+				const cookieValue = event.cookies.get(name) ?? event.cookies.get(encodeURIComponent(name));
+				if (cookieValue !== undefined) return this.deserialize<T>(cookieValue, true);
 				return undefined;
 			}
 			return undefined;
@@ -105,18 +121,15 @@ export class UniversalCookie {
 	 */
 	public static getAll<T = Record<string, unknown>>(): T | undefined {
 		if (BROWSER) {
-			return Cookies.getAll() as T;
+			const allCookies = Cookies.getAll({ parse: false });
+			return Object.fromEntries(Object.entries(allCookies).map(([name, value]) => [name, this.deserialize(String(value))])) as T;
 		} else {
 			const event = RequestContext.current().event;
 			const result: Record<string, unknown> = {};
 			if (event) {
 				const allCookies = event.cookies.getAll();
 				for (const singleCookie of allCookies) {
-					try {
-						result[singleCookie.name] = JSON.parse(singleCookie.value);
-					} catch {
-						result[singleCookie.name] = singleCookie.value;
-					}
+					result[singleCookie.name] = this.deserialize(singleCookie.value, true);
 				}
 			}
 			return result as T;
@@ -165,9 +178,12 @@ export class UniversalCookie {
 	}
 
 	public static toCredentials() {
-		const all = this.getAll<Record<string, string>>() ?? {};
+		const all = this.getAll<Record<string, unknown>>() ?? {};
 		return Object.entries(all)
-			.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+			.map(([key, value]) => {
+				const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+				return `${encodeURIComponent(key)}=${encodeURIComponent(serialized)}`;
+			})
 			.join('; ');
 	}
 }

@@ -3,7 +3,9 @@ import { RequestContext } from '@azure-net/edges/context';
 import { createHttpServiceInstance } from '../../src/lib/infra/http-service/HttpServiceInstance.js';
 
 describe('HttpServiceInstance integration', () => {
-	it('calls external fake-api route and parses payload', async () => {
+	it('uses native fetch and parses a representative payload', async () => {
+		const payload = Array.from({ length: 100 }, (_, id) => ({ id }));
+		const url = `data:application/json,${encodeURIComponent(JSON.stringify(payload))}`;
 		RequestContext.init(
 			() =>
 				({
@@ -14,11 +16,12 @@ describe('HttpServiceInstance integration', () => {
 				}) as never
 		);
 
-		const instance = createHttpServiceInstance({ timeout: 15000 });
-		const result = await instance.get<unknown[]>('https://cb784374e7b649a4b5ced37b17042896.fake-api.io/public-route');
+		const instance = createHttpServiceInstance({ timeout: 5000 });
+		const result = await instance.get<Array<{ id: number }>>(url);
 
 		expect(result.success).toBe(true);
-		expect(Array.isArray(result.data)).toBe(true);
-		expect((result.data as unknown[]).length).toBeGreaterThan(0);
+		expect(result.data).toHaveLength(100);
+		expect(result.data[99]).toEqual({ id: 99 });
+		expect(result.headers['content-type']).toBe('application/json');
 	});
 });

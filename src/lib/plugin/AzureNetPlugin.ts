@@ -30,10 +30,28 @@ const findStaticImportInsertPosition = (sourceCode: string): number => {
 
 const createVirtualServerHooks = (silentChromeDevtools: boolean) => `// ${GENERATED_MARKER}
 import { edgesHandle, edgesHandleRaw } from '${VIRTUAL_SERVER_UTILS_ID}';
+import { RequestContext } from '@azure-net/kit/server-context';
 
 const getRegister = async () => (await import('${VIRTUAL_PROGRAM_ID}')).register;
 
+const withRequestContext = (event, callback) => {
+	try {
+		RequestContext.current();
+	} catch {
+		return edgesHandleRaw(event, callback);
+	}
+
+	return callback();
+};
+
 export const init = async () => (await getRegister()).serverInit();
+export const handleFetch = (input) => withRequestContext(input.event, async () => (await getRegister()).serverFetch(input));
+export const handleValidationError = (input) => withRequestContext(
+	input.event,
+	async () => (await getRegister()).serverValidationError(input)
+);
+export const reroute = async (input) => (await getRegister()).reroute(input);
+export const getTransport = async () => (await getRegister()).transport;
 
 export const handle = edgesHandle(async ({ serialize, edgesEvent, resolve }) => {
 	const register = await getRegister();
@@ -71,8 +89,26 @@ const createVirtualServerUtils = () => "export { edgesHandle, edgesHandleRaw } f
 const createVirtualClientHooks = () => `// ${GENERATED_MARKER}
 const getRegister = async () => (await import('${VIRTUAL_PROGRAM_ID}')).register;
 
-export const init = async () => (await getRegister()).clientInit();
+export const transport = {};
+
+const createCodecView = (method) => new Proxy({}, {
+	get: (_, key) => transport[key]?.[method],
+	ownKeys: () => Reflect.ownKeys(transport),
+	getOwnPropertyDescriptor: (_, key) => key in transport
+		? { configurable: true, enumerable: true, value: transport[key][method] }
+		: undefined
+});
+
+export const decoders = createCodecView('decode');
+export const encoders = createCodecView('encode');
+
+export const init = async () => {
+	const register = await getRegister();
+	Object.assign(transport, register.transport);
+	return register.clientInit();
+};
 export const handleError = async (input) => (await getRegister()).clientError(input);
+export const reroute = async (input) => (await getRegister()).reroute(input);
 `;
 
 const createVirtualProgram = (root: string) => {
@@ -94,7 +130,7 @@ const assertProgramExists = (root: string) => {
 	throw new Error('[AzureNetPlugin] src/program.ts is required. Create it and export register from createApp().');
 };
 
-const hasUserHook = (root: string, hookName: 'hooks.server' | 'hooks.client') => {
+const hasUserHook = (root: string, hookName: 'hooks.server' | 'hooks.client' | 'hooks') => {
 	const srcPath = path.join(root, 'src');
 	const candidates = ['.ts', '.js'].map((extension) => path.join(srcPath, `${hookName}${extension}`));
 
@@ -108,7 +144,8 @@ const hasUserHook = (root: string, hookName: 'hooks.server' | 'hooks.client') =>
 const assertNoUserHooks = (root: string) => {
 	const serverHook = hasUserHook(root, 'hooks.server');
 	const clientHook = hasUserHook(root, 'hooks.client');
-	const hook = serverHook ?? clientHook;
+	const universalHook = hasUserHook(root, 'hooks');
+	const hook = serverHook ?? clientHook ?? universalHook;
 
 	if (!hook) return;
 
@@ -138,21 +175,16 @@ const transformGeneratedServerInternal = (sourceCode: string) => {
 		throw new Error('[AzureNetPlugin] Unsupported SvelteKit generated server internals: get_hooks() was not found.');
 	}
 
-	const universalImportMatch = sourceCode.match(/\(\{\s*reroute,\s*transport\s*\}\s*=\s*await\s*import\([^)]+\)\);/);
-	const universalImport = universalImportMatch?.[0] ? `\n\t${universalImportMatch[0]}` : '';
 	const importLine = `import * as __azureNetServerHooks from '${VIRTUAL_SERVER_HOOKS_ID}';`;
 	const getHooksReplacement = `export async function get_hooks() {
-\tlet reroute;
-\tlet transport;${universalImport}
-
 \treturn {
 \t\thandle: __azureNetServerHooks.handle,
-\t\thandleFetch: undefined,
+\t\thandleFetch: __azureNetServerHooks.handleFetch,
 \t\thandleError: __azureNetServerHooks.handleError,
-\t\thandleValidationError: undefined,
+\t\thandleValidationError: __azureNetServerHooks.handleValidationError,
 \t\tinit: __azureNetServerHooks.init,
-\t\treroute,
-\t\ttransport
+\t\treroute: __azureNetServerHooks.reroute,
+\t\ttransport: await __azureNetServerHooks.getTransport()
 \t};
 }`;
 	const transformed = ensureVirtualImport(sourceCode, `// ${GENERATED_MARKER}\n${importLine}`).replace(getHooksPattern, getHooksReplacement);
@@ -172,6 +204,13 @@ const transformGeneratedClientApp = (sourceCode: string) => {
 	if (!handleErrorPattern.test(sourceCode)) {
 		throw new Error('[AzureNetPlugin] Unsupported SvelteKit generated client app: default handleError was not found.');
 	}
+	const decodersPattern =
+		/export const decoders = Object\.fromEntries\(Object\.entries\(hooks\.transport\)\.map\(\(\[k, v\]\) => \[k, v\.decode\]\)\);/;
+	const encodersPattern =
+		/export const encoders = Object\.fromEntries\(Object\.entries\(hooks\.transport\)\.map\(\(\[k, v\]\) => \[k, v\.encode\]\)\);/;
+	if (!decodersPattern.test(sourceCode) || !encodersPattern.test(sourceCode)) {
+		throw new Error('[AzureNetPlugin] Unsupported SvelteKit generated client app: transport codecs were not found.');
+	}
 
 	let transformed = ensureVirtualImport(sourceCode, `// ${GENERATED_MARKER}\nimport * as __azureNetClientHooks from '${VIRTUAL_CLIENT_HOOKS_ID}';`);
 	transformed = transformed.replace(handleErrorPattern, 'handleError: __azureNetClientHooks.handleError');
@@ -184,6 +223,11 @@ const transformGeneratedClientApp = (sourceCode: string) => {
 			'handleError: __azureNetClientHooks.handleError,\n\tinit: __azureNetClientHooks.init,'
 		);
 	}
+
+	transformed = transformed.replace(/^\s*reroute:\s*[^,\n]+,?/m, '\treroute: __azureNetClientHooks.reroute,');
+	transformed = transformed.replace(/^\s*transport:\s*[^,\n]+,?/m, '\ttransport: __azureNetClientHooks.transport');
+	transformed = transformed.replace(decodersPattern, 'export const decoders = __azureNetClientHooks.decoders;');
+	transformed = transformed.replace(encodersPattern, 'export const encoders = __azureNetClientHooks.encoders;');
 
 	return transformed;
 };

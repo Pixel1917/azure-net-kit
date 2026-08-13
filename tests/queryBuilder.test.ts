@@ -35,6 +35,34 @@ describe('createQueryInstance base behavior', () => {
 		const query = createQueryInstance();
 		expect(query.toString({ a: 1, b: null, c: undefined, d: 'ok' })).toBe('?a=1&d=ok');
 	});
+
+	it('serializes object items in arrays instead of coercing them to object Object', () => {
+		const query = createQueryInstance();
+		const params = query.toSearchParams({
+			filters: [
+				{ field: 'status', value: 'active' },
+				{ field: 'page', value: 2 }
+			]
+		});
+
+		expect(params.getAll('filters')).toEqual(['{"field":"status","value":"active"}', '{"field":"page","value":2}']);
+		expect(query.toString({ filters: [{ id: 1 }] })).toBe('?filters=%7B%22id%22%3A1%7D');
+	});
+
+	it('throws a readable error for circular objects in every object format', () => {
+		const circular: Record<string, unknown> = {};
+		circular.self = circular;
+
+		expect(() => createQueryInstance().toString({ circular })).toThrow(
+			'[QueryInstance] Query value could not be serialized: circular reference detected'
+		);
+		expect(() => createQueryInstance({ objectFormat: 'nested-brackets' }).toString(circular)).toThrow(
+			'[QueryInstance] Query value could not be serialized: circular reference detected'
+		);
+		expect(() => createQueryInstance().toString({ values: [circular] })).toThrow(
+			'[QueryInstance] Query value could not be serialized: circular reference detected'
+		);
+	});
 });
 
 describe('createQueryInstance', () => {

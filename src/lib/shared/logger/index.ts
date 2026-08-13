@@ -1,6 +1,7 @@
 import { AppError, AzureNetKitInternalError, type IAppError } from '../app-error/index.js';
 import { BROWSER } from '../../external/tools/index.js';
 import { RequestContext } from '../../external/edges/ServerContext.js';
+import { BackgroundTask } from '../background-task/index.js';
 
 export enum LoggerErrors {
 	AzureNetKitInternal,
@@ -63,26 +64,29 @@ const getFetcher = (): typeof fetch => {
 	}
 };
 
-export const useLogger = (error: unknown, settings: ILoggerSettings) => {
+export const useLogger = (error: unknown, settings: ILoggerSettings): BackgroundTask<void> => {
 	const preparedError = prepareError(error);
 	if (settings.filterLog && settings.filterLog(preparedError)) {
-		return;
+		return BackgroundTask.run(() => undefined);
 	}
 	if (settings.includeOnly && !settings.includeOnly.includes(preparedError.type)) {
-		return;
+		return BackgroundTask.run(() => undefined);
 	}
 	const prefix = settings?.prefix ?? '[Logger]';
 	const errorMessage = prefix + preparedError.message + (settings?.joinToLog ? settings.joinToLog(preparedError) : '');
 	console.log(errorMessage);
-	if (settings.collector) {
-		const fetcher = getFetcher();
+	if (!settings.collector) return BackgroundTask.run(() => undefined);
+
+	const { collector } = settings;
+	return BackgroundTask.run(async () => {
 		try {
-			void fetcher(settings.collector.request(preparedError)).catch((err) => {
-				settings.collector?.onError?.(err);
-				return;
-			});
+			await getFetcher()(collector.request(preparedError));
 		} catch (err) {
-			settings.collector.onError?.(err);
+			try {
+				collector.onError?.(err);
+			} catch {
+				return;
+			}
 		}
-	}
+	});
 };

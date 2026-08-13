@@ -43,4 +43,34 @@ describe('ClassMirror', () => {
 		expect(service.add(2)).toBe(102);
 		expect(service.multiply(3)).toBe(15);
 	});
+
+	it('does not violate proxy invariants for non-configurable repository properties', () => {
+		const repository = new Counter(2) as Counter & { fixed: () => number };
+		Object.defineProperty(repository, 'fixed', {
+			configurable: false,
+			enumerable: true,
+			value: () => 42
+		});
+
+		const mirror = new ClassMirror(repository) as unknown as { fixed: () => number };
+
+		expect(mirror.fixed()).toBe(42);
+		expect('fixed' in mirror).toBe(true);
+		expect(() => Object.keys(mirror)).not.toThrow();
+		expect(Object.keys(mirror)).not.toContain('fixed');
+	});
+
+	it('keeps declared service fields visible to reflection', () => {
+		class Service extends ClassMirror {
+			readonly own = 'service';
+
+			constructor() {
+				super(new Counter(2));
+			}
+		}
+
+		const service = new Service();
+		expect(Object.keys(service)).toContain('own');
+		expect(Object.getOwnPropertyDescriptor(service, 'own')?.value).toBe('service');
+	});
 });

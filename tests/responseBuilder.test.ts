@@ -72,6 +72,25 @@ describe('ResponseBuilder', () => {
 		);
 	});
 
+	it('does not extract inherited properties', () => {
+		const inherited = Object.create({ secret: 'prototype-value' }) as { value: string; secret: string };
+		inherited.value = 'payload-value';
+		const response = new HttpServiceResponse({
+			headers: {},
+			status: 200,
+			success: true,
+			data: inherited,
+			message: 'ok'
+		});
+
+		const builder = new ResponseBuilder<{ value: string; secret: string }>(response);
+		expect(builder.extract('value').getData()).toBe('payload-value');
+		expect(() => builder.extract('secret').getData()).toThrow('[ResponseBuilder] Failed to extract: path "secret" not found in response data');
+		expect(() => builder.extract('constructor' as 'value').getData()).toThrow(
+			'[ResponseBuilder] Failed to extract: path "constructor" not found in response data'
+		);
+	});
+
 	it('merges metadata and supports flatten output', () => {
 		const response = new HttpServiceResponse({
 			headers: {},
