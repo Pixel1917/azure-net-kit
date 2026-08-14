@@ -1,8 +1,43 @@
-import { describe, expect, it } from 'vitest';
-import { createQuery } from '../src/lib/svelte/query/Query.svelte.js';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import { createQuery, type QueryController, type QueryPath } from '../src/lib/svelte/query/Query.svelte.js';
 import { createStateValue } from './fixtures/stateValue.svelte.js';
 
 describe('createQuery.patch', () => {
+	it('exposes type-safe nested dependency paths', () => {
+		type Paths = QueryPath<{
+			page: number;
+			filters: { search: string; range: { min: number; max?: number } };
+			tags: string[];
+		}>;
+
+		expectTypeOf<Paths>().toEqualTypeOf<
+			'page' | 'filters' | 'filters.search' | 'filters.range' | 'filters.range.min' | 'filters.range.max' | 'tags'
+		>();
+	});
+
+	it('infers search params codec types from initial values', () => {
+		type Query = { page: number; filters: { search: string } };
+		const factory = () =>
+			createQuery(
+				{ page: 1, filters: { search: '' } },
+				{
+					syncWithSearchParams: {
+						fromSearchParams: (params, initial) => {
+							expectTypeOf(initial).toEqualTypeOf<Readonly<Query>>();
+							return { page: Number(params.get('page') ?? initial.page) };
+						},
+						toSearchParams: (data, initial) => {
+							expectTypeOf(data).toEqualTypeOf<Readonly<Query>>();
+							expectTypeOf(initial).toEqualTypeOf<Readonly<Query>>();
+							return new URLSearchParams({ page: String(data.page) });
+						}
+					}
+				}
+			);
+
+		expectTypeOf(factory).returns.toEqualTypeOf<QueryController<Query>>();
+	});
+
 	it('merges only provided keys and keeps others unchanged', () => {
 		const query = createQuery({
 			page: 1,
@@ -83,7 +118,7 @@ describe('createQuery.patch', () => {
 		expect(query.data.cycle.self).toBe(query.data.cycle);
 		expect(query.data.cycle.label).toBe('root');
 
-		const snapshot = query.snapshot();
+		const snapshot = query.createSnapshot();
 		snapshot.metadata.get('nested')!.enabled = false;
 		snapshot.bytes[1] = 9;
 		expect(query.data.metadata.get('nested')!.enabled).toBe(true);

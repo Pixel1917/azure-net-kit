@@ -26,6 +26,33 @@ export interface AsyncSignalSvelte<TData, TError = Error> {
 	abort: () => void;
 }
 
+export interface AsyncSignalBatchOptions {
+	parallel?: boolean;
+}
+
+export interface AsyncSignalBatchFactory {
+	<TData, TError = Error>(
+		handler: (signal?: AbortSignal) => Promise<TData>,
+		options?: Omit<AsyncSignalOptions<TData, TError>, 'immediate'>
+	): AsyncSignalSvelte<TData, TError>;
+}
+
+export interface AsyncSignalBatch<TSignals extends readonly AsyncSignalSvelte<unknown, unknown>[]> {
+	execute: () => TSignals;
+}
+
+const ASYNC_SIGNAL_BATCH_INTERNAL = Symbol('async-signal-batch-internal');
+
+interface AsyncSignalBatchInternal {
+	lock: (gate?: Promise<unknown>) => void;
+	unlock: () => void;
+	start: (source: AsyncSignalSource) => Promise<unknown>;
+}
+
+type BatchManagedAsyncSignal<TData, TError> = AsyncSignalSvelte<TData, TError> & {
+	[ASYNC_SIGNAL_BATCH_INTERNAL]: AsyncSignalBatchInternal;
+};
+
 const createAsyncSignalManager = () => {
 	const instances = BROWSER ? new Map<string, (source: AsyncSignalSource) => Promise<unknown>>() : undefined;
 
@@ -95,6 +122,9 @@ export const createAsyncSignal = <TData, TError = Error>(
 	let currentPromise: Promise<TData | undefined> | null = null;
 	let currentRunId = 0;
 	let started = false;
+	let batchLocked = false;
+	let batchGate: Promise<unknown> | null = null;
+	let batchSkipRequested = false;
 
 	const run = async (runId: number, source: AsyncSignalSource): Promise<TData | undefined> => {
 		const initial = !started;
@@ -163,7 +193,16 @@ export const createAsyncSignal = <TData, TError = Error>(
 		return localPromise;
 	};
 
+	const startWhenUnlocked = (source: AsyncSignalSource): Promise<unknown> => {
+		if (batchLocked) return batchGate ?? Promise.resolve(data);
+		return start(source);
+	};
+
 	const execute = async (): Promise<void> => {
+		if (batchLocked) {
+			await batchGate;
+			return;
+		}
 		if (currentPromise) {
 			await currentPromise;
 			return;
@@ -172,12 +211,16 @@ export const createAsyncSignal = <TData, TError = Error>(
 	};
 
 	const refresh = async (): Promise<void> => {
+		if (batchLocked) {
+			await batchGate;
+			return;
+		}
 		await start('manual');
 	};
 
 	if (BROWSER) {
 		const signalKey = key ?? asyncSignalManager.generateKey();
-		const callback = (source: AsyncSignalSource) => start(source);
+		const callback = (source: AsyncSignalSource) => startWhenUnlocked(source);
 		asyncSignalManager.register(signalKey, callback);
 		$effect(() => {
 			return () => {
@@ -196,7 +239,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 		}
 	}
 
-	return {
+	const asyncSignal: AsyncSignalSvelte<TData, TError> = {
 		get data() {
 			return data;
 		},
@@ -210,12 +253,14 @@ export const createAsyncSignal = <TData, TError = Error>(
 			return pending;
 		},
 		get ready() {
+			if (batchLocked) return (batchGate ?? Promise.resolve(data)) as Promise<TData | undefined>;
 			if (currentPromise) return currentPromise;
 			return start('auto');
 		},
 		execute,
 		refresh,
 		reset: () => {
+			if (batchLocked) batchSkipRequested = true;
 			currentRunId += 1;
 			abortController?.abort();
 			abortController = null;
@@ -225,6 +270,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 			status = 'idle';
 		},
 		abort: () => {
+			if (batchLocked) batchSkipRequested = true;
 			currentRunId += 1;
 			abortController?.abort();
 			abortController = null;
@@ -233,6 +279,117 @@ export const createAsyncSignal = <TData, TError = Error>(
 			status = 'idle';
 		}
 	};
+
+	Object.defineProperty(asyncSignal, ASYNC_SIGNAL_BATCH_INTERNAL, {
+		value: {
+			lock: (gate?: Promise<unknown>) => {
+				batchLocked = true;
+				batchGate = gate ?? null;
+				batchSkipRequested = false;
+			},
+			unlock: () => {
+				batchLocked = false;
+				batchGate = null;
+			},
+			start: (source: AsyncSignalSource) => {
+				if (batchSkipRequested) return Promise.resolve(undefined);
+				return start(source);
+			}
+		} satisfies AsyncSignalBatchInternal
+	});
+
+	return asyncSignal;
+};
+
+const createDeferred = () => {
+	let resolve!: (value: unknown) => void;
+	const promise = new Promise<unknown>((promiseResolve) => {
+		resolve = promiseResolve;
+	});
+
+	return { promise, resolve };
+};
+
+export const createAsyncSignalBatch = <const TSignals extends readonly AsyncSignalSvelte<unknown, unknown>[]>(
+	factory: (createSignal: AsyncSignalBatchFactory) => TSignals,
+	options: AsyncSignalBatchOptions = {}
+): AsyncSignalBatch<TSignals> => {
+	const internals = new Map<AsyncSignalSvelte<unknown, unknown>, AsyncSignalBatchInternal>();
+	const createSignal: AsyncSignalBatchFactory = <TData, TError = Error>(
+		handler: (signal?: AbortSignal) => Promise<TData>,
+		signalOptions: Omit<AsyncSignalOptions<TData, TError>, 'immediate'> = {}
+	) => {
+		const signal = createAsyncSignal(handler, { ...signalOptions, immediate: false }) as BatchManagedAsyncSignal<TData, TError>;
+		const internal = signal[ASYNC_SIGNAL_BATCH_INTERNAL];
+		internal.lock();
+		internals.set(signal, internal);
+		return signal;
+	};
+	const signals = factory(createSignal);
+	const uniqueSignals = new Set(signals);
+
+	if (uniqueSignals.size !== signals.length || signals.some((signal) => !internals.has(signal))) {
+		throw new Error('[AsyncSignalBatch] Factory must return each signal created by createSignal exactly once.');
+	}
+	if (internals.size !== signals.length) {
+		throw new Error('[AsyncSignalBatch] Factory must return every signal created by createSignal.');
+	}
+
+	let running = false;
+
+	const execute = (): TSignals => {
+		if (running || signals.length === 0) return signals;
+		running = true;
+
+		const gates = signals.map(() => createDeferred());
+		signals.forEach((signal, index) => {
+			internals.get(signal)?.lock(gates[index].promise);
+		});
+
+		queueMicrotask(() => {
+			if (options.parallel !== false) {
+				let remaining = signals.length;
+				signals.forEach((signal, index) => {
+					const internal = internals.get(signal)!;
+					void internal
+						.start('manual')
+						.catch(() => undefined)
+						.then((result) => {
+							gates[index].resolve(result);
+							internal.unlock();
+							remaining -= 1;
+							if (remaining === 0) running = false;
+						});
+				});
+				return;
+			}
+
+			void (async () => {
+				for (let index = 0; index < signals.length; index += 1) {
+					const signal = signals[index];
+					const internal = internals.get(signal)!;
+					const result = await internal.start('manual').catch(() => undefined);
+					gates[index].resolve(result);
+					internal.unlock();
+
+					if (signal.status !== 'success') {
+						for (let skippedIndex = index + 1; skippedIndex < signals.length; skippedIndex += 1) {
+							const skippedSignal = signals[skippedIndex];
+							gates[skippedIndex].resolve(undefined);
+							internals.get(skippedSignal)?.unlock();
+						}
+						break;
+					}
+				}
+			})().finally(() => {
+				running = false;
+			});
+		});
+
+		return signals;
+	};
+
+	return { execute };
 };
 
 export const refreshAsyncSignal = async (key: string) => {

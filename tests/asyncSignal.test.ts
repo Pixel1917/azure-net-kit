@@ -194,3 +194,224 @@ describe('AsyncSignal', () => {
 		expect(signal.status).toBe('idle');
 	});
 });
+
+describe('AsyncSignalBatch', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.resetModules();
+	});
+
+	it('does not start signals until execute and starts parallel signals together', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignalBatch } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const firstRequest = createDeferred<string>();
+		const secondRequest = createDeferred<string>();
+		const firstHandler = vi.fn(() => firstRequest.promise);
+		const secondHandler = vi.fn(() => secondRequest.promise);
+		const batch = createAsyncSignalBatch((createSignal) => [createSignal(firstHandler), createSignal(secondHandler, { initialData: 'initial' })]);
+
+		expect(firstHandler).not.toHaveBeenCalled();
+		expect(secondHandler).not.toHaveBeenCalled();
+
+		const [firstSignal, secondSignal] = batch.execute();
+		expect(firstHandler).not.toHaveBeenCalled();
+		expect(secondHandler).not.toHaveBeenCalled();
+		expect(secondSignal.data).toBe('initial');
+
+		await Promise.resolve();
+		expect(firstHandler).toHaveBeenCalledTimes(1);
+		expect(secondHandler).toHaveBeenCalledTimes(1);
+		expect(firstSignal.status).toBe('pending');
+		expect(secondSignal.status).toBe('pending');
+
+		firstRequest.resolve('first');
+		await firstSignal.ready;
+		expect(firstSignal.data).toBe('first');
+		expect(firstSignal.status).toBe('success');
+		expect(secondSignal.status).toBe('pending');
+
+		secondRequest.resolve('second');
+		await secondSignal.ready;
+		expect(secondSignal.data).toBe('second');
+	});
+
+	it('runs sequential signals in order and allows later handlers to read earlier data', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignalBatch } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const firstRequest = createDeferred<{ id: number }>();
+		const secondRequest = createDeferred<string>();
+		const firstHandler = vi.fn(() => firstRequest.promise);
+		const secondHandler = vi.fn((id: string) => {
+			void id;
+			return secondRequest.promise;
+		});
+		const batch = createAsyncSignalBatch(
+			(createSignal) => {
+				const first = createSignal(firstHandler);
+				const second = createSignal(() => secondHandler(String(first.data!.id)));
+				return [first, second] as const;
+			},
+			{ parallel: false }
+		);
+		const [firstSignal, secondSignal] = batch.execute();
+		const secondReady = secondSignal.ready;
+
+		await Promise.resolve();
+		expect(firstHandler).toHaveBeenCalledTimes(1);
+		expect(secondHandler).not.toHaveBeenCalled();
+		expect(secondSignal.status).toBe('idle');
+
+		firstRequest.resolve({ id: 42 });
+		await firstSignal.ready;
+		await Promise.resolve();
+		expect(secondHandler).toHaveBeenCalledWith('42');
+		expect(secondSignal.status).toBe('pending');
+
+		secondRequest.resolve('done');
+		await expect(secondReady).resolves.toBe('done');
+		expect(secondSignal.data).toBe('done');
+	});
+
+	it('waits for onSuccess before starting the next sequential signal', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignalBatch } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const success = createDeferred<void>();
+		const secondHandler = vi.fn(async () => 'second');
+		const batch = createAsyncSignalBatch(
+			(createSignal) => [createSignal(async () => 'first', { onSuccess: () => success.promise }), createSignal(secondHandler)],
+			{ parallel: false }
+		);
+		const [firstSignal, secondSignal] = batch.execute();
+
+		await vi.waitFor(() => expect(firstSignal.status).toBe('success'));
+		expect(secondHandler).not.toHaveBeenCalled();
+
+		success.resolve();
+		await firstSignal.ready;
+		await secondSignal.ready;
+		expect(secondHandler).toHaveBeenCalledTimes(1);
+	});
+
+	it('stops a sequential batch after an error and releases skipped ready promises', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignalBatch } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const failure = new Error('failed');
+		const secondHandler = vi.fn(async () => 'second');
+		const thirdHandler = vi.fn(async () => 'third');
+		const batch = createAsyncSignalBatch(
+			(createSignal) => [
+				createSignal(async () => {
+					throw failure;
+				}),
+				createSignal(secondHandler),
+				createSignal(thirdHandler)
+			],
+			{ parallel: false }
+		);
+		const [firstSignal, secondSignal, thirdSignal] = batch.execute();
+		const skippedReady = Promise.all([secondSignal.ready, thirdSignal.ready]);
+
+		await firstSignal.ready;
+		await expect(skippedReady).resolves.toEqual([undefined, undefined]);
+		expect(firstSignal.status).toBe('error');
+		expect(firstSignal.error).toBe(failure);
+		expect(secondSignal.status).toBe('idle');
+		expect(thirdSignal.status).toBe('idle');
+		expect(secondHandler).not.toHaveBeenCalled();
+		expect(thirdHandler).not.toHaveBeenCalled();
+	});
+
+	it('does not start a sequential signal aborted while it waits for its turn', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignalBatch } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const firstRequest = createDeferred<string>();
+		const secondHandler = vi.fn(async () => 'second');
+		const batch = createAsyncSignalBatch((createSignal) => [createSignal(() => firstRequest.promise), createSignal(secondHandler)], {
+			parallel: false
+		});
+		const [firstSignal, secondSignal] = batch.execute();
+		const secondReady = secondSignal.ready;
+
+		secondSignal.abort();
+		firstRequest.resolve('first');
+		await firstSignal.ready;
+		await expect(secondReady).resolves.toBeUndefined();
+		expect(secondHandler).not.toHaveBeenCalled();
+		expect(secondSignal.status).toBe('idle');
+	});
+
+	it('does not let global refresh bypass a dormant batch or a sequential gate', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: true }));
+		const { createAsyncSignalBatch, refreshAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const firstRequest = createDeferred<string>();
+		const secondRequest = createDeferred<string>();
+		const firstHandler = vi.fn(() => firstRequest.promise);
+		const secondHandler = vi.fn(() => secondRequest.promise);
+		const batch = createAsyncSignalBatch(
+			(createSignal) => [createSignal(firstHandler, { key: 'batch-first' }), createSignal(secondHandler, { key: 'batch-second' })],
+			{ parallel: false }
+		);
+
+		await refreshAsyncSignal('batch-second');
+		expect(secondHandler).not.toHaveBeenCalled();
+
+		const [firstSignal, secondSignal] = batch.execute();
+		const globalRefresh = refreshAsyncSignal('batch-second');
+		await Promise.resolve();
+		expect(firstHandler).toHaveBeenCalledTimes(1);
+		expect(secondHandler).not.toHaveBeenCalled();
+
+		firstRequest.resolve('first');
+		await firstSignal.ready;
+		expect(secondHandler).toHaveBeenCalledTimes(1);
+		secondRequest.resolve('second');
+		await globalRefresh;
+		expect(secondSignal.data).toBe('second');
+	});
+
+	it('deduplicates execute while running and can rerun the same signal tuple', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignalBatch } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const requests = [createDeferred<number>(), createDeferred<number>()];
+		const handler = vi.fn(() => requests[handler.mock.calls.length - 1].promise);
+		const batch = createAsyncSignalBatch((createSignal) => [createSignal(handler)]);
+		const firstExecution = batch.execute();
+		const duplicateExecution = batch.execute();
+
+		expect(duplicateExecution).toBe(firstExecution);
+		await Promise.resolve();
+		expect(handler).toHaveBeenCalledTimes(1);
+
+		requests[0].resolve(1);
+		await firstExecution[0].ready;
+
+		const secondExecution = batch.execute();
+		expect(secondExecution).toBe(firstExecution);
+		await Promise.resolve();
+		expect(handler).toHaveBeenCalledTimes(2);
+
+		requests[1].resolve(2);
+		await secondExecution[0].ready;
+		expect(secondExecution[0].data).toBe(2);
+	});
+
+	it('rejects foreign, duplicate and omitted factory signals', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal, createAsyncSignalBatch } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const foreignSignal = createAsyncSignal(async () => 'foreign', { immediate: false });
+
+		expect(() => createAsyncSignalBatch(() => [foreignSignal])).toThrow(/Factory must return each signal/);
+		expect(() =>
+			createAsyncSignalBatch((createSignal) => {
+				const signal = createSignal(async () => 'value');
+				return [signal, signal];
+			})
+		).toThrow(/Factory must return each signal/);
+		expect(() =>
+			createAsyncSignalBatch((createSignal) => {
+				createSignal(async () => 'omitted');
+				return [];
+			})
+		).toThrow(/Factory must return every signal/);
+	});
+});

@@ -8,7 +8,12 @@ export default mergeConfig(
 			conditions: ['browser']
 		},
 		test: {
-			include: ['tests/queryReactivity.test.ts', 'tests/activeFormReactivity.test.ts'],
+			include: [
+				'tests/queryReactivity.test.ts',
+				'tests/querySearchParams.test.ts',
+				'tests/activeFormReactivity.test.ts',
+				'tests/effectReactivity.test.ts'
+			],
 			environment: 'jsdom'
 		}
 	})

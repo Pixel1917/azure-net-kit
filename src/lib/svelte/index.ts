@@ -1,7 +1,11 @@
 export {
 	createAsyncSignal,
+	createAsyncSignalBatch,
 	refreshAsyncSignal,
 	refreshAllAsyncSignals,
+	type AsyncSignalBatch,
+	type AsyncSignalBatchFactory,
+	type AsyncSignalBatchOptions,
 	type AsyncSignalOptions,
 	type AsyncSignalSvelte,
 	type AsyncStatus,
@@ -21,4 +25,5 @@ export {
 	type LinkSignalOptions,
 	type ResetBehaviors
 } from './active-form/ActiveForm.svelte.js';
-export { createQuery, type QueryController, type CreateQueryOptions } from './query/Query.svelte.js';
+export { createEffect, type EffectCallback, type EffectCleanup, type EffectDependency } from './effect/Effect.svelte.js';
+export { createQuery, type CreateQueryOptions, type QueryController, type QueryPath, type QuerySearchParamsSync } from './query/Query.svelte.js';
