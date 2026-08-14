@@ -87,6 +87,51 @@ describe('AsyncSignal', () => {
 		expect(signal.error).toBeUndefined();
 	});
 
+	it('instance refresh supersedes an in-flight execution and keeps the latest result', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const first = createDeferred<string>();
+		const second = createDeferred<string>();
+		const requests = [first, second];
+		const aborts: boolean[] = [];
+		const handler = vi.fn((signal?: AbortSignal) => {
+			const request = requests[handler.mock.calls.length - 1];
+			signal?.addEventListener('abort', () => aborts.push(true), { once: true });
+			return request.promise;
+		});
+		const signal = createAsyncSignal(handler, { immediate: false });
+
+		const execution = signal.execute();
+		const refresh = signal.refresh();
+
+		expect(handler).toHaveBeenCalledTimes(2);
+		expect(aborts).toEqual([true]);
+
+		second.resolve('latest');
+		await refresh;
+		first.resolve('stale');
+		await execution;
+
+		expect(signal.data).toBe('latest');
+		expect(signal.status).toBe('success');
+	});
+
+	it('execute still deduplicates concurrent calls', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const request = createDeferred<string>();
+		const handler = vi.fn(() => request.promise);
+		const signal = createAsyncSignal(handler, { immediate: false });
+
+		const first = signal.execute();
+		const second = signal.execute();
+
+		expect(handler).toHaveBeenCalledTimes(1);
+		request.resolve('done');
+		await Promise.all([first, second]);
+		expect(signal.data).toBe('done');
+	});
+
 	it('handles beforeSend failures and remains executable', async () => {
 		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
 		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');

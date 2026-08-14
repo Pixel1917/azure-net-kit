@@ -4,10 +4,12 @@ import viteConfig from './vite.config';
 export default mergeConfig(
 	viteConfig,
 	defineConfig({
+		resolve: {
+			conditions: ['browser']
+		},
 		test: {
-			include: ['tests/**/*.test.ts'],
-			exclude: ['tests/queryReactivity.test.ts', 'tests/integration/**', 'e2e/**', 'dist/**', 'node_modules/**'],
-			environment: 'node'
+			include: ['tests/queryReactivity.test.ts'],
+			environment: 'jsdom'
 		}
 	})
 );

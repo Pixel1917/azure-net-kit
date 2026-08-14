@@ -1,4 +1,4 @@
-export { UniversalCookie, type CookieOptions } from './cookie/index.js';
+export { UniversalCookie, UniversalCookieInstance, UniversalNamedCookieInstance, type CookieOptions } from './cookie/index.js';
 export { BackgroundTask } from './background-task/index.js';
 export { AppEvents } from './event-bus/index.js';
 export { ClassMirror } from './class-mirror/index.js';

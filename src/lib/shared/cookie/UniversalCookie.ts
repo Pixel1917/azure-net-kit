@@ -13,12 +13,103 @@ export type CookieOptions = {
 	partitioned?: boolean | undefined;
 };
 
+const cloneCookieOptions = (options: CookieOptions): CookieOptions => ({
+	...options,
+	expires: options.expires instanceof Date ? new Date(options.expires) : options.expires
+});
+
+const mergeCookieOptions = (defaults: CookieOptions, overrides?: CookieOptions): CookieOptions =>
+	overrides ? { ...defaults, ...overrides } : defaults;
+
+/** Cookie operations with shared defaults and request-local resolution at call time. */
+export class UniversalCookieInstance {
+	private readonly defaults: CookieOptions;
+
+	constructor(options: CookieOptions = {}) {
+		this.defaults = cloneCookieOptions(options);
+	}
+
+	set<T>(name: string, value: T, options?: CookieOptions): void {
+		UniversalCookie.set(name, value, mergeCookieOptions(this.defaults, options));
+	}
+
+	get<T = string>(name: string): T | undefined {
+		return UniversalCookie.get<T>(name);
+	}
+
+	getAll<T = Record<string, unknown>>(): T | undefined {
+		return UniversalCookie.getAll<T>();
+	}
+
+	has(name: string): boolean {
+		return UniversalCookie.has(name);
+	}
+
+	delete(name: string, options?: CookieOptions): void {
+		UniversalCookie.delete(name, mergeCookieOptions(this.defaults, options));
+	}
+
+	clear(options?: CookieOptions): void {
+		UniversalCookie.clear(mergeCookieOptions(this.defaults, options));
+	}
+
+	toCredentials(): string {
+		return UniversalCookie.toCredentials();
+	}
+
+	createNamedInstance<T = string>(name: string): UniversalNamedCookieInstance<T> {
+		return new UniversalNamedCookieInstance<T>(name, this);
+	}
+}
+
+/** Type-safe operations for one cookie name. */
+export class UniversalNamedCookieInstance<T = string> {
+	readonly name: string;
+	private readonly cookies: UniversalCookieInstance;
+
+	constructor(name: string, cookies: UniversalCookieInstance) {
+		if (!name) throw new TypeError('Cookie name must not be empty.');
+		this.name = name;
+		this.cookies = cookies;
+	}
+
+	set(value: T, options?: CookieOptions): void {
+		this.cookies.set(this.name, value, options);
+	}
+
+	get(): T | undefined {
+		return this.cookies.get<T>(this.name);
+	}
+
+	has(): boolean {
+		return this.cookies.has(this.name);
+	}
+
+	delete(options?: CookieOptions): void {
+		this.cookies.delete(this.name, options);
+	}
+
+	clear(options?: CookieOptions): void {
+		this.delete(options);
+	}
+}
+
 /**
  * Utility class for managing cookies in svelte ssr (browser and server).
  * Supports setting, getting, deleting, checking, and clearing cookies.
  * All methods are static and operate without creating instances.
  */
 export class UniversalCookie {
+	/** Creates reusable cookie operations with shared defaults. */
+	public static createInstance(options: CookieOptions = {}): UniversalCookieInstance {
+		return new UniversalCookieInstance(options);
+	}
+
+	/** Creates reusable operations bound to one cookie name. */
+	public static createNamedInstance<T = string>(name: string, options: CookieOptions = {}): UniversalNamedCookieInstance<T> {
+		return this.createInstance(options).createNamedInstance<T>(name);
+	}
+
 	private static serialize<T>(value: T): string {
 		if (typeof value === 'string') return value;
 

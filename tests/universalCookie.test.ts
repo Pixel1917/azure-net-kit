@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RequestContext } from '@azure-net/edges/context';
+import { edgesHandleRaw } from '@azure-net/edges/server';
 import { UniversalCookie, type CookieOptions } from '../src/lib/shared/cookie/UniversalCookie.js';
 
 type CookieRecord = { name: string; value: string };
@@ -107,5 +108,97 @@ describe('UniversalCookie on the server', () => {
 
 	it('rejects values JSON.stringify cannot serialize', () => {
 		expect(() => UniversalCookie.set('invalid', undefined)).toThrow('Cookie value is not JSON-serializable');
+	});
+
+	it('creates an instance with reusable defaults and optional per-call overrides', () => {
+		const defaults: CookieOptions = {
+			domain: 'example.com',
+			path: '/app',
+			secure: true,
+			httpOnly: true,
+			sameSite: 'Strict'
+		};
+		const instance = UniversalCookie.createInstance(defaults);
+		defaults.path = '/mutated-after-creation';
+
+		instance.set('first', 'value');
+		instance.set('second', 'value', { path: '/custom', maxAge: 60 });
+
+		expect(cookies.set).toHaveBeenNthCalledWith(
+			1,
+			'first',
+			'value',
+			expect.objectContaining({ domain: 'example.com', path: '/app', secure: true, httpOnly: true, sameSite: 'strict' })
+		);
+		expect(cookies.set).toHaveBeenNthCalledWith(
+			2,
+			'second',
+			'value',
+			expect.objectContaining({ domain: 'example.com', path: '/custom', secure: true, maxAge: 60 })
+		);
+	});
+
+	it('creates a typed named instance without repeating its name or defaults', () => {
+		const cookiesApi = UniversalCookie.createInstance({ domain: 'example.com', path: '/account', secure: true });
+		const session = cookiesApi.createNamedInstance<{ userId: number }>('session');
+
+		session.set({ userId: 7 });
+
+		expect(session.name).toBe('session');
+		expect(session.get()).toEqual({ userId: 7 });
+		expect(session.has()).toBe(true);
+		expect(cookies.set).toHaveBeenLastCalledWith(
+			'session',
+			'{"userId":7}',
+			expect.objectContaining({ domain: 'example.com', path: '/account', secure: true })
+		);
+
+		session.clear();
+		expect(cookies.set).toHaveBeenLastCalledWith(
+			'session',
+			'',
+			expect.objectContaining({ domain: 'example.com', path: '/account', expires: new Date(0), maxAge: 0 })
+		);
+	});
+
+	it('supports directly creating a named instance', () => {
+		const theme = UniversalCookie.createNamedInstance<'light' | 'dark'>('theme', { path: '/settings', sameSite: 'Lax' });
+
+		theme.set('dark');
+
+		expect(theme.get()).toBe('dark');
+		expect(cookies.set).toHaveBeenLastCalledWith('theme', 'dark', expect.objectContaining({ path: '/settings', sameSite: 'lax' }));
+	});
+
+	it('rejects an empty named cookie', () => {
+		expect(() => UniversalCookie.createNamedInstance('')).toThrow('Cookie name must not be empty');
+	});
+
+	it('keeps module-level instances isolated between concurrent server requests', async () => {
+		const session = UniversalCookie.createNamedInstance<string>('session', { path: '/', httpOnly: true });
+		const firstCookies = createCookieJar();
+		const secondCookies = createCookieJar();
+		let releaseFirst!: () => void;
+		const firstBarrier = new Promise<void>((resolve) => {
+			releaseFirst = resolve;
+		});
+
+		const firstRequest = edgesHandleRaw({ cookies: firstCookies, url: new URL('https://example.com/first') } as never, async () => {
+			session.set('first');
+			await firstBarrier;
+			return new Response(session.get());
+		});
+		const secondRequest = edgesHandleRaw({ cookies: secondCookies, url: new URL('https://example.com/second') } as never, async () => {
+			session.set('second');
+			releaseFirst();
+			return new Response(session.get());
+		});
+
+		const [firstResponse, secondResponse] = await Promise.all([firstRequest, secondRequest]);
+
+		await expect(firstResponse.text()).resolves.toBe('first');
+		await expect(secondResponse.text()).resolves.toBe('second');
+		expect(firstCookies.values.get('session')).toBe('first');
+		expect(secondCookies.values.get('session')).toBe('second');
 	});
 });

@@ -171,6 +171,10 @@ export const createAsyncSignal = <TData, TError = Error>(
 		await start('manual');
 	};
 
+	const refresh = async (): Promise<void> => {
+		await start('manual');
+	};
+
 	if (BROWSER) {
 		const signalKey = key ?? asyncSignalManager.generateKey();
 		const callback = (source: AsyncSignalSource) => start(source);
@@ -210,7 +214,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 			return start('auto');
 		},
 		execute,
-		refresh: execute,
+		refresh,
 		reset: () => {
 			currentRunId += 1;
 			abortController?.abort();

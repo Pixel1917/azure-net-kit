@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "5.2.0",
+	"version": "5.3.0",
 	"license": "MIT",
 	"author": "Pixel1917",
 	"description": "Universal toolkit and library collection, developed as part of the Azure-net ecosystem",
@@ -28,8 +28,9 @@
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
 		"test:unit": "vitest --config vitest.config.ts",
+		"test:client": "vitest --config vitest.client.config.ts",
 		"test:integration": "vitest --config vitest.integration.config.ts --run",
-		"test": "pnpm test:unit -- --run && pnpm test:integration && pnpm test:e2e",
+		"test": "pnpm test:unit -- --run && pnpm test:client -- --run && pnpm test:integration && pnpm test:e2e",
 		"test:e2e": "playwright test",
 		"commit": "pnpm format && git add ."
 	},

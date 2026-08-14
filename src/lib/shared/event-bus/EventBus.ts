@@ -1,9 +1,16 @@
 import { EventBus } from '../../external/tools/index.js';
 import { createPresenter } from '../../external/edges/Edges.js';
 
-type AppEventsList = { [key: string]: unknown } & App.CustomEvents['list'];
+declare global {
+	// Namespace augmentation is required for SvelteKit's App.CustomEvents contract.
+	// eslint-disable-next-line @typescript-eslint/no-namespace
+	namespace App {
+		interface CustomEvents {
+			readonly __azureNetEvents__?: never;
+		}
+	}
+}
 
-export const AppEvents = createPresenter(() => {
-	const appEventBus = new EventBus<AppEventsList>({});
-	return appEventBus;
-});
+export type AppEventsList = App.CustomEvents extends { list: infer TEvents extends object } ? TEvents : Record<never, never>;
+
+export const AppEvents: () => EventBus<AppEventsList> = createPresenter<EventBus<AppEventsList>>(() => new EventBus<AppEventsList>({}));

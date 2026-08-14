@@ -41,4 +41,18 @@ describe('UniversalCookie in the browser', () => {
 		expect(UniversalCookie.get('literal')).toBe(false);
 		expect(UniversalCookie.getAll()).toEqual({ profile: { name: 'Ada' }, literal: false });
 	});
+
+	it('applies instance defaults and supports named browser cookies', () => {
+		const browserCookies = UniversalCookie.createInstance({ path: '/app', secure: true, sameSite: 'Lax' });
+		const preferences = browserCookies.createNamedInstance<{ compact: boolean }>('preferences');
+
+		preferences.set({ compact: true });
+
+		expect(cookieSet).toHaveBeenCalledWith('preferences', '{"compact":true}', {
+			path: '/app',
+			secure: true,
+			sameSite: 'Lax'
+		});
+		expect(preferences.get()).toEqual({ compact: true });
+	});
 });
