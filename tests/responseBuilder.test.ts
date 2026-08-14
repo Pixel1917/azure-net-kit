@@ -102,7 +102,7 @@ describe('ResponseBuilder', () => {
 
 		const result = new ResponseBuilder(response)
 			.addMeta({ page: 1 })
-			.addMeta((meta) => ({ total: (meta as { page: number }).page + 9 }))
+			.addMeta((meta) => ({ total: (meta as { page: number }).page + 9, ...meta }))
 			.getFlatten();
 
 		expect(result).toEqual({ data: { id: 1 }, page: 1, total: 10 });

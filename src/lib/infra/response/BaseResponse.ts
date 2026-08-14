@@ -86,9 +86,9 @@ export class ResponseBuilder<TData = unknown, TMeta = object, TWrapper = TData> 
 	}
 
 	addMeta<TNewMeta extends Record<string, unknown>>(
-		metaData: TNewMeta | ((current: TMeta) => TNewMeta)
+		metaData: TNewMeta | ((current: TMeta & TNewMeta) => TMeta & TNewMeta)
 	): Omit<this, keyof ResponseBuilder<unknown, unknown, unknown>> & ResponseBuilder<TData, TMeta & TNewMeta, TWrapper> {
-		const newMeta = typeof metaData === 'function' ? metaData(this.state.meta) : metaData;
+		const newMeta = typeof metaData === 'function' ? metaData(this.state.meta as TMeta & TNewMeta) : metaData;
 
 		const newResponse = new (this.constructor as typeof ResponseBuilder<unknown, unknown, unknown>)(this.response);
 		newResponse.state = {

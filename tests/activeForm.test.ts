@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
-import { createActiveForm, type ActiveFormController } from '../src/lib/svelte/active-form/ActiveForm.svelte.js';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { createActiveForm, type ActiveFormCallbackContext, type ActiveFormController } from '../src/lib/svelte/active-form/ActiveForm.svelte.js';
 import { ErrorTypes } from '../src/lib/shared/app-error/AppError.js';
 import type { AsyncActionResponse } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
+import type { AsyncSignalSvelte, AsyncStatus } from '../src/lib/svelte/async-signal/AsyncSignal.svelte.js';
 
 type FormData = { name: string };
 type Response = { id: number };
@@ -9,20 +10,27 @@ type Result = AsyncActionResponse<Response, FormData>;
 
 const createDeferred = <T>() => {
 	let resolve!: (value: T) => void;
-	const promise = new Promise<T>((next) => {
+	let reject!: (reason?: unknown) => void;
+	const promise = new Promise<T>((next, fail) => {
 		resolve = next;
+		reject = fail;
 	});
-	return { promise, resolve };
+	return { promise, reject, resolve };
+};
+
+const waitForStatus = async (form: { status: string }, status: string) => {
+	await vi.waitFor(() => expect(form.status).toBe(status));
 };
 
 describe('createActiveForm', () => {
 	it('loads synchronous initial data by value and tracks dirty state deeply', async () => {
 		const source = { name: 'initial' };
 		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }), {
-			initialData: () => source
+			initialValues: () => source
 		});
 
-		await expect(form.ready).resolves.toEqual({ name: 'initial' });
+		expect(form.status).toBe('idle');
+		expect(form.pending).toBe(false);
 		expect(form.data).toEqual({ name: 'initial' });
 		expect(form.data).not.toBe(source);
 		expect(form.dirty).toBe(false);
@@ -34,26 +42,26 @@ describe('createActiveForm', () => {
 		expect(form.dirty).toBe(false);
 	});
 
-	it('starts with empty data and resolves ready when initialData is omitted', async () => {
+	it('starts idle with empty data when initialValues is omitted', async () => {
 		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }));
 
-		await expect(form.ready).resolves.toEqual({});
+		expect(form.status).toBe('idle');
 		expect(form.data).toEqual({});
 		expect(form.errors).toEqual({});
 		expect(form.pending).toBe(false);
 		expect(form.dirty).toBe(false);
 	});
 
-	it('waits for initialData before submitting', async () => {
+	it('waits for initialValues before submitting', async () => {
 		const initial = createDeferred<Partial<FormData>>();
 		const onSubmit = vi.fn(async (): Promise<Result> => ({ success: true, response: { id: 1 } }));
 		const form = createActiveForm(onSubmit, {
-			initialData: () => initial.promise,
-			successBehavior: 'default'
+			initialValues: () => initial.promise
 		});
 
 		const submission = form.submit();
 		expect(form.pending).toBe(true);
+		expect(form.status).toBe('waitingForInitialValues');
 		expect(onSubmit).not.toHaveBeenCalled();
 
 		initial.resolve({ name: 'ready' });
@@ -61,21 +69,22 @@ describe('createActiveForm', () => {
 
 		expect(onSubmit).toHaveBeenCalledWith({ name: 'ready' });
 		expect(form.pending).toBe(false);
+		expect(form.status).toBe('success');
 	});
 
 	it('allows only the latest submission to update form state', async () => {
 		const first = createDeferred<Result>();
 		const second = createDeferred<Result>();
-		const onSubmit = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+		const onSubmit = vi.fn<(formData: Partial<FormData>) => Promise<Result>>().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
 		const form = createActiveForm(onSubmit, {
-			initialData: () => ({ name: 'initial' }),
-			successBehavior: 'clear'
+			initialValues: () => ({ name: 'initial' })
 		});
-		await form.ready;
+		await waitForStatus(form, 'idle');
 
 		form.data = { name: 'first' };
 		const firstSubmission = form.submit();
 		await Promise.resolve();
+		expect(form.status).toBe('pending');
 		form.data = { name: 'second' };
 		const secondSubmission = form.submit();
 		await Promise.resolve();
@@ -100,9 +109,9 @@ describe('createActiveForm', () => {
 	it('reset invalidates an in-flight submission', async () => {
 		const request = createDeferred<Result>();
 		const form = createActiveForm(() => request.promise, {
-			initialData: () => ({ name: 'initial' })
+			initialValues: () => ({ name: 'initial' })
 		});
-		await form.ready;
+		await waitForStatus(form, 'idle');
 
 		const submission = form.submit();
 		await Promise.resolve();
@@ -119,15 +128,16 @@ describe('createActiveForm', () => {
 		expect(form.errors).toEqual({});
 	});
 
-	it('does not let pending initialData overwrite an explicit reset', async () => {
+	it('does not let pending initialValues overwrite an explicit reset', async () => {
 		const initial = createDeferred<Partial<FormData>>();
 		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }), {
-			initialData: () => initial.promise
+			initialValues: () => initial.promise
 		});
 
 		await form.reset('clear');
 		initial.resolve({ name: 'stale initial' });
-		await form.ready;
+		await Promise.resolve();
+		await Promise.resolve();
 
 		expect(form.data).toEqual({});
 	});
@@ -135,9 +145,9 @@ describe('createActiveForm', () => {
 	it('reloads initial data on demand and clears existing errors', async () => {
 		let version = 0;
 		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }), {
-			initialData: () => ({ name: `initial-${++version}` })
+			initialValues: () => ({ name: `initial-${++version}` })
 		});
-		await form.ready;
+		await waitForStatus(form, 'idle');
 		form.data.name = 'changed';
 		form.errors = { name: 'error' };
 
@@ -148,6 +158,172 @@ describe('createActiveForm', () => {
 		expect(form.dirty).toBe(false);
 	});
 
+	it('reports reloadInitial as waiting for initial values', async () => {
+		const reloaded = createDeferred<Partial<FormData>>();
+		let loadCount = 0;
+		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }), {
+			initialValues: () => (++loadCount === 1 ? { name: 'initial' } : reloaded.promise)
+		});
+		await waitForStatus(form, 'idle');
+
+		const reset = form.reset('reloadInitial');
+		expect(form.status).toBe('waitingForInitialValues');
+		expect(form.pending).toBe(true);
+		reloaded.resolve({ name: 'reloaded' });
+		await reset;
+
+		expect(form.status).toBe('idle');
+		expect(form.pending).toBe(false);
+		expect(form.data).toEqual({ name: 'reloaded' });
+	});
+
+	it('applies only the latest concurrent reloadInitial result', async () => {
+		const firstReload = createDeferred<Partial<FormData>>();
+		const secondReload = createDeferred<Partial<FormData>>();
+		let loadCount = 0;
+		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }), {
+			initialValues: () => {
+				loadCount += 1;
+				if (loadCount === 1) return { name: 'initial' };
+				return loadCount === 2 ? firstReload.promise : secondReload.promise;
+			}
+		});
+		await waitForStatus(form, 'idle');
+
+		const firstReset = form.reset('reloadInitial');
+		const secondReset = form.reset('reloadInitial');
+		secondReload.resolve({ name: 'latest' });
+		await secondReset;
+		firstReload.resolve({ name: 'stale' });
+		await firstReset;
+
+		expect(form.data).toEqual({ name: 'latest' });
+		expect(form.status).toBe('idle');
+	});
+
+	it('recovers from an initial values failure through reloadInitial', async () => {
+		const failure = new Error('initial failed');
+		let loadCount = 0;
+		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }), {
+			initialValues: async () => {
+				if (++loadCount === 1) throw failure;
+				return { name: 'recovered' };
+			}
+		});
+		await waitForStatus(form, 'error');
+
+		await form.reset('reloadInitial');
+
+		expect(form.data).toEqual({ name: 'recovered' });
+		expect(form.status).toBe('idle');
+		expect(form.pending).toBe(false);
+	});
+
+	it('ignores a stale initial values rejection after an explicit reset', async () => {
+		const initial = createDeferred<Partial<FormData>>();
+		const onSubmit = vi.fn(async (): Promise<Result> => ({ success: true, response: { id: 1 } }));
+		const form = createActiveForm(onSubmit, { initialValues: () => initial.promise });
+
+		await form.reset('clear');
+		initial.reject(new Error('stale failure'));
+		await Promise.resolve();
+		await Promise.resolve();
+		await form.submit();
+
+		expect(onSubmit).toHaveBeenCalledWith({});
+		expect(form.status).toBe('success');
+	});
+
+	it('links a promise and maps its resolved value into initial values', async () => {
+		const user = createDeferred<{ profile: { displayName: string } }>();
+		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }), {
+			initialValues: ({ linkPromise }) =>
+				linkPromise(
+					() => user.promise,
+					(value) => ({ name: value.profile.displayName })
+				)
+		});
+
+		user.resolve({ profile: { displayName: 'Linked user' } });
+
+		await waitForStatus(form, 'idle');
+		expect(form.data).toEqual({ name: 'Linked user' });
+	});
+
+	it('links a pending signal, waits for ready and maps signal data', async () => {
+		type User = { login: string };
+		const request = createDeferred<User | undefined>();
+		let status: AsyncStatus = 'pending';
+		let data: User | undefined;
+		const ready = request.promise.then((value) => {
+			data = value;
+			status = 'success';
+			return value;
+		});
+		const signal: AsyncSignalSvelte<User, unknown> = {
+			get data() {
+				return data;
+			},
+			get error() {
+				return undefined;
+			},
+			get status() {
+				return status;
+			},
+			get pending() {
+				return status === 'pending';
+			},
+			ready,
+			execute: vi.fn(),
+			refresh: vi.fn(),
+			reset: vi.fn(),
+			abort: vi.fn()
+		};
+		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }), {
+			initialValues: ({ linkSignal }) => {
+				const linkedValues = linkSignal(signal, {
+					mapValues: (value) => ({ name: value?.login ?? '' })
+				});
+				expectTypeOf(linkedValues).toEqualTypeOf<Promise<{ name: string }>>();
+				return linkedValues;
+			}
+		});
+
+		request.resolve({ login: 'sergey' });
+
+		await waitForStatus(form, 'idle');
+		expect(form.data).toEqual({ name: 'sergey' });
+	});
+
+	it('uses the whole signal data and does not restart an already ready signal', async () => {
+		let readyReads = 0;
+		const signal: AsyncSignalSvelte<FormData, unknown> = {
+			data: { name: 'ready signal' },
+			error: undefined,
+			status: 'success',
+			pending: false,
+			get ready() {
+				readyReads += 1;
+				return Promise.reject(new Error('ready must not be read for a completed signal'));
+			},
+			execute: vi.fn(),
+			refresh: vi.fn(),
+			reset: vi.fn(),
+			abort: vi.fn()
+		};
+		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }), {
+			initialValues: ({ linkSignal }) => {
+				const linkedValues = linkSignal(signal);
+				expectTypeOf(linkedValues).toEqualTypeOf<Promise<FormData | undefined>>();
+				return linkedValues;
+			}
+		});
+
+		await waitForStatus(form, 'idle');
+		expect(form.data).toEqual({ name: 'ready signal' });
+		expect(readyReads).toBe(0);
+	});
+
 	it('lets beforeSubmit mutate data and abort without calling submit', async () => {
 		const onSubmit = vi.fn(async (): Promise<Result> => ({ success: true, response: { id: 1 } }));
 		const beforeSubmit = vi.fn(({ form, abort }: { form: ActiveFormController<FormData>; abort: () => void }) => {
@@ -155,10 +331,10 @@ describe('createActiveForm', () => {
 			abort();
 		});
 		const form = createActiveForm(onSubmit, {
-			initialData: () => ({ name: 'initial' }),
+			initialValues: () => ({ name: 'initial' }),
 			beforeSubmit
 		});
-		await form.ready;
+		await waitForStatus(form, 'idle');
 
 		const result = await form.submit();
 
@@ -167,42 +343,72 @@ describe('createActiveForm', () => {
 		expect(result.success).toBe(false);
 		expect(form.data).toEqual({ name: 'prepared' });
 		expect(form.pending).toBe(false);
+		expect(form.status).toBe('idle');
 	});
 
-	it('calls success callback and applies configured success behavior', async () => {
-		const onSuccess = vi.fn(async () => undefined);
+	it('passes the full response and form to onSuccess and lets the callback choose reset behavior', async () => {
+		const onSuccess = vi.fn(async ({ form }: ActiveFormCallbackContext<FormData, Response, Record<never, never>>) => form.reset('clear'));
 		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 42 } }), {
-			initialData: () => ({ name: 'initial' }),
-			onSuccess,
-			successBehavior: 'clear'
+			initialValues: () => ({ name: 'initial' }),
+			onSuccess
 		});
-		await form.ready;
+		await waitForStatus(form, 'idle');
 		form.data.name = 'submitted';
 
 		const result = await form.submit();
 
 		expect(result).toEqual({ success: true, response: { id: 42 } });
-		expect(onSuccess).toHaveBeenCalledWith({ id: 42 });
+		expect(onSuccess).toHaveBeenCalledWith({ form, response: result });
 		expect(form.data).toEqual({});
 		expect(form.errors).toEqual({});
+		expect(form.status).toBe('idle');
 	});
 
-	it('preserves data by default after success while clearing errors', async () => {
+	it('does not mutate form state automatically after success', async () => {
 		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }), {
-			initialData: () => ({ name: 'initial' })
+			initialValues: () => ({ name: 'initial' })
 		});
-		await form.ready;
+		await waitForStatus(form, 'idle');
 		form.data.name = 'submitted';
 		form.errors = { name: 'old error' };
 
 		await form.submit();
 
 		expect(form.data).toEqual({ name: 'submitted' });
-		expect(form.errors).toEqual({});
+		expect(form.errors).toEqual({ name: 'old error' });
 		expect(form.dirty).toBe(true);
+		expect(form.status).toBe('success');
 	});
 
-	it('maps validation errors and awaits onError', async () => {
+	it('keeps pending true until an asynchronous submit callback finishes', async () => {
+		const callback = createDeferred<void>();
+		const onSuccess = vi.fn(() => callback.promise);
+		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }), { onSuccess });
+
+		const submission = form.submit();
+		await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+		expect(form.status).toBe('pending');
+		expect(form.pending).toBe(true);
+		callback.resolve();
+		await submission;
+
+		expect(form.status).toBe('success');
+		expect(form.pending).toBe(false);
+	});
+
+	it('moves to error and releases pending when submit throws', async () => {
+		const failure = new Error('request failed');
+		const form = createActiveForm(async (): Promise<Result> => {
+			throw failure;
+		});
+
+		await expect(form.submit()).rejects.toBe(failure);
+
+		expect(form.status).toBe('error');
+		expect(form.pending).toBe(false);
+	});
+
+	it('maps validation errors and passes the full response and form to onError', async () => {
 		const onError = vi.fn(async () => undefined);
 		const form = createActiveForm(
 			async (): Promise<Result> => ({
@@ -213,26 +419,27 @@ describe('createActiveForm', () => {
 			{ onError }
 		);
 
-		await form.submit();
+		const result = await form.submit();
 
 		expect(form.errors).toEqual({ name: 'Required' });
 		expect(onError).toHaveBeenCalledTimes(1);
+		expect(onError).toHaveBeenCalledWith({ form, response: result });
 		expect(form.pending).toBe(false);
+		expect(form.status).toBe('error');
 	});
 
-	it('propagates initialData failures and releases pending state', async () => {
+	it('propagates initialValues failures and releases pending state', async () => {
 		const failure = new Error('initial failed');
 		const onSubmit = vi.fn(async (): Promise<Result> => ({ success: true, response: { id: 1 } }));
 		const form = createActiveForm(onSubmit, {
-			initialData: async () => {
+			initialValues: async () => {
 				throw failure;
 			}
 		});
-		void form.ready.catch(() => undefined);
-
 		await expect(form.submit()).rejects.toBe(failure);
 		expect(onSubmit).not.toHaveBeenCalled();
 		expect(form.pending).toBe(false);
+		expect(form.status).toBe('error');
 	});
 
 	it('preserves rich initial values and protects the reset baseline', async () => {
@@ -251,13 +458,12 @@ describe('createActiveForm', () => {
 			optional: undefined
 		};
 		const form = createActiveForm(async (): Promise<RichResult> => ({ success: true, response: { id: 1 } }), {
-			initialData: () => source
+			initialValues: () => source
 		});
 
-		const readyValue = await form.ready;
+		await waitForStatus(form, 'idle');
 		source.createdAt.setUTCFullYear(2000);
 		source.metadata.get('settings')!.enabled = false;
-		readyValue.metadata!.get('settings')!.enabled = false;
 
 		expect(form.data.createdAt).toBeInstanceOf(Date);
 		expect(form.data.createdAt!.toISOString()).toBe('2026-08-13T10:00:00.000Z');

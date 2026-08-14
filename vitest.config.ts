@@ -6,7 +6,14 @@ export default mergeConfig(
 	defineConfig({
 		test: {
 			include: ['tests/**/*.test.ts'],
-			exclude: ['tests/queryReactivity.test.ts', 'tests/integration/**', 'e2e/**', 'dist/**', 'node_modules/**'],
+			exclude: [
+				'tests/queryReactivity.test.ts',
+				'tests/activeFormReactivity.test.ts',
+				'tests/integration/**',
+				'e2e/**',
+				'dist/**',
+				'node_modules/**'
+			],
 			environment: 'node'
 		}
 	})
