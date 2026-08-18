@@ -20,7 +20,7 @@ type ProviderFactory<T extends ServiceMap, D extends Record<string, ProviderWith
 
 export interface ProviderSettings<T extends ServiceMap, D extends Record<string, ProviderWithType<ServiceMap>>> {
 	dependsOn?: D;
-	boot?: (services: ResolvedServices<T>) => void | Promise<void>;
+	boot?: (services: ResolvedServices<T>) => undefined;
 	register: ProviderFactory<T, D>;
 }
 
@@ -38,19 +38,19 @@ const getProviderCache = (providerName: string): Map<string, unknown> => {
 		return clientCache.get(providerName)!;
 	} else {
 		const context = RequestContext.current();
-		if (!context.data.providers) {
-			context.data.providers = new Map();
+		if (!context.data.azureNetKitBoundaryProviders) {
+			context.data.azureNetKitBoundaryProviders = new Map();
 		}
 
-		const providers = context.data.providers as Map<string, Map<string, unknown>>;
+		const providers = context.data.azureNetKitBoundaryProviders as Map<string, Map<string, unknown>>;
 		if (!providers.has(providerName)) {
 			providers.set(providerName, new Map());
 		}
 
-		if (!context.data.providersToCleanup) {
-			context.data.providersToCleanup = new Set<string>();
+		if (!context.data.azureNetKitBoundaryProvidersToCleanup) {
+			context.data.azureNetKitBoundaryProvidersToCleanup = new Set<string>();
 		}
-		(context.data.providersToCleanup as Set<string>).add(providerName);
+		(context.data.azureNetKitBoundaryProvidersToCleanup as Set<string>).add(providerName);
 
 		return providers.get(providerName)!;
 	}
@@ -210,13 +210,14 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 		}
 
 		if (boot && !getBootFlag(name)) {
-			setBootFlag(name, true);
 			getFactories();
 
-			const bootResult = boot(providerProxy);
-			if (bootResult instanceof Promise) {
-				bootResult.catch((err) => console.error(`Error in boot for provider '${name}':`, err));
+			const bootResult = boot(providerProxy) as unknown;
+			if (bootResult && typeof (bootResult as PromiseLike<unknown>).then === 'function') {
+				void Promise.resolve(bootResult).catch(() => undefined);
+				throw new AzureNetKitInternalError(`[BoundaryProvider] Boot for provider '${name}' must be synchronous.`);
 			}
+			setBootFlag(name, true);
 		}
 
 		return providerProxy;
@@ -252,7 +253,7 @@ export async function cleanupProvider(name: string): Promise<void> {
 		if (cache) await cleanupCache(cache);
 	} else {
 		const context = RequestContext.current();
-		const providers = context.data.providers as Map<string, Map<string, unknown>> | undefined;
+		const providers = context.data.azureNetKitBoundaryProviders as Map<string, Map<string, unknown>> | undefined;
 		if (providers?.has(name)) {
 			const cache = providers.get(name)!;
 			providers.delete(name);

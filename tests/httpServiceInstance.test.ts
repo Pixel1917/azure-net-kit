@@ -208,7 +208,7 @@ describe('HttpServiceInstance', () => {
 			status: 200,
 			headers: new Headers([['x-one', '1']]),
 			json: async () => ({ data: true }),
-			text: async () => '',
+			text: async () => JSON.stringify({ data: true }),
 			blob: async () => new Blob(),
 			arrayBuffer: async () => new ArrayBuffer(0),
 			formData: async () => new FormData(),
@@ -244,6 +244,16 @@ describe('HttpServiceInstance', () => {
 		const result = await createHttpServiceInstance().delete('/resource');
 
 		expect(result.status).toBe(204);
+		expect(result.data).toBeUndefined();
+	});
+
+	it('accepts successful 200 responses with an empty json body', async () => {
+		const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+
+		const result = await createHttpServiceInstance().get('/empty');
+
+		expect(result.status).toBe(200);
 		expect(result.data).toBeUndefined();
 	});
 

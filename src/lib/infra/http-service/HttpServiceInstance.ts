@@ -242,10 +242,14 @@ const parseBodyByFormat = async <T>(response: Response, format: HttpInstanceNorm
 			return (await response.arrayBuffer()) as T;
 		case 'body':
 			return response.body as T;
-		case 'json':
-			return (await response.json()) as T;
-		default:
-			return (await response.json()) as T;
+		case 'json': {
+			const text = await response.text();
+			return (text.trim() ? JSON.parse(text) : undefined) as T;
+		}
+		default: {
+			const text = await response.text();
+			return (text.trim() ? JSON.parse(text) : undefined) as T;
+		}
 	}
 };
 

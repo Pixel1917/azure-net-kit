@@ -67,6 +67,12 @@ describe('Schema', () => {
 		expect(formData.get('age')).toBe('21');
 	});
 
+	it('rejects null passed to from()', () => {
+		const userSchema = schema<{ name: string }>().create();
+
+		expect(() => userSchema.from(null as never)).toThrow('Data in "from" method can be only valid object or formData.');
+	});
+
 	it('exposes toJson and toFormData from validated()', () => {
 		const userSchema = schema<{ name: string }>()
 			.transform((data) => ({ ...data, name: data.name.trim() }))

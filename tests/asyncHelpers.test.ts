@@ -118,6 +118,38 @@ describe('AsyncHelpers', () => {
 		expect(result).toEqual({ success: true, response: { ok: true, calls: 2 } });
 	});
 
+	it('does not repeat a successful action when onSuccess fails and retry is requested', async () => {
+		let actionCalls = 0;
+		let retryAvailable: boolean | undefined;
+		const { createAsyncAction } = createAsyncHelpers();
+		const result = await runInApp(
+			() =>
+				createAsyncAction(
+					async () => {
+						actionCalls += 1;
+						return { ok: true };
+					},
+					{
+						onSuccess: () => {
+							throw new Error('consumer success callback failed');
+						}
+					}
+				),
+			async ({ error, retry }) => {
+				retryAvailable = retry.can;
+				await retry.call?.();
+				return error.toPlainObject();
+			}
+		);
+
+		expect(actionCalls).toBe(1);
+		expect(retryAvailable).toBe(false);
+		expect(result).toMatchObject({
+			success: false,
+			error: { message: 'consumer success callback failed' }
+		});
+	});
+
 	it('keeps the failed response when retry also fails', async () => {
 		let calls = 0;
 		const { createAsyncAction } = createAsyncHelpers();

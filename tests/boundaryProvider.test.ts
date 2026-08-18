@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RequestContext } from '@azure-net/edges/context';
+import { createPresenter } from '@azure-net/edges';
 import { cleanupProvider, createBoundaryProvider } from '../src/lib/shared/boundary-provider/Provider.js';
 import type { ProviderWithType } from '../src/lib/shared/boundary-provider/Provider.js';
 
@@ -27,6 +28,23 @@ describe('createBoundaryProvider', () => {
 
 		expect(first.id).toBe(1);
 		expect(second.id).toBe(1);
+	});
+
+	it('keeps boundary and Edges provider caches isolated when names match', () => {
+		const name = 'SharedProviderName';
+		const Presenter = createPresenter(name, () => ({ source: 'edges' }));
+		const BoundaryProvider = createBoundaryProvider(name, {
+			register: () => ({ service: () => ({ source: 'boundary' }) })
+		});
+
+		expect(Presenter()).toEqual({ source: 'edges' });
+		expect(BoundaryProvider().service).toEqual({ source: 'boundary' });
+		expect(Presenter()).toEqual({ source: 'edges' });
+
+		const data = context.data as Record<string, unknown>;
+		expect(data.providers).toBeInstanceOf(Map);
+		expect(data.azureNetKitBoundaryProviders).toBeInstanceOf(Map);
+		expect(data.azureNetKitBoundaryProviders).not.toBe(data.providers);
 	});
 
 	it('throws for missing service key', () => {
@@ -82,6 +100,15 @@ describe('createBoundaryProvider', () => {
 		AppProvider();
 
 		expect(boot).toHaveBeenCalledTimes(1);
+	});
+
+	it('rejects asynchronous boot at runtime', () => {
+		const AppProvider = createBoundaryProvider('AsyncBootProvider', {
+			register: () => ({ svc: () => ({ ok: true }) }),
+			boot: (async () => undefined) as never
+		});
+
+		expect(() => AppProvider()).toThrow("Boot for provider 'AsyncBootProvider' must be synchronous");
 	});
 
 	it('cleanupProvider calls dispose on cached services', async () => {

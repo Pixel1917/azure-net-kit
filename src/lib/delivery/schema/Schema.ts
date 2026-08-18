@@ -171,7 +171,7 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 				let _errors: RequestErrors<SchemaData> = {};
 				let _isValid = true;
 
-				if (typeof _preparedData !== 'object') {
+				if (_preparedData === null || typeof _preparedData !== 'object') {
 					throw new AzureNetKitInternalError('[Schema] Data in "from" method can be only valid object or formData.');
 				}
 

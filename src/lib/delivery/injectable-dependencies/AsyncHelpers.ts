@@ -99,26 +99,43 @@ export const createAsyncHelpers = <ErrorResult extends object>() => {
 		const beforeSendResult = await beforeSendResolver(args);
 		if (beforeSendResult) return beforeSendResult;
 
-		const req = async () => {
+		const executeAction = async () => {
 			const response = await Promise.resolve(action());
-			const result = { response, success: true } as AsyncActionResponse<Res, never, ErrorResult>;
-			await args?.onSuccess?.(result);
-			return result;
+			return { response, success: true } as AsyncActionResponse<Res, never, ErrorResult>;
 		};
-		try {
-			return await req();
-		} catch (err) {
-			const { error, retryResult } = await prepareErrors<Res, Req>(normalizeError(err), async () => await req());
+
+		const handleFailure = async (
+			err: unknown,
+			retry?: () => Promise<AsyncActionResponse<Res, Req, ErrorResult>>
+		): Promise<AsyncActionResponse<Res, Req, ErrorResult>> => {
+			const { error, retryResult } = await prepareErrors<Res, Req>(normalizeError(err), retry);
 			if (retryResult) {
-				return retryResult as AsyncActionResponse<Res, never, ErrorResult>;
+				return completeSuccess(retryResult);
 			}
 			const result = { error, response: args?.fallbackResponse as Res, success: false };
 			try {
 				await args?.onError?.(result as AsyncActionResponse<never, Req, ErrorResult>);
-			} catch (err) {
-				throw await resolveAzureNetKitError<Req, ErrorResult>(new AsyncHelperError('onError caught exception', { cause: normalizeError(err) }));
+			} catch (onErrorException) {
+				throw await resolveAzureNetKitError<Req, ErrorResult>(
+					new AsyncHelperError('onError caught exception', { cause: normalizeError(onErrorException) })
+				);
 			}
 			return result;
+		};
+
+		const completeSuccess = async (result: AsyncActionResponse<Res, Req, ErrorResult>): Promise<AsyncActionResponse<Res, Req, ErrorResult>> => {
+			try {
+				await args?.onSuccess?.(result as AsyncActionResponse<Res, never, ErrorResult>);
+				return result;
+			} catch (err) {
+				return handleFailure(err);
+			}
+		};
+
+		try {
+			return completeSuccess(await executeAction());
+		} catch (err) {
+			return handleFailure(err, executeAction);
 		}
 	};
 
