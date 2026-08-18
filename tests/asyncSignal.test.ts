@@ -50,7 +50,8 @@ describe('AsyncSignal', () => {
 		req1.resolve('stale');
 		await manualPromise;
 
-		expect(signal.data).toBe('latest');
+		expect(signal.response).toBe('latest');
+		expect('data' in signal).toBe(false);
 		expect(signal.status).toBe('success');
 	});
 
@@ -82,7 +83,7 @@ describe('AsyncSignal', () => {
 		req1.reject(new Error('stale-failure'));
 		await manualPromise;
 
-		expect(signal.data).toBe('ok-new');
+		expect(signal.response).toBe('ok-new');
 		expect(signal.status).toBe('success');
 		expect(signal.error).toBeUndefined();
 	});
@@ -112,7 +113,7 @@ describe('AsyncSignal', () => {
 		first.resolve('stale');
 		await execution;
 
-		expect(signal.data).toBe('latest');
+		expect(signal.response).toBe('latest');
 		expect(signal.status).toBe('success');
 	});
 
@@ -129,7 +130,100 @@ describe('AsyncSignal', () => {
 		expect(handler).toHaveBeenCalledTimes(1);
 		request.resolve('done');
 		await Promise.all([first, second]);
-		expect(signal.data).toBe('done');
+		expect(signal.response).toBe('done');
+	});
+
+	it('ready resolves immediately without starting an idle signal', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const handler = vi.fn(async () => 'loaded');
+		const signal = createAsyncSignal(handler, { immediate: false, initialData: 'initial' });
+		const ready = signal.ready;
+
+		await expect(ready).resolves.toBe('initial');
+		expect(signal.ready).toBe(ready);
+		expect(handler).not.toHaveBeenCalled();
+		expect(signal.status).toBe('idle');
+	});
+
+	it('keeps an immediate client-only signal pending during SSR without executing it', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const handler = vi.fn(async () => 'loaded');
+		const signal = createAsyncSignal(handler);
+
+		expect(signal.status).toBe('pending');
+		expect(signal.pending).toBe(true);
+		await expect(signal.ready).resolves.toBeUndefined();
+		expect(signal.status).toBe('pending');
+		expect(handler).not.toHaveBeenCalled();
+
+		await signal.execute();
+		expect(handler).toHaveBeenCalledTimes(1);
+		expect(signal.response).toBe('loaded');
+		expect(signal.status).toBe('success');
+	});
+
+	it('executes an immediate server signal and settles its SSR pending state', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const request = createDeferred<string>();
+		const handler = vi.fn(() => request.promise);
+		const signal = createAsyncSignal(handler, { server: true });
+
+		expect(signal.status).toBe('pending');
+		expect(handler).toHaveBeenCalledTimes(1);
+		request.resolve('server response');
+		await expect(signal.ready).resolves.toBe('server response');
+		expect(signal.response).toBe('server response');
+		expect(signal.status).toBe('success');
+	});
+
+	it('ready waits for the active cycle across refresh and never restarts a completed signal', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const first = createDeferred<string>();
+		const second = createDeferred<string>();
+		const requests = [first, second];
+		const handler = vi.fn(() => requests[handler.mock.calls.length - 1].promise);
+		const signal = createAsyncSignal(handler, { immediate: false });
+
+		const execution = signal.execute();
+		const ready = signal.ready;
+		const refresh = signal.refresh();
+
+		expect(handler).toHaveBeenCalledTimes(2);
+		expect(signal.ready).toBe(ready);
+
+		second.resolve('latest');
+		await expect(ready).resolves.toBe('latest');
+		await refresh;
+		await expect(signal.ready).resolves.toBe('latest');
+		expect(handler).toHaveBeenCalledTimes(2);
+
+		first.resolve('stale');
+		await execution;
+		expect(signal.response).toBe('latest');
+	});
+
+	it('ready settles after a failed request without starting a retry', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const failure = new Error('failed');
+		const handler = vi.fn(async () => {
+			throw failure;
+		});
+		const signal = createAsyncSignal(handler, { immediate: false });
+
+		const execution = signal.execute();
+		const ready = signal.ready;
+
+		await execution;
+		await expect(ready).resolves.toBeUndefined();
+		expect(signal.status).toBe('error');
+		expect(signal.error).toBe(failure);
+		await expect(signal.ready).resolves.toBeUndefined();
+		expect(handler).toHaveBeenCalledTimes(1);
 	});
 
 	it('handles beforeSend failures and remains executable', async () => {
@@ -156,7 +250,7 @@ describe('AsyncSignal', () => {
 		shouldFail = false;
 		await signal.execute();
 		expect(signal.status).toBe('success');
-		expect(signal.data).toBe('ok');
+		expect(signal.response).toBe('ok');
 	});
 
 	it('reset invalidates an in-flight handler even when it ignores AbortSignal', async () => {
@@ -166,12 +260,14 @@ describe('AsyncSignal', () => {
 		const signal = createAsyncSignal(() => request.promise, { immediate: false });
 
 		const execution = signal.execute();
+		const ready = signal.ready;
 		expect(signal.pending).toBe(true);
 		signal.reset();
+		await expect(ready).resolves.toBeUndefined();
 		request.resolve('stale');
 		await execution;
 
-		expect(signal.data).toBeUndefined();
+		expect(signal.response).toBeUndefined();
 		expect(signal.error).toBeUndefined();
 		expect(signal.status).toBe('idle');
 		expect(signal.pending).toBe(false);
@@ -184,13 +280,15 @@ describe('AsyncSignal', () => {
 		const signal = createAsyncSignal(() => request.promise, { immediate: false });
 
 		const execution = signal.execute();
+		const ready = signal.ready;
 		signal.abort();
+		await expect(ready).resolves.toBeUndefined();
 		expect(signal.status).toBe('idle');
 		expect(signal.pending).toBe(false);
 
 		request.resolve('stale');
 		await execution;
-		expect(signal.data).toBeUndefined();
+		expect(signal.response).toBeUndefined();
 		expect(signal.status).toBe('idle');
 	});
 });
@@ -216,7 +314,7 @@ describe('AsyncSignalBatch', () => {
 		const [firstSignal, secondSignal] = batch.execute();
 		expect(firstHandler).not.toHaveBeenCalled();
 		expect(secondHandler).not.toHaveBeenCalled();
-		expect(secondSignal.data).toBe('initial');
+		expect(secondSignal.response).toBe('initial');
 
 		await Promise.resolve();
 		expect(firstHandler).toHaveBeenCalledTimes(1);
@@ -226,13 +324,13 @@ describe('AsyncSignalBatch', () => {
 
 		firstRequest.resolve('first');
 		await firstSignal.ready;
-		expect(firstSignal.data).toBe('first');
+		expect(firstSignal.response).toBe('first');
 		expect(firstSignal.status).toBe('success');
 		expect(secondSignal.status).toBe('pending');
 
 		secondRequest.resolve('second');
 		await secondSignal.ready;
-		expect(secondSignal.data).toBe('second');
+		expect(secondSignal.response).toBe('second');
 	});
 
 	it('runs sequential signals in order and allows later handlers to read earlier data', async () => {
@@ -248,7 +346,7 @@ describe('AsyncSignalBatch', () => {
 		const batch = createAsyncSignalBatch(
 			(createSignal) => {
 				const first = createSignal(firstHandler);
-				const second = createSignal(() => secondHandler(String(first.data!.id)));
+				const second = createSignal(() => secondHandler(String(first.response!.id)));
 				return [first, second] as const;
 			},
 			{ parallel: false }
@@ -269,7 +367,7 @@ describe('AsyncSignalBatch', () => {
 
 		secondRequest.resolve('done');
 		await expect(secondReady).resolves.toBe('done');
-		expect(secondSignal.data).toBe('done');
+		expect(secondSignal.response).toBe('done');
 	});
 
 	it('waits for onSuccess before starting the next sequential signal', async () => {
@@ -366,7 +464,7 @@ describe('AsyncSignalBatch', () => {
 		expect(secondHandler).toHaveBeenCalledTimes(1);
 		secondRequest.resolve('second');
 		await globalRefresh;
-		expect(secondSignal.data).toBe('second');
+		expect(secondSignal.response).toBe('second');
 	});
 
 	it('deduplicates execute while running and can rerun the same signal tuple', async () => {
@@ -392,7 +490,7 @@ describe('AsyncSignalBatch', () => {
 
 		requests[1].resolve(2);
 		await secondExecution[0].ready;
-		expect(secondExecution[0].data).toBe(2);
+		expect(secondExecution[0].response).toBe(2);
 	});
 
 	it('rejects foreign, duplicate and omitted factory signals', async () => {

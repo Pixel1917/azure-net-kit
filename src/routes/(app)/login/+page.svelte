@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createAsyncSignal } from '$lib/svelte/index.js';
+	import { createAsyncSignal, createQuery } from '$lib/svelte/index.js';
 	import { PublicPresenter, PublicStore } from '../../../app/mock-api-context/layers/delivery/public/index.js';
 	import type { PageProps } from '../../../../.svelte-kit/types/src/routes/(app)/login/$types.js';
 	import { Container } from '../../../program.js';
@@ -13,6 +13,8 @@
 
 	const { collection, willFail } = PublicPresenter();
 
+	const query = createQuery({ page: 1, perPage: 20, ivan: { collection: [] } }, { syncWithSearchParams: true });
+
 	const signal = createAsyncSignal(() => collection(), {
 		immediate: false,
 		initialData: () => data.collection
@@ -21,6 +23,12 @@
 	const failSignal = createAsyncSignal(() => willFail(), {
 		immediate: false
 	});
+
+	query.createEffect(() => {
+		if (!signal.pending) {
+			signal.refresh();
+		}
+	}, ['ivan.collection', 'page', 'perPage']);
 </script>
 
 <a href="/">kra</a>
@@ -45,10 +53,10 @@
 
 <button onclick={() => failSignal.execute()}>test fail signal</button>
 
-{#if signal.data && !signal.pending}
-	{$t({ key: 'count', vars: { count: signal.data.meta?.count ?? 1 } })}
+{#if signal.response && !signal.pending}
+	{$t({ key: 'count', vars: { count: signal.response.meta?.count ?? 1 } })}
 	<br />
-	{#each signal.data.data as dataEl (dataEl.id)}
+	{#each signal.response.data as dataEl (dataEl.id)}
 		<p>id: {dataEl.id}</p>
 		<p>name: {dataEl.name}</p>
 		<p>price: {dataEl.price}</p>

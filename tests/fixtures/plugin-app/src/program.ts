@@ -27,9 +27,10 @@ export const { register } = createApp(
 				if (new URL(request.url).pathname === '/fixture-fetch') return new Response('intercepted');
 				return fetch(request);
 			})
-			.useServer(({ event }) => {
+			.useServer(({ event, resolve }) => {
 				event.locals.pluginMarker = 'handled';
 				UniversalCookie.set('fixture-cookie', 'hello world');
+				return resolve(event, { transformPageChunk: () => undefined });
 			}),
 	'AzureNetPluginFixtureApp'
 );

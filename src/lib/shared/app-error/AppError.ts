@@ -1,6 +1,7 @@
 import { HttpErrorTypes, HttpServiceError } from '../../infra/http-service/HttpServiceInstance.js';
 import { type RequestErrors, SchemaFail } from '../../delivery/schema/Schema.js';
-import { AsyncHelperError } from '../../delivery/injectable-dependencies/AsyncHelpers.js';
+
+export class AsyncHelperError extends Error {}
 
 export enum ErrorTypes {
 	Http = 'Http',

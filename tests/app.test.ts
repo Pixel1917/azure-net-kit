@@ -388,7 +388,7 @@ describe('createApp', () => {
 		expect(app.register.transport).toBe(transport);
 	});
 
-	it.each(['useServerFetch', 'useServerValidationError', 'useReroute', 'useTransport'] as const)(
+	it.each(['useServerFetch', 'useServerValidationError', 'useAzureNetKitError', 'useReroute', 'useTransport'] as const)(
 		'throws when %s is registered twice at runtime',
 		(method) => {
 			expect(() =>

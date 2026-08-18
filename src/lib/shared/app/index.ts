@@ -1,5 +1,7 @@
 export {
 	createApp,
+	type AppAzureNetKitErrorCallback,
+	type AppAzureNetKitErrorContext,
 	type AppClientErrorCallback,
 	type AppClientErrorContext,
 	type AppClientInitLifecycleCallback,

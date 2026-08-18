@@ -16,10 +16,10 @@
 </script>
 
 {$t('privateData')}
-{#if signal.data}
-	{$t({ key: 'count', vars: { count: signal.data.meta?.count ?? 1 } })}
+{#if signal.response}
+	{$t({ key: 'count', vars: { count: signal.response.meta?.count ?? 1 } })}
 	<br />
-	{#each signal.data.data as dataEl (dataEl.id)}
+	{#each signal.response.data as dataEl (dataEl.id)}
 		<p>id: {dataEl.id}</p>
 		<p>privateData: {dataEl.privateData}</p>
 		<hr />

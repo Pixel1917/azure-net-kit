@@ -86,13 +86,13 @@ interface SchemaBuilder<SchemaData, Rules = unknown, TransformResult = SchemaDat
 }
 
 interface SchemaInstance<TransformResult, SchemaData> {
-	json(params?: TransformationParams<SchemaData>): TransformResult;
-	formData(params?: TransformationParams<SchemaData>): FormData;
+	toJson(params?: TransformationParams<SchemaData>): TransformResult;
+	toFormData(params?: TransformationParams<SchemaData>): FormData;
 	validated(): {
 		valid: boolean;
 		errors: RequestErrors<SchemaData>;
-		json(): TransformResult;
-		formData(): FormData;
+		toJson(): TransformResult;
+		toFormData(): FormData;
 	};
 }
 
@@ -208,12 +208,12 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 					return {
 						valid: _isValid,
 						errors: _errors,
-						json: () => json({ validate: false }),
-						formData: () => formData({ validate: false })
+						toJson: () => toJson({ validate: false }),
+						toFormData: () => toFormData({ validate: false })
 					};
 				};
 
-				const json = (params: TransformationParams<SchemaData> = {}): TransformResult => {
+				const toJson = (params: TransformationParams<SchemaData> = {}): TransformResult => {
 					const { validate = true, onValidationError } = params;
 					if (validate && !validated({ onValidationError }).valid) {
 						throw new SchemaFail<SchemaData>(_errors);
@@ -221,7 +221,7 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 					return transform(_preparedData as SchemaData) as TransformResult;
 				};
 
-				const formData = (params: TransformationParams<SchemaData> = {}): FormData => {
+				const toFormData = (params: TransformationParams<SchemaData> = {}): FormData => {
 					const { validate = true, onValidationError } = params;
 					if (validate && !validated({ onValidationError }).valid) {
 						throw new SchemaFail<SchemaData>(_errors);
@@ -230,8 +230,8 @@ class SchemaBuilderImpl<SchemaData, Rules = unknown, TransformResult = SchemaDat
 				};
 
 				return {
-					json,
-					formData,
+					toJson,
+					toFormData,
 					validated
 				};
 			}

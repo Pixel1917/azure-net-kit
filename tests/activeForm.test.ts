@@ -2,7 +2,7 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { createActiveForm, type ActiveFormCallbackContext, type ActiveFormController } from '../src/lib/svelte/active-form/ActiveForm.svelte.js';
 import { ErrorTypes } from '../src/lib/shared/app-error/AppError.js';
 import type { AsyncActionResponse } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
-import type { AsyncSignalSvelte, AsyncStatus } from '../src/lib/svelte/async-signal/AsyncSignal.svelte.js';
+import { createAsyncSignal, type AsyncSignalSvelte, type AsyncStatus } from '../src/lib/svelte/async-signal/AsyncSignal.svelte.js';
 
 type FormData = { name: string };
 type Response = { id: number };
@@ -250,7 +250,7 @@ describe('createActiveForm', () => {
 		expect(form.data).toEqual({ name: 'Linked user' });
 	});
 
-	it('links a pending signal, waits for ready and maps signal data', async () => {
+	it('links a pending signal, waits for ready and maps signal response', async () => {
 		type User = { login: string };
 		const request = createDeferred<User | undefined>();
 		let status: AsyncStatus = 'pending';
@@ -261,7 +261,7 @@ describe('createActiveForm', () => {
 			return value;
 		});
 		const signal: AsyncSignalSvelte<User, unknown> = {
-			get data() {
+			get response() {
 				return data;
 			},
 			get error() {
@@ -295,10 +295,10 @@ describe('createActiveForm', () => {
 		expect(form.data).toEqual({ name: 'sergey' });
 	});
 
-	it('uses the whole signal data and does not restart an already ready signal', async () => {
+	it('uses the whole signal response and does not restart an already ready signal', async () => {
 		let readyReads = 0;
 		const signal: AsyncSignalSvelte<FormData, unknown> = {
-			data: { name: 'ready signal' },
+			response: { name: 'ready signal' },
 			error: undefined,
 			status: 'success',
 			pending: false,
@@ -322,6 +322,24 @@ describe('createActiveForm', () => {
 		await waitForStatus(form, 'idle');
 		expect(form.data).toEqual({ name: 'ready signal' });
 		expect(readyReads).toBe(0);
+	});
+
+	it('keeps SSR form initialization waiting for an immediate client-only signal', async () => {
+		const mapValues = vi.fn(() => ({ name: 'must not be applied on SSR' }));
+		const handler = vi.fn(async (): Promise<FormData> => ({ name: 'client response' }));
+		const signal = createAsyncSignal(handler);
+		const form = createActiveForm(async (): Promise<Result> => ({ success: true, response: { id: 1 } }), {
+			initialValues: ({ linkSignal }) => linkSignal(signal, { mapValues })
+		});
+
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(mapValues).not.toHaveBeenCalled();
+		expect(form.status).toBe('waitingForInitialValues');
+		expect(form.pending).toBe(true);
+		expect(form.data).toEqual({});
+		expect(handler).not.toHaveBeenCalled();
 	});
 
 	it('lets beforeSubmit mutate data and abort without calling submit', async () => {

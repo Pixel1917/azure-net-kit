@@ -39,6 +39,26 @@ describe('createBoundaryProvider', () => {
 		expect(() => (AppProvider() as Record<string, unknown>).unknown).toThrow("Service 'unknown' not found in provider 'MissingServiceProvider'");
 	});
 
+	it('supports object enumeration, serialization and Promise resolution', async () => {
+		let constructCount = 0;
+		const AppProvider = createBoundaryProvider('ObjectInteropProvider', {
+			register: () => ({
+				svc: () => ({ id: ++constructCount })
+			})
+		});
+		const provider = AppProvider();
+
+		expect(Object.keys(provider)).toEqual(['svc']);
+		expect(constructCount).toBe(0);
+		expect(JSON.stringify(provider)).toBe('{"svc":{"id":1}}');
+		expect(constructCount).toBe(1);
+		await expect(Promise.resolve(provider)).resolves.toBe(provider);
+		expect(String(provider)).toBe('[object Object]');
+		expect(Object.prototype.hasOwnProperty.call(provider, 'svc')).toBe(true);
+		expect(Reflect.get(provider, Symbol.toStringTag)).toBeUndefined();
+		expect(() => (provider as Record<string, unknown>).unknown).toThrow("Service 'unknown' not found in provider 'ObjectInteropProvider'");
+	});
+
 	it('throws when service factory returns Promise', () => {
 		const AppProvider = createBoundaryProvider('PromiseServiceProvider', {
 			register: () => ({

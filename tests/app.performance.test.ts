@@ -3,6 +3,7 @@ import { RequestContext } from '@azure-net/edges/context';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/lib/shared/app/index.js';
 import type { IServerMiddleware } from '../src/lib/shared/app/index.js';
+import { createAsyncHelpers } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
 
 const createServerContext = () => ({
 	data: {},
@@ -132,5 +133,40 @@ describe('createApp performance', () => {
 		});
 
 		expect(result.avg).toBeLessThan(0.3);
+	});
+
+	it('converts default async helper errors with low overhead', async () => {
+		const { createAsyncAction } = createAsyncHelpers();
+		const error = new Error('expected');
+		const result = await measureAsync('default helper error conversion', 5_000, async () => {
+			await createAsyncAction(async () => {
+				throw error;
+			});
+		});
+
+		expect(result.avg).toBeLessThan(0.15);
+	});
+
+	it('runs the request-scoped custom error hook with low overhead', async () => {
+		const context = createServerContext();
+		RequestContext.init(() => context as never);
+		const { createAsyncAction } = createAsyncHelpers<{ code: string }>();
+		const error = new Error('expected');
+		let result!: { avg: number };
+		const app = createApp((builder) => builder.useAzureNetKitError(({ error }) => error.toPlainObject({ code: 'EXPECTED' })));
+
+		await app.register.handle({
+			event: context.event,
+			resolve: async () => {
+				result = await measureAsync('custom helper error conversion', 5_000, async () => {
+					await createAsyncAction(async () => {
+						throw error;
+					});
+				});
+				return new Response('ok');
+			}
+		} as never);
+
+		expect(result.avg).toBeLessThan(0.2);
 	});
 });

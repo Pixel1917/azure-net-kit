@@ -18,14 +18,22 @@ describe('Rules', () => {
 	it('number and finite rules validate constraints', () => {
 		const numberValidator = rules.number({ range: { min: 2, max: 5 } });
 		expect(numberValidator({ val: 'abc' })).toBe('This field must be an integer');
+		expect(numberValidator({ val: '' })).toBe('This field must be an integer');
+		expect(numberValidator({ val: '   ' })).toBe('This field must be an integer');
+		expect(numberValidator({ val: false })).toBe('This field must be an integer');
 		expect(numberValidator({ val: 1 })).toBe('The number must be at least 2');
 		expect(numberValidator({ val: 10 })).toBe('The number must be at most 5');
 		expect(numberValidator({ val: 3 })).toBeUndefined();
+		expect(numberValidator({ val: '3' })).toBeUndefined();
 
 		const finiteValidator = rules.finite({ maxDigitsAfterDot: 2, range: { min: 1, max: 3 } });
+		expect(finiteValidator({ val: '' })).toBe('This field must be a number');
+		expect(finiteValidator({ val: '   ' })).toBe('This field must be a number');
+		expect(finiteValidator({ val: false })).toBe('This field must be a number');
 		expect(finiteValidator({ val: '.2' })).toBe('This field must be a number');
 		expect(finiteValidator({ val: 1.234 })).toBe('Number of digits after the decimal point must not exceed 2');
 		expect(finiteValidator({ val: 4 })).toBe('The number must be at most 3');
+		expect(finiteValidator({ val: '2.25' })).toBeUndefined();
 	});
 
 	it('required, boolean and allowedOnly rules', () => {
@@ -54,6 +62,13 @@ describe('Rules', () => {
 		expect(result).toEqual([{ name: 'This field is required' }, {}]);
 	});
 
+	it('array rule respects zero length bounds', () => {
+		const validator = rules.array({ length: { min: 0, max: 0 } });
+
+		expect(validator({ val: [] })).toBeUndefined();
+		expect(validator({ val: [1] })).toBe('Maximum array length is 0');
+	});
+
 	it('password and email rules', () => {
 		const password = rules.password({ length: 6, numbers: 1, specialChars: 1, lowerUpperCasePattern: true });
 		expect(password({ val: 'short' })).toBe('Minimum password length is 6');
@@ -63,6 +78,8 @@ describe('Rules', () => {
 
 		const email = rules.email();
 		expect(email({ val: 'bad-email' })).toBe('Invalid email address');
+		expect(email({ val: 'a[b@example.com' })).toBe('Invalid email address');
+		expect(email({ val: String.raw`a\b@example.com` })).toBe('Invalid email address');
 		expect(email({ val: 'test@example.com' })).toBeUndefined();
 	});
 

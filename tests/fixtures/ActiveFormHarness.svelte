@@ -20,6 +20,7 @@
 	} = $props();
 
 	const signal = createAsyncSignal(() => request(), { immediate: false });
+	void signal.execute();
 	const form = createActiveForm((data: Partial<FormData>): Promise<Result> => submit(data), {
 		initialValues: ({ linkSignal }) => linkSignal(signal, { watch })
 	});

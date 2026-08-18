@@ -1,7 +1,7 @@
-import { ObjectUtil } from '../../external/tools/index.js';
+import { BROWSER, ObjectUtil } from '../../external/tools/index.js';
 import type { RequestErrors } from '../../delivery/schema/index.js';
 import type { AsyncActionResponse } from '../../delivery/injectable-dependencies/AsyncHelpers.js';
-import type { AsyncSignalSvelte, AsyncStatus } from '../async-signal/AsyncSignal.svelte.js';
+import { isAsyncSignalScheduledForClient, type AsyncSignalSvelte, type AsyncStatus } from '../async-signal/AsyncSignal.svelte.js';
 import { cloneStateValue } from '../shared/cloneStateValue.js';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -156,7 +156,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	$effect(() => {
 		for (const binding of signalBindings) {
 			const status = binding.signal.status;
-			const data = binding.signal.data;
+			const data = binding.signal.response;
 			const shouldUpdate = binding.active && status === 'success' && (binding.lastStatus !== 'success' || !Object.is(binding.lastData, data));
 
 			binding.lastStatus = status;
@@ -169,6 +169,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 	const loadInitialValues = async (): Promise<void> => {
 		const runId = ++initialLoadRunId;
 		const source = config?.initialValues;
+		let waitingForClientSignal = false;
 		initialValuesError = NO_INITIAL_VALUES_ERROR;
 
 		if (!source) {
@@ -199,7 +200,7 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 							map: map as (value: unknown) => Partial<FormData>,
 							active: false,
 							loadRunId: runId,
-							lastData: signal.data,
+							lastData: signal.response,
 							lastStatus: signal.status
 						};
 						bindings.set(untypedSignal, binding);
@@ -211,8 +212,12 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 					signalBindings = [...bindings.values()];
 				}
 
+				if (!BROWSER && isAsyncSignalScheduledForClient(signal as AsyncSignalSvelte<unknown, unknown>)) {
+					waitingForClientSignal = true;
+					return undefined;
+				}
 				if (signal.status === 'idle' || signal.status === 'pending') await signal.ready;
-				const value = signal.data;
+				const value = signal.response;
 
 				if (binding && runId === initialLoadRunId && binding.loadRunId === runId) {
 					binding.active = true;
@@ -233,6 +238,10 @@ export const createActiveForm = <SubmitReturn extends Promise<AsyncActionRespons
 				nextInitial = sourceResult;
 			}
 			if (runId !== initialLoadRunId) return;
+			if (waitingForClientSignal) {
+				status = 'waitingForInitialValues';
+				return;
+			}
 
 			if (bindingsBySignal) {
 				for (const [signal, binding] of bindingsBySignal) {

@@ -1,7 +1,7 @@
-import { createErrorHandler } from './ErrorHandler.js';
-import { type AppError, type IAppError } from '../../shared/app-error/AppError.js';
-import { BROWSER } from '../../external/tools/index.js';
-import { RequestContext } from '../../external/edges/ServerContext.js';
+import { AsyncHelperError, type AppError, type IAppError } from '../../shared/app-error/AppError.js';
+import { resolveAzureNetKitError } from '../../shared/app-error/ErrorRuntime.js';
+
+export type { AsyncHelperRetry } from '../../shared/app-error/ErrorRuntime.js';
 
 export interface AsyncActionResponse<T, D = never, ErrorResult = Record<never, never>> {
 	success: boolean;
@@ -9,13 +9,7 @@ export interface AsyncActionResponse<T, D = never, ErrorResult = Record<never, n
 	error?: IAppError<D> & ErrorResult;
 }
 
-export interface AsyncHelperRetry {
-	can: boolean;
-	call?: () => Promise<Error | void>;
-}
-
 type Action<Res> = () => Promise<Res>;
-type ErrorParser<ErrorResult extends object> = ReturnType<typeof createErrorHandler<ErrorResult>>;
 
 export interface AsyncActionSettings<Res = never, Req = never, ErrorResult = AppError<Error>> {
 	beforeSend?: (actions: { next: () => void; abort: (reason?: Error) => void }) => void | Promise<void>;
@@ -28,37 +22,7 @@ export interface AsyncResourceSettings<Res = never, Req = never, ErrorResult = A
 	reject?: boolean;
 }
 
-export class AsyncHelperError extends Error {}
-
 export const createAsyncHelpers = <ErrorResult extends object>() => {
-	const defaultErrorParser = createErrorHandler<ErrorResult>();
-	const handlerContextKey = Symbol('azureNetAsyncHelperErrorParser');
-	let clientErrorParser: ErrorParser<ErrorResult> | undefined;
-
-	const getErrorParser = (): ErrorParser<ErrorResult> => {
-		if (BROWSER) return clientErrorParser ?? defaultErrorParser;
-
-		try {
-			const data = RequestContext.current().data as Record<PropertyKey, unknown>;
-			return (data[handlerContextKey] as ErrorParser<ErrorResult> | undefined) ?? defaultErrorParser;
-		} catch {
-			return defaultErrorParser;
-		}
-	};
-
-	const errorParser: ErrorParser<ErrorResult> = async <T = unknown>(error: Error, asyncHelperRetry?: AsyncHelperRetry) =>
-		await getErrorParser()<T>(error, asyncHelperRetry);
-
-	const useHandler = (parser: ErrorParser<ErrorResult>) => {
-		if (BROWSER) {
-			clientErrorParser = parser;
-			return;
-		}
-
-		const data = RequestContext.current().data as Record<PropertyKey, unknown>;
-		data[handlerContextKey] = parser;
-	};
-
 	const normalizeError = (err: unknown): Error => (err instanceof Error ? err : new Error(String(err)));
 
 	const prepareErrors = async <Res = never, Req = never>(error: Error, retry?: () => Promise<AsyncActionResponse<Res, Req, ErrorResult>>) => {
@@ -73,7 +37,10 @@ export const createAsyncHelpers = <ErrorResult extends object>() => {
 					.catch((err) => normalizeError(err));
 			}
 		};
-		const parsedError = await errorParser<Req>(normalizeError(error), { can: !!retry, call: retry ? () => retryFunc() : undefined });
+		const parsedError = await resolveAzureNetKitError<Req, ErrorResult>(normalizeError(error), {
+			can: !!retry,
+			call: retry ? () => retryFunc() : undefined
+		});
 		return { error: parsedError, retryResult };
 	};
 
@@ -149,7 +116,7 @@ export const createAsyncHelpers = <ErrorResult extends object>() => {
 			try {
 				await args?.onError?.(result as AsyncActionResponse<never, Req, ErrorResult>);
 			} catch (err) {
-				throw await errorParser<Req>(new AsyncHelperError('onError caught exception', { cause: normalizeError(err) }));
+				throw await resolveAzureNetKitError<Req, ErrorResult>(new AsyncHelperError('onError caught exception', { cause: normalizeError(err) }));
 			}
 			return result;
 		}
@@ -168,8 +135,6 @@ export const createAsyncHelpers = <ErrorResult extends object>() => {
 
 	return {
 		createAsyncAction,
-		createAsyncResource,
-		errorParser,
-		useHandler
+		createAsyncResource
 	};
 };

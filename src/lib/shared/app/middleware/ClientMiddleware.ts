@@ -7,11 +7,11 @@ import type { RedirectStatus } from '../../redirect/index.js';
 export type IClientMiddleware = (middlewareData: {
 	to: URL;
 	from?: URL;
-	next: (location?: string | URL, status?: RedirectStatus) => void;
+	next: (location?: string | URL, status?: RedirectStatus) => undefined;
 	ensureRoute: EnsureRoute;
-}) => Promise<void> | void;
+}) => undefined;
 
-export const executeClientMiddlewares = async (middlewares: IClientMiddleware[], navigation?: BeforeNavigate) => {
+export const executeClientMiddlewares = (middlewares: IClientMiddleware[], navigation?: BeforeNavigate): void => {
 	const from = navigation?.from?.url ?? undefined;
 	const to = navigation?.to?.url ?? page?.url;
 	for (const middleware of middlewares) {
@@ -20,19 +20,19 @@ export const executeClientMiddlewares = async (middlewares: IClientMiddleware[],
 		const next = (location?: string | URL) => {
 			shouldContinue = true;
 			redirectTo = location;
+			return undefined;
 		};
 
-		const result = middleware({
+		middleware({
 			to,
 			from,
 			next,
 			ensureRoute
 		});
-		if (result && typeof result.then === 'function') await result;
 
 		if (redirectTo) {
 			navigation?.cancel();
-			await goto(redirectTo);
+			void goto(redirectTo);
 			return;
 		}
 

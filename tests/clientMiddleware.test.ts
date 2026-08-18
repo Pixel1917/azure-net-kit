@@ -22,22 +22,21 @@ describe('executeClientMiddlewares', () => {
 		mocks.goto.mockResolvedValue(undefined);
 	});
 
-	it('stops the chain immediately when a synchronous middleware does not call next', async () => {
+	it('stops the chain immediately when a middleware does not call next', () => {
 		const navigation = createNavigation();
 		const second = vi.fn(({ next }) => next());
 		const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-		const execution = executeClientMiddlewares([() => undefined, second], navigation as never);
+		executeClientMiddlewares([() => undefined, second], navigation as never);
 
 		expect(navigation.cancel).toHaveBeenCalledOnce();
-		await execution;
 		expect(second).not.toHaveBeenCalled();
 		expect(mocks.goto).not.toHaveBeenCalled();
 		expect(warning).toHaveBeenCalledOnce();
 		warning.mockRestore();
 	});
 
-	it('continues through middlewares that call next', async () => {
+	it('continues synchronously through middlewares that call next', () => {
 		const navigation = createNavigation();
 		const calls: string[] = [];
 		const middlewares: IClientMiddleware[] = [
@@ -45,24 +44,23 @@ describe('executeClientMiddlewares', () => {
 				calls.push('first');
 				next();
 			},
-			async ({ next }) => {
-				await Promise.resolve();
+			({ next }) => {
 				calls.push('second');
 				next();
 			}
 		];
 
-		await executeClientMiddlewares(middlewares, navigation as never);
+		executeClientMiddlewares(middlewares, navigation as never);
 
 		expect(calls).toEqual(['first', 'second']);
 		expect(navigation.cancel).not.toHaveBeenCalled();
 	});
 
-	it('cancels and redirects once without running later middlewares', async () => {
+	it('cancels synchronously and redirects once without running later middlewares', () => {
 		const navigation = createNavigation();
 		const second = vi.fn(({ next }) => next());
 
-		await executeClientMiddlewares([({ next }) => next('/login'), second], navigation as never);
+		executeClientMiddlewares([({ next }) => next('/login'), second], navigation as never);
 
 		expect(navigation.cancel).toHaveBeenCalledOnce();
 		expect(mocks.goto).toHaveBeenCalledWith('/login');

@@ -63,7 +63,7 @@ export class ResponseBuilder<TData = unknown, TMeta = object, TWrapper = TData> 
 		return newResponse as Omit<this, keyof ResponseBuilder<unknown, unknown, unknown>> & ResponseBuilder<TResource[], TMeta, TWrapper>;
 	}
 
-	extract<TPath extends DeepKeys<TData>>(
+	extractKey<TPath extends DeepKeys<TData>>(
 		path: TPath
 	): Omit<this, keyof ResponseBuilder<unknown, unknown, unknown>> & ResponseBuilder<DeepValue<TData, TPath>, TMeta, TWrapper> {
 		const keys = path.split('.');

@@ -147,14 +147,17 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 		};
 
 		const providerProxy = new Proxy({} as ResolvedServices<T>, {
-			get(_, key: string) {
+			get(target, key: string | symbol, receiver) {
+				if (typeof key === 'symbol') return Reflect.get(target, key, receiver);
 				if (cache.has(key)) {
 					return cache.get(key);
 				}
 
 				const factories = getFactories();
 
-				if (!(key in factories)) {
+				if (!Object.hasOwn(factories, key)) {
+					if (key === 'then' || key === 'toJSON') return undefined;
+					if (Reflect.has(target, key)) return Reflect.get(target, key, receiver);
 					throw new AzureNetKitInternalError(`[BoundaryProvider] Service '${key}' not found in provider '${name}'`);
 				}
 
@@ -173,11 +176,12 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 				return instance;
 			},
 
-			has(_, key: string) {
+			has(target, key: string | symbol) {
+				if (typeof key === 'symbol') return Reflect.has(target, key);
 				if (cache.has(key)) return true;
 
 				const factories = getFactories();
-				return key in factories;
+				return Object.hasOwn(factories, key) || Reflect.has(target, key);
 			},
 
 			ownKeys() {
@@ -185,6 +189,19 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 				const cachedKeys = Array.from(cache.keys());
 				const factoryKeys = Object.keys(factories);
 				return [...new Set([...cachedKeys, ...factoryKeys])];
+			},
+
+			getOwnPropertyDescriptor(_, key: string | symbol) {
+				if (typeof key === 'symbol') return undefined;
+
+				const factories = getFactories();
+				if (!cache.has(key) && !Object.hasOwn(factories, key)) return undefined;
+
+				return {
+					configurable: true,
+					enumerable: true,
+					get: () => providerProxy[key as keyof ResolvedServices<T>]
+				};
 			}
 		});
 

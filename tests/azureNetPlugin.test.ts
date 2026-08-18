@@ -111,6 +111,7 @@ describe('AzureNetPlugin', () => {
 		expect(serverHooks).toContain('export const handleValidationError = (input) => withRequestContext');
 		expect(serverHooks).toContain('export const reroute = async (input) => (await getRegister()).reroute(input);');
 		expect(serverHooks).toContain('export const getTransport = async () => (await getRegister()).transport;');
+		expect(serverHooks).toContain('await options.transformPageChunk(chunk) : undefined) ?? chunk.html');
 		expect(serverHooks).not.toContain('await register.serverInit?.();');
 		expect(serverHooks).toContain('export const handleError = async');
 		expect(serverHooks).toContain('await edgesHandleRaw(event, async () => {');

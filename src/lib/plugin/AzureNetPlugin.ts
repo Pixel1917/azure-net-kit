@@ -62,7 +62,7 @@ export const handle = edgesHandle(async ({ serialize, edgesEvent, resolve }) => 
 			resolve(event, {
 				...options,
 				transformPageChunk: async (chunk) => {
-					const html = options?.transformPageChunk ? await options.transformPageChunk(chunk) : chunk.html;
+					const html = (options?.transformPageChunk ? await options.transformPageChunk(chunk) : undefined) ?? chunk.html;
 					return serialize(html);
 				}
 			})

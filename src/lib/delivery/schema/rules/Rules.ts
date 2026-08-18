@@ -33,6 +33,10 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		return val !== undefined && val !== null;
 	};
 
+	const isNumericInput = (val: unknown): val is number | string => {
+		return typeof val === 'number' || (typeof val === 'string' && val.trim().length > 0);
+	};
+
 	/**
 	 * Checks a value against a regular expression.
 	 */
@@ -168,8 +172,9 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		const { message, range } = { ...params, message: { ...validationMessages.number, ...params?.message } };
 		return ({ val }: ValidationParams<T, D>): ValidationMessage | undefined => {
 			if (checkVal(val)) {
+				if (!isNumericInput(val)) return message.base();
 				const numberVal = Number(val);
-				if (!Number.isInteger(numberVal) || Number.isNaN(numberVal)) {
+				if (!Number.isInteger(numberVal)) {
 					return message.base();
 				}
 				switch (true) {
@@ -197,12 +202,14 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		const { message, maxDigitsAfterDot, range } = { ...params, message: { ...validationMessages.finite, ...params?.message } };
 		return ({ val }: ValidationParams<T, D>): ValidationMessage | undefined => {
 			if (checkVal(val)) {
+				if (!isNumericInput(val)) return message.base();
+				const normalizedValue = typeof val === 'string' ? val.trim() : String(val);
 				const numVal = Number(val);
-				if (!Number.isFinite(numVal) || String(val)[0] === '.') {
+				if (!Number.isFinite(numVal) || normalizedValue.startsWith('.')) {
 					return message.base();
 				}
 				if (typeof maxDigitsAfterDot === 'number') {
-					const digitsAfterDot = val.toString().split('.')[1]?.length ?? 0;
+					const digitsAfterDot = normalizedValue.split('.')[1]?.length ?? 0;
 					if (digitsAfterDot > maxDigitsAfterDot) {
 						return message.maxDigitsAfterDot(maxDigitsAfterDot);
 					}
@@ -246,8 +253,8 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 			if (checkVal(val)) {
 				if (!Array.isArray(val)) return message.base();
 
-				if (length.min && val.length < length.min) return message.min(length.min);
-				if (length.max && val.length > length.max) return message.max(length.max);
+				if (length.min !== undefined && val.length < length.min) return message.min(length.min);
+				if (length.max !== undefined && val.length > length.max) return message.max(length.max);
 
 				if (schema) {
 					const nestedErrors: ValidationErrorsMap[] = [];
@@ -408,7 +415,7 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 		const normalizedBlockedDomains = blockedDomains?.map(normalizeDomain).filter(Boolean);
 		const emailRegExp =
 			// eslint-disable-next-line no-control-regex
-			/^(?:[A-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21\x23-\x5B\x5D-\x7F]|[\x01-\x09\x0B\x0C\x0E-\x7F])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]{2,}(?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21-\x5A\x53-\x7F]|\\[\x01-\x09\x0B\x0C\x0E-\x7F])+)])$/i;
+			/^(?:[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21\x23-\x5B\x5D-\x7F]|[\x01-\x09\x0B\x0C\x0E-\x7F])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9]{2,}(?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0B\x0C\x0E-\x1F\x21-\x5A\x53-\x7F]|\\[\x01-\x09\x0B\x0C\x0E-\x7F])+)])$/i;
 		return ({ val }: ValidationParams<T, D>): ValidationMessage | undefined => {
 			if (!checkVal(val)) return undefined;
 			if (typeof val !== 'string') return message.base();

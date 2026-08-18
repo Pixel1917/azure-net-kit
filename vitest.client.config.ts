@@ -9,6 +9,7 @@ export default mergeConfig(
 		},
 		test: {
 			include: [
+				'tests/appErrorClient.test.ts',
 				'tests/queryReactivity.test.ts',
 				'tests/querySearchParams.test.ts',
 				'tests/activeFormReactivity.test.ts',

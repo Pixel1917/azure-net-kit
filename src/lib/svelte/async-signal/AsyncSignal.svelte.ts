@@ -15,7 +15,7 @@ export interface AsyncSignalOptions<TData, TError = Error> {
 }
 
 export interface AsyncSignalSvelte<TData, TError = Error> {
-	data?: TData;
+	response?: TData;
 	error?: TError;
 	status: AsyncStatus;
 	pending: boolean;
@@ -42,6 +42,7 @@ export interface AsyncSignalBatch<TSignals extends readonly AsyncSignalSvelte<un
 }
 
 const ASYNC_SIGNAL_BATCH_INTERNAL = Symbol('async-signal-batch-internal');
+const ASYNC_SIGNAL_SCHEDULED_FOR_CLIENT = Symbol('async-signal-scheduled-for-client');
 
 interface AsyncSignalBatchInternal {
 	lock: (gate?: Promise<unknown>) => void;
@@ -51,6 +52,27 @@ interface AsyncSignalBatchInternal {
 
 type BatchManagedAsyncSignal<TData, TError> = AsyncSignalSvelte<TData, TError> & {
 	[ASYNC_SIGNAL_BATCH_INTERNAL]: AsyncSignalBatchInternal;
+};
+
+type InternalAsyncSignal = AsyncSignalSvelte<unknown, unknown> & {
+	[ASYNC_SIGNAL_SCHEDULED_FOR_CLIENT]: () => boolean;
+};
+
+export const isAsyncSignalScheduledForClient = (signal: AsyncSignalSvelte<unknown, unknown>): boolean => {
+	return (signal as Partial<InternalAsyncSignal>)[ASYNC_SIGNAL_SCHEDULED_FOR_CLIENT]?.() ?? false;
+};
+
+const createDeferred = <T = unknown>() => {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((promiseResolve) => {
+		resolve = promiseResolve;
+	});
+
+	return { promise, resolve };
+};
+
+const createResolvedPromise = <T>(value: T): Promise<T> => {
+	return new Promise((resolve) => resolve(value));
 };
 
 const createAsyncSignalManager = () => {
@@ -111,20 +133,42 @@ export const createAsyncSignal = <TData, TError = Error>(
 ): AsyncSignalSvelte<TData, TError> => {
 	const { server = false, immediate = true, initialData = undefined, key } = options;
 	const resolvedInitialData = typeof initialData === 'function' ? (initialData as () => TData)() : initialData;
+	let scheduledForClient = immediate && !BROWSER && !server;
 
 	let data = $state<TData | undefined>(resolvedInitialData);
 	let error = $state<TError>();
-	let status = $state<AsyncStatus>('idle');
+	let status = $state<AsyncStatus>(scheduledForClient ? 'pending' : 'idle');
 
 	const pending = $derived(status === 'pending');
 
 	let abortController: AbortController | null = null;
 	let currentPromise: Promise<TData | undefined> | null = null;
+	let readyPromise = createResolvedPromise<TData | undefined>(resolvedInitialData);
+	let resolveReady: ((value: TData | undefined) => void) | null = null;
 	let currentRunId = 0;
 	let started = false;
 	let batchLocked = false;
 	let batchGate: Promise<unknown> | null = null;
 	let batchSkipRequested = false;
+
+	const startReadyCycle = () => {
+		if (resolveReady) return;
+
+		const deferred = createDeferred<TData | undefined>();
+		readyPromise = deferred.promise;
+		resolveReady = deferred.resolve;
+	};
+
+	const settleReadyCycle = () => {
+		const resolve = resolveReady;
+		if (!resolve) {
+			readyPromise = createResolvedPromise<TData | undefined>(data);
+			return;
+		}
+
+		resolveReady = null;
+		resolve(data);
+	};
 
 	const run = async (runId: number, source: AsyncSignalSource): Promise<TData | undefined> => {
 		const initial = !started;
@@ -182,11 +226,14 @@ export const createAsyncSignal = <TData, TError = Error>(
 			if (currentRunId === runId) {
 				currentPromise = null;
 				if (abortController === localController) abortController = null;
+				settleReadyCycle();
 			}
 		}
 	};
 
 	const start = (source: AsyncSignalSource): Promise<TData | undefined> => {
+		scheduledForClient = false;
+		startReadyCycle();
 		const runId = ++currentRunId;
 		const localPromise = run(runId, source);
 		currentPromise = localPromise;
@@ -194,7 +241,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 	};
 
 	const startWhenUnlocked = (source: AsyncSignalSource): Promise<unknown> => {
-		if (batchLocked) return batchGate ?? Promise.resolve(data);
+		if (batchLocked) return batchGate ?? readyPromise;
 		return start(source);
 	};
 
@@ -240,7 +287,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 	}
 
 	const asyncSignal: AsyncSignalSvelte<TData, TError> = {
-		get data() {
+		get response() {
 			return data;
 		},
 		get error() {
@@ -253,13 +300,13 @@ export const createAsyncSignal = <TData, TError = Error>(
 			return pending;
 		},
 		get ready() {
-			if (batchLocked) return (batchGate ?? Promise.resolve(data)) as Promise<TData | undefined>;
-			if (currentPromise) return currentPromise;
-			return start('auto');
+			if (batchLocked) return (batchGate ?? readyPromise) as Promise<TData | undefined>;
+			return readyPromise;
 		},
 		execute,
 		refresh,
 		reset: () => {
+			scheduledForClient = false;
 			if (batchLocked) batchSkipRequested = true;
 			currentRunId += 1;
 			abortController?.abort();
@@ -268,8 +315,10 @@ export const createAsyncSignal = <TData, TError = Error>(
 			data = undefined;
 			error = undefined;
 			status = 'idle';
+			settleReadyCycle();
 		},
 		abort: () => {
+			scheduledForClient = false;
 			if (batchLocked) batchSkipRequested = true;
 			currentRunId += 1;
 			abortController?.abort();
@@ -277,8 +326,13 @@ export const createAsyncSignal = <TData, TError = Error>(
 			currentPromise = null;
 			error = undefined;
 			status = 'idle';
+			settleReadyCycle();
 		}
 	};
+
+	Object.defineProperty(asyncSignal, ASYNC_SIGNAL_SCHEDULED_FOR_CLIENT, {
+		value: () => scheduledForClient
+	});
 
 	Object.defineProperty(asyncSignal, ASYNC_SIGNAL_BATCH_INTERNAL, {
 		value: {
@@ -299,15 +353,6 @@ export const createAsyncSignal = <TData, TError = Error>(
 	});
 
 	return asyncSignal;
-};
-
-const createDeferred = () => {
-	let resolve!: (value: unknown) => void;
-	const promise = new Promise<unknown>((promiseResolve) => {
-		resolve = promiseResolve;
-	});
-
-	return { promise, resolve };
 };
 
 export const createAsyncSignalBatch = <const TSignals extends readonly AsyncSignalSvelte<unknown, unknown>[]>(

@@ -66,8 +66,8 @@ describe('ResponseBuilder', () => {
 		});
 
 		const builder = new ResponseBuilder<{ user: { profile: { city: string } } }>(response);
-		expect(builder.extract('user.profile.city').getData()).toBe('Moscow');
-		expect(() => builder.extract('user.profile.country' as 'user.profile.city')).toThrow(
+		expect(builder.extractKey('user.profile.city').getData()).toBe('Moscow');
+		expect(() => builder.extractKey('user.profile.country' as 'user.profile.city')).toThrow(
 			'[ResponseBuilder] Failed to extract: path "user.profile.country" not found in response data'
 		);
 	});
@@ -84,9 +84,9 @@ describe('ResponseBuilder', () => {
 		});
 
 		const builder = new ResponseBuilder<{ value: string; secret: string }>(response);
-		expect(builder.extract('value').getData()).toBe('payload-value');
-		expect(() => builder.extract('secret').getData()).toThrow('[ResponseBuilder] Failed to extract: path "secret" not found in response data');
-		expect(() => builder.extract('constructor' as 'value').getData()).toThrow(
+		expect(builder.extractKey('value').getData()).toBe('payload-value');
+		expect(() => builder.extractKey('secret').getData()).toThrow('[ResponseBuilder] Failed to extract: path "secret" not found in response data');
+		expect(() => builder.extractKey('constructor' as 'value').getData()).toThrow(
 			'[ResponseBuilder] Failed to extract: path "constructor" not found in response data'
 		);
 	});
