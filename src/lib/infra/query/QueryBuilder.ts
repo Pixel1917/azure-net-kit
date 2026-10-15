@@ -115,18 +115,26 @@ const toSearchParamsWithSettings = <TTransformInput extends object = object>(
 	return params;
 };
 
-export const createQueryInstance = <TTransformInput extends object = object>(
-	defaults?: IQueryBuilderSettings<TTransformInput>
-): IQueryBuilderInstance<TTransformInput> => {
-	return {
-		toSearchParams: (query: object, settings?: Omit<IQueryBuilderSettings<TTransformInput>, 'delimiter'>) => {
-			const resolved = normalizeSettings<TTransformInput>(defaults, settings);
-			return toSearchParamsWithSettings(query, resolved);
-		},
-		toString: (query: object, settings?: IQueryBuilderSettings<TTransformInput>) => {
-			const resolved = normalizeSettings<TTransformInput>(defaults, settings);
-			const serialized = encodeQuery(Array.from(toSearchParamsWithSettings(query, resolved).entries()));
-			return resolved.delimiter && serialized ? `?${serialized}` : serialized;
-		}
+export class QueryBuilder<TTransformInputGlobal extends object = object> implements IQueryBuilderInstance<TTransformInputGlobal> {
+	private readonly defaults: IQueryBuilderSettings<TTransformInputGlobal> | undefined;
+	constructor(config?: IQueryBuilderSettings<TTransformInputGlobal>) {
+		this.defaults = { ...config };
+	}
+
+	public readonly toSearchParams = <TTransformInput extends TTransformInputGlobal = TTransformInputGlobal>(
+		query: object,
+		settings?: Omit<IQueryBuilderSettings<TTransformInput>, 'delimiter'>
+	) => {
+		const resolved = normalizeSettings<TTransformInput>(this.defaults, settings);
+		return toSearchParamsWithSettings(query, resolved);
 	};
-};
+
+	public readonly toString = <TTransformInput extends TTransformInputGlobal = TTransformInputGlobal>(
+		query: object,
+		settings?: IQueryBuilderSettings<TTransformInput>
+	) => {
+		const resolved = normalizeSettings<TTransformInput>(this.defaults, settings);
+		const serialized = encodeQuery(Array.from(toSearchParamsWithSettings(query, resolved).entries()));
+		return resolved.delimiter && serialized ? `?${serialized}` : serialized;
+	};
+}

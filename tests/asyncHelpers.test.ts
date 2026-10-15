@@ -1,6 +1,7 @@
-import { RequestContext } from '@azure-net/edges/context';
+import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
+import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAsyncHelpers } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
+import { createAsyncAction as asyncAction, createAsyncResource as asyncResource } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
 import { createApp, type AppAzureNetKitErrorCallback } from '../src/lib/shared/app/index.js';
 
 const createServerContext = () => ({
@@ -12,9 +13,9 @@ const createServerContext = () => ({
 	}
 });
 
-const runInApp = async <T>(action: () => Promise<T>, errorHandler?: AppAzureNetKitErrorCallback<Record<string, unknown>>): Promise<T> => {
+const runInApp = async <T>(action: () => Promise<T>, errorHandler?: AppAzureNetKitErrorCallback): Promise<T> => {
 	const context = createServerContext();
-	RequestContext.init(() => context as never);
+	initializeRequestContext(() => context as never);
 	let result!: T;
 	const app = createApp((builder) => {
 		const configured = errorHandler ? builder.useAzureNetKitError(errorHandler) : builder;
@@ -37,11 +38,12 @@ describe('AsyncHelpers', () => {
 	});
 
 	it('exposes only stateless action and resource helpers', () => {
-		expect(Object.keys(createAsyncHelpers()).sort()).toEqual(['createAsyncAction', 'createAsyncResource']);
+		expect(typeof asyncAction).toBe('function');
+		expect(typeof asyncResource).toBe('function');
 	});
 
 	it('aborts action in beforeSend when abort() is called', async () => {
-		const { createAsyncAction } = createAsyncHelpers();
+		const createAsyncAction = asyncAction;
 		const result = await createAsyncAction(async () => ({ ok: true }), {
 			beforeSend: ({ abort }) => abort(),
 			fallbackResponse: { ok: false }
@@ -53,7 +55,7 @@ describe('AsyncHelpers', () => {
 	});
 
 	it('continues action when beforeSend returns without calling next or abort', async () => {
-		const { createAsyncAction } = createAsyncHelpers();
+		const createAsyncAction = asyncAction;
 		const result = await createAsyncAction(async () => ({ ok: true }), {
 			beforeSend: async () => {
 				await Promise.resolve();
@@ -64,7 +66,7 @@ describe('AsyncHelpers', () => {
 	});
 
 	it('uses the default AppError conversion when the app hook is absent', async () => {
-		const { createAsyncAction } = createAsyncHelpers();
+		const createAsyncAction = asyncAction;
 		const result = await createAsyncAction(async () => {
 			throw new Error('fatal');
 		});
@@ -79,16 +81,15 @@ describe('AsyncHelpers', () => {
 	});
 
 	it('routes errors through createApp and preserves custom result typing', async () => {
-		const { createAsyncAction } = createAsyncHelpers<{ marker: string }>();
+		const createAsyncAction = asyncAction<never, never, { marker: string }>;
 		const result = await runInApp(
 			() =>
 				createAsyncAction(async () => {
 					throw new Error('custom');
 				}),
-			({ error, retry, AppEvents, isServer, isClient, requestContext, event }) => {
+			({ error, retry, isServer, isClient, requestContext, event }) => {
 				expect(retry.can).toBe(true);
 				expect(typeof retry.call).toBe('function');
-				expect(typeof AppEvents).toBe('function');
 				expect(isServer).toBe(true);
 				expect(isClient).toBe(false);
 				expect(requestContext?.event).toBe(event);
@@ -101,7 +102,7 @@ describe('AsyncHelpers', () => {
 
 	it('supports retry from the application error hook', async () => {
 		let calls = 0;
-		const { createAsyncAction } = createAsyncHelpers();
+		const createAsyncAction = asyncAction;
 		const result = await runInApp(
 			() =>
 				createAsyncAction(async () => {
@@ -121,7 +122,7 @@ describe('AsyncHelpers', () => {
 	it('does not repeat a successful action when onSuccess fails and retry is requested', async () => {
 		let actionCalls = 0;
 		let retryAvailable: boolean | undefined;
-		const { createAsyncAction } = createAsyncHelpers();
+		const createAsyncAction = asyncAction;
 		const result = await runInApp(
 			() =>
 				createAsyncAction(
@@ -152,7 +153,7 @@ describe('AsyncHelpers', () => {
 
 	it('keeps the failed response when retry also fails', async () => {
 		let calls = 0;
-		const { createAsyncAction } = createAsyncHelpers();
+		const createAsyncAction = asyncAction;
 		const result = await runInApp(
 			() =>
 				createAsyncAction(
@@ -175,7 +176,7 @@ describe('AsyncHelpers', () => {
 
 	it('routes onError callback failures through the same application hook', async () => {
 		const seen: string[] = [];
-		const { createAsyncAction } = createAsyncHelpers();
+		const createAsyncAction = asyncAction;
 
 		await expect(
 			runInApp(
@@ -201,7 +202,7 @@ describe('AsyncHelpers', () => {
 	});
 
 	it('rejects createAsyncResource with the converted error when reject is enabled', async () => {
-		const { createAsyncResource } = createAsyncHelpers<{ code: string }>();
+		const createAsyncResource = asyncResource<never, never, { code: string }>;
 
 		await expect(
 			runInApp(
@@ -218,7 +219,7 @@ describe('AsyncHelpers', () => {
 	});
 
 	it('rejects an invalid hook result instead of leaking an unconverted error shape', async () => {
-		const { createAsyncAction } = createAsyncHelpers();
+		const createAsyncAction = asyncAction;
 
 		await expect(
 			runInApp(
@@ -236,7 +237,7 @@ describe('AsyncHelpers', () => {
 		const hook = vi.fn(() => {
 			throw hookError;
 		});
-		const { createAsyncAction } = createAsyncHelpers();
+		const createAsyncAction = asyncAction;
 
 		await expect(
 			runInApp(

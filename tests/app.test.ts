@@ -1,4 +1,5 @@
-import { RequestContext } from '@azure-net/edges/context';
+import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
+import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/lib/shared/app/index.js';
 import { AzureNetKitInternalError } from '../src/lib/shared/app-error/index.js';
@@ -8,6 +9,7 @@ import { ensureRoute } from '../src/lib/shared/app/middleware/Shared.js';
 import type { IServerMiddleware } from '../src/lib/shared/app/index.js';
 
 const createServerContext = () => ({
+	state: {},
 	data: {},
 	event: {
 		fetch,
@@ -21,6 +23,23 @@ const createServerContext = () => ({
 });
 
 describe('createApp', () => {
+	it('exposes only the registrar and no dependency registration API', async () => {
+		const context = createServerContext();
+		initializeRequestContext(() => context as never);
+		const app = createApp((builder) => {
+			expect(builder).not.toHaveProperty('dependencies');
+			return builder
+				.use((input) => {
+					expect(input).not.toHaveProperty('Container');
+				})
+				.useServer((input) => {
+					expect(input).not.toHaveProperty('Container');
+				});
+		});
+		expect(Object.keys(app)).toEqual(['register']);
+		await app.register.handle({ event: context.event, resolve: () => new Response('ok') } as never);
+		expect(context.data).not.toHaveProperty('azureNetKitBoundaryProviders');
+	});
 	it('matches static and dynamic routes exactly', () => {
 		expect(ensureRoute('/', '/')).toBe(true);
 		expect(ensureRoute('/', '/app/products')).toBe(false);
@@ -33,58 +52,18 @@ describe('createApp', () => {
 		expect(ensureRoute('/profile/{id}', new URL('https://example.com/profile/42'))).toBe(true);
 	});
 
-	it('resolves dependencies through boundary provider lazily', () => {
-		const context = createServerContext();
-		RequestContext.init(() => context as never);
-
-		let calls = 0;
-		const { Container } = createApp((app) =>
-			app.dependencies({
-				Config: () => {
-					calls += 1;
-					return { apiUrl: 'https://example.com' };
-				}
-			})
-		);
-
-		expect(calls).toBe(0);
-		expect(Container.Config.apiUrl).toBe('https://example.com');
-		expect(Container.Config).toBe(Container.Config);
-		expect(calls).toBe(1);
-	});
-
-	it('uses an isolated dependency cache for every server request context', () => {
-		let context = createServerContext();
-		RequestContext.init(() => context as never);
-
-		let calls = 0;
-		const { Container } = createApp((app) =>
-			app.dependencies({
-				RequestService: () => ({ id: ++calls })
-			})
-		);
-
-		const first = Container.RequestService;
-		expect(first.id).toBe(1);
-
-		context = createServerContext();
-		const second = Container.RequestService;
-		expect(second.id).toBe(2);
-		expect(second).not.toBe(first);
-	});
-
 	it('runs universal and server callbacks once per server request context', async () => {
 		let context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		const calls: string[] = [];
 		const app = createApp((app) =>
 			app
 				.use(({ event, isServer, requestContext }) => {
-					calls.push(`use:${isServer}:${event === context.event}:${requestContext === context}`);
+					calls.push(`use:${isServer}:${event === context.event}:${requestContext === (context as unknown)}`);
 				})
 				.useServer(({ event, requestContext }) => {
-					calls.push(`server:${event === context.event}:${requestContext === context}`);
+					calls.push(`server:${event === context.event}:${requestContext === (context as unknown)}`);
 				})
 		);
 
@@ -108,7 +87,7 @@ describe('createApp', () => {
 
 	it('exposes a SvelteKit handle that runs server callbacks and resolves the event', async () => {
 		const context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		let receivedEvent: unknown;
 		const app = createApp((app) =>
@@ -132,7 +111,7 @@ describe('createApp', () => {
 
 	it('allows useServer callbacks to resolve the response manually', async () => {
 		const context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		let resolveCalls = 0;
 		const manualResponse = new Response('manual');
@@ -159,7 +138,7 @@ describe('createApp', () => {
 
 	it('does not run client callbacks on server', () => {
 		const context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		let calls = 0;
 		const app = createApp((app) =>
@@ -172,70 +151,9 @@ describe('createApp', () => {
 		expect(calls).toBe(0);
 	});
 
-	it('detects circular dependencies through boundary provider guard', () => {
-		const context = createServerContext();
-		RequestContext.init(() => context as never);
-
-		const { Container } = createApp((app) =>
-			app.dependencies({
-				First: (container) => container.Second,
-				Second: (container) => container.First
-			})
-		);
-
-		expect(() => Container.First).toThrow(
-			'[BoundaryProvider] Circular provider dependency detected: __AzureNetKitGlobalAppContainer__.First -> __AzureNetKitGlobalAppContainer__.Second -> __AzureNetKitGlobalAppContainer__.First'
-		);
-	});
-
-	it('does not allow async dependencies in AppContainer', () => {
-		const context = createServerContext();
-		RequestContext.init(() => context as never);
-
-		const { Container } = createApp((app) =>
-			app.dependencies({
-				AsyncService: () => Promise.resolve({ ok: true })
-			})
-		);
-
-		expect(() => Container.AsyncService).toThrow("Service 'AsyncService' in provider '__AzureNetKitGlobalAppContainer__' returned Promise.");
-	});
-
-	it('chains dependency registration and exposes dependencies to later factories', () => {
-		const context = createServerContext();
-		RequestContext.init(() => context as never);
-
-		const { Container } = createApp((app) =>
-			app
-				.dependencies({
-					Config: () => ({ baseUrl: 'https://api.example.com' })
-				})
-				.dependencies({
-					Http: ({ Config }) => ({ url: `${Config.baseUrl}/v1` })
-				})
-		);
-
-		expect(Container.Http.url).toBe('https://api.example.com/v1');
-	});
-
-	it('supports has/ownKeys/getOwnPropertyDescriptor proxy operations for AppContainer', () => {
-		const context = createServerContext();
-		RequestContext.init(() => context as never);
-
-		const { Container } = createApp((app) =>
-			app.dependencies({
-				FeatureFlag: () => true
-			})
-		);
-
-		expect('FeatureFlag' in Container).toBe(true);
-		expect(Object.keys(Container)).toContain('FeatureFlag');
-		expect(Object.getOwnPropertyDescriptor(Container, 'FeatureFlag')?.value).toBe(true);
-	});
-
 	it('runs async universal callback before server callback', async () => {
 		const context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		const calls: string[] = [];
 		const app = createApp((app) =>
@@ -287,7 +205,7 @@ describe('createApp', () => {
 
 	it('runs server error callback with request context and error data', () => {
 		const context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		const callback = vi.fn();
 		const app = createApp((app) => app.useServerError(callback));
@@ -301,7 +219,6 @@ describe('createApp', () => {
 		} as never);
 
 		expect(callback).toHaveBeenCalledWith({
-			Container: app.Container,
 			requestContext: context,
 			error,
 			event: context.event,
@@ -311,23 +228,20 @@ describe('createApp', () => {
 		});
 	});
 
-	it('runs handleFetch with app dependencies and request context', async () => {
+	it('runs handleFetch with request context', async () => {
 		const context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		const upstream = vi.fn(() => Promise.resolve(new Response('upstream')));
 		const request = new Request('https://api.example.com/items');
 		const app = createApp((app) =>
-			app
-				.dependencies({ Marker: () => 'app' })
-				.useServerFetch(({ Container, requestContext, event, request: receivedRequest, fetch: receivedFetch }) => {
-					expect(Container.Marker).toBe('app');
-					expect(requestContext).toBe(context);
-					expect(event).toBe(context.event);
-					expect(receivedRequest).toBe(request);
-					expect(receivedFetch).toBe(upstream);
-					return new Response('intercepted');
-				})
+			app.useServerFetch(({ requestContext, event, request: receivedRequest, fetch: receivedFetch }) => {
+				expect(requestContext).toBe(context);
+				expect(event).toBe(context.event);
+				expect(receivedRequest).toBe(request);
+				expect(receivedFetch).toBe(upstream);
+				return new Response('intercepted');
+			})
 		);
 
 		const response = await app.register.serverFetch({ event: context.event, request, fetch: upstream } as never);
@@ -345,13 +259,14 @@ describe('createApp', () => {
 		expect(upstream).toHaveBeenCalledWith(request);
 	});
 
-	it('runs handleValidationError with app dependencies and request context', async () => {
+	it('passes Kit 3 validation errors through useServerError with request context', async () => {
 		const context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 		const issues = [{ message: 'Invalid value' }];
 		const app = createApp((app) =>
-			app.dependencies({ Marker: () => 'app' }).useServerValidationError(({ Container, requestContext, event, issues: receivedIssues }) => {
-				expect(Container.Marker).toBe('app');
+			app.useServerError(({ requestContext, event, issues: receivedIssues, kind, status }) => {
+				expect(kind).toBe('validation');
+				expect(status).toBe(400);
 				expect(requestContext).toBe(context);
 				expect(event).toBe(context.event);
 				expect(receivedIssues).toBe(issues);
@@ -359,19 +274,22 @@ describe('createApp', () => {
 			})
 		);
 
-		await expect(Promise.resolve(app.register.serverValidationError({ event: context.event, issues } as never))).resolves.toEqual({
+		await expect(
+			Promise.resolve(
+				app.register.serverError({ event: context.event, kind: 'validation', error: { status: 400, message: 'Bad Request' }, issues } as never)
+			)
+		).resolves.toEqual({
 			message: 'Custom validation error'
 		});
 	});
 
-	it('uses the SvelteKit validation fallback when no callback is configured', () => {
-		const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-		const issues = [{ message: 'Invalid value' }];
+	it('leaves validation fallback to SvelteKit without a handler', () => {
+		const context = createServerContext();
+		initializeRequestContext(() => context as never);
 		const app = createApp((app) => app);
-
-		expect(app.register.serverValidationError({ event: createServerContext().event, issues } as never)).toEqual({ message: 'Bad Request' });
-		expect(error).toHaveBeenCalledWith('Remote function schema validation failed:', issues);
-		error.mockRestore();
+		expect(
+			app.register.serverError({ event: context.event, kind: 'validation', error: { status: 400, message: 'Bad Request' }, issues: [] } as never)
+		).toBeUndefined();
 	});
 
 	it('exposes reroute and transport hooks without altering their native contracts', async () => {
@@ -388,7 +306,7 @@ describe('createApp', () => {
 		expect(app.register.transport).toBe(transport);
 	});
 
-	it.each(['useServerFetch', 'useServerValidationError', 'useAzureNetKitError', 'useReroute', 'useTransport'] as const)(
+	it.each(['useServerFetch', 'useAzureNetKitError', 'useReroute', 'useTransport'] as const)(
 		'throws when %s is registered twice at runtime',
 		(method) => {
 			expect(() =>
@@ -412,7 +330,7 @@ describe('createApp', () => {
 				fetch: requestFetch
 			}
 		};
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 		const onError = vi.fn();
@@ -459,7 +377,7 @@ describe('createApp', () => {
 		const context = createServerContext();
 		const requestFetch = vi.fn(() => Promise.resolve(new Response('ok')));
 		context.event.fetch = requestFetch;
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 		const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 		const waitUntil = vi.fn<(promise: Promise<unknown>) => void>();
 
@@ -488,7 +406,7 @@ describe('createApp', () => {
 
 	it('executes server middlewares in order and exposes navigation data', async () => {
 		const context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		const calls: string[] = [];
 		const first: IServerMiddleware = ({ to, from, event, ensureRoute, next }) => {
@@ -517,7 +435,7 @@ describe('createApp', () => {
 
 	it('rejects server request when middleware chain is not continued', async () => {
 		const context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		const app = createApp((app) =>
 			app.useServer(async ({ useMiddlewares }) => {
@@ -535,7 +453,7 @@ describe('createApp', () => {
 
 	it('does not resolve when server middleware blocks the request', async () => {
 		const context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		const resolve = vi.fn(() => new Response('ok'));
 		const app = createApp((app) =>
@@ -555,7 +473,7 @@ describe('createApp', () => {
 
 	it('skips server lifecycle on repeated handle call in the same request context but still resolves', async () => {
 		const context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		const server = vi.fn();
 		const resolve = vi.fn(() => new Response('ok'));

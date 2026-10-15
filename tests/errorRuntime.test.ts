@@ -1,15 +1,16 @@
+import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { RequestContext, type ContextData } from '@azure-net/edges/context';
+import { RequestContext, type ContextData } from '../src/lib/shared/request-context/Internal.js';
 import { describe, expect, it } from 'vitest';
-import { createAsyncHelpers } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
+import { createAsyncAction as asyncAction } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
 import { HttpErrorTypes, HttpServiceError } from '../src/lib/infra/http-service/HttpServiceInstance.js';
 import { SchemaFail } from '../src/lib/delivery/schema/Schema.js';
 import { createApp } from '../src/lib/shared/app/index.js';
 
-type TestContext = ContextData & { data: { marker: string } & ContextData['data'] };
+type TestContext = ContextData & { state: { marker: string } & App.RequestContextState };
 
 const createContext = (marker: string): TestContext => ({
-	data: { marker },
+	state: { marker },
 	event: {
 		fetch,
 		url: new URL(`https://example.com/${marker}`),
@@ -20,17 +21,17 @@ const createContext = (marker: string): TestContext => ({
 describe('AzureNetKit error runtime', () => {
 	it('keeps concurrent server error hooks isolated and releases request bindings', async () => {
 		const storage = new AsyncLocalStorage<TestContext>();
-		RequestContext.init(() => {
+		initializeRequestContext(() => {
 			const context = storage.getStore();
 			if (!context) throw new Error('Missing test request context');
 			return context;
 		});
 
-		const helpers = createAsyncHelpers<{ marker: string }>();
+		const helpers = { createAsyncAction: asyncAction<never, never, { marker: string }> };
 		const results = new Map<string, string | undefined>();
 		const app = createApp((builder) =>
 			builder.useAzureNetKitError(async ({ error, requestContext, event }) => {
-				const marker = (requestContext?.data as { marker: string }).marker;
+				const marker = (requestContext?.state as { marker: string }).marker;
 				await new Promise((resolve) => setTimeout(resolve, marker.charCodeAt(0) % 4));
 				expect(event).toBe(requestContext?.event);
 				return error.toPlainObject({ marker });
@@ -46,9 +47,9 @@ describe('AzureNetKit error runtime', () => {
 						resolve: async () => {
 							await Promise.resolve();
 							const result = await helpers.createAsyncAction(async () => {
-								throw new Error(context.data.marker);
+								throw new Error(context.state.marker);
 							});
-							results.set(context.data.marker, result.error?.marker);
+							results.set(context.state.marker, result.error?.marker);
 							return new Response('ok');
 						}
 					} as never);
@@ -57,14 +58,14 @@ describe('AzureNetKit error runtime', () => {
 		);
 
 		for (const context of contexts) {
-			expect(results.get(context.data.marker)).toBe(context.data.marker);
-			expect(Reflect.ownKeys(context.data).filter((key) => typeof key === 'symbol')).toHaveLength(0);
+			expect(results.get(context.state.marker)).toBe(context.state.marker);
+			expect(Reflect.ownKeys(context.state).filter((key) => typeof key === 'symbol')).toHaveLength(0);
 		}
 	});
 
 	it('releases the request binding when handle throws', async () => {
 		const context = createContext('throwing');
-		RequestContext.init(() => context);
+		initializeRequestContext(() => context);
 		const app = createApp((builder) => builder.useAzureNetKitError(({ error }) => error.toPlainObject()));
 
 		await expect(
@@ -75,13 +76,13 @@ describe('AzureNetKit error runtime', () => {
 				}
 			} as never)
 		).rejects.toThrow('resolve failed');
-		expect(Reflect.ownKeys(context.data).filter((key) => typeof key === 'symbol')).toHaveLength(0);
+		expect(Reflect.ownKeys(context.state).filter((key) => typeof key === 'symbol')).toHaveLength(0);
 	});
 
 	it('does not retain resolver bindings after repeated requests', async () => {
 		let context = createContext('initial');
-		RequestContext.init(() => context);
-		const helpers = createAsyncHelpers();
+		initializeRequestContext(() => context);
+		const helpers = { createAsyncAction: asyncAction };
 		const app = createApp((builder) => builder.useAzureNetKitError(({ error }) => error.toPlainObject()));
 
 		for (let index = 0; index < 250; index += 1) {
@@ -96,12 +97,12 @@ describe('AzureNetKit error runtime', () => {
 				}
 			} as never);
 
-			expect(Reflect.ownKeys(context.data).filter((key) => typeof key === 'symbol')).toHaveLength(0);
+			expect(Reflect.ownKeys(context.state).filter((key) => typeof key === 'symbol')).toHaveLength(0);
 		}
 	});
 
 	it('maps HttpServiceError through the default conversion', async () => {
-		const { createAsyncAction } = createAsyncHelpers();
+		const createAsyncAction = asyncAction;
 		const result = await createAsyncAction(async () => {
 			throw new HttpServiceError({
 				data: { reason: 'bad request' },
@@ -115,7 +116,7 @@ describe('AzureNetKit error runtime', () => {
 	});
 
 	it('maps SchemaFail validation through the default conversion', async () => {
-		const { createAsyncAction } = createAsyncHelpers();
+		const createAsyncAction = asyncAction;
 		const result = await createAsyncAction(async () => {
 			throw new SchemaFail<Record<string, unknown>>({ name: 'required' } as never);
 		});

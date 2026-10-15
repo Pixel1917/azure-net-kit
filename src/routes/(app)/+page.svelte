@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { PrivatePresenter } from '../../app/mock-api-context/layers/delivery/private/index.js';
-	import { createAsyncSignal } from '$lib/svelte/index.js';
+	import { createAsyncSignal } from '#lib/svelte/index.js';
 	import { TranslationManager } from '../../core/translations/index.js';
 	import type { PageProps } from '../../../.svelte-kit/types/src/routes/(app)/$types.js';
 
-	const { t } = TranslationManager();
+	const translation = TranslationManager();
+	const { t } = translation;
 
 	const { data }: PageProps = $props();
 	const { collection } = PrivatePresenter();
@@ -15,9 +16,9 @@
 	});
 </script>
 
-{$t('privateData')}
+{t('privateData')}
 {#if signal.response}
-	{$t({ key: 'count', vars: { count: signal.response.meta?.count ?? 1 } })}
+	{t({ key: 'count', vars: { count: signal.response.meta?.count ?? 1 } })}
 	<br />
 	{#each signal.response.data as dataEl (dataEl.id)}
 		<p>id: {dataEl.id}</p>

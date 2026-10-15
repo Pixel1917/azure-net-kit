@@ -1,4 +1,12 @@
-export { createAsyncHelpers, type AsyncHelperRetry, type AsyncResourceSettings, type AsyncActionResponse } from './injectable-dependencies/index.js';
+export {
+	createAsyncAction,
+	createAsyncResource,
+	type AsyncActionSettings,
+	type AsyncHelperRetry,
+	type AsyncResourceSettings,
+	type AsyncActionResponse
+} from './injectable-dependencies/index.js';
+export { RegisterProvider, type ProviderLifecycle } from './presenter/RegisterProvider.js';
 
 export {
 	createSchemaFactory,

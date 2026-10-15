@@ -6,6 +6,14 @@ import { AzureNetPlugin } from '../src/lib/plugin/index.js';
 
 const tempRoots: string[] = [];
 
+it('leaves all route modules untouched and does not resolve virtual routes', async () => {
+	const plugin = AzureNetPlugin();
+	for (const file of ['+page.ts', '+page.server.ts', '+layout.ts', '+layout.server.ts', '+page.svelte', '+layout.svelte', '+server.ts']) {
+		expect(await runTransform('export const load = () => ({ unchanged: true });', `/project/src/routes/${file}`, plugin)).toBeNull();
+		expect(await runResolveId(`/project/src/routes/${file}`, plugin)).toBeNull();
+	}
+});
+
 const createTempRoot = (withProgram = true) => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), 'azure-net-plugin-'));
 	tempRoots.push(root);
@@ -92,7 +100,7 @@ describe('AzureNetPlugin', () => {
 
 	it('provides virtual server and client hooks', async () => {
 		const root = createTempRoot();
-		const plugin = AzureNetPlugin({ silentChromeDevtools: false });
+		const plugin = AzureNetPlugin();
 
 		runConfig(root, plugin);
 
@@ -102,22 +110,15 @@ describe('AzureNetPlugin', () => {
 		const clientHooks = await runLoad(String(clientId), plugin);
 
 		expect(serverHooks).toContain('__AZURE_NET_KIT_VIRTUAL_HOOK__');
-		expect(serverHooks).toContain("import { edgesHandle, edgesHandleRaw } from 'virtual:azure-net-kit/server-utils';");
-		expect(serverHooks).toContain("import { RequestContext } from '@azure-net/kit/server-context';");
+		expect(serverHooks).toContain("import { runRequest } from '@azure-net/kit/internal/server'");
+		expect(serverHooks).toContain('runRequest(input.event');
+		expect(serverHooks).not.toMatch(/edgesHandle|serialize|transformPageChunk|silentChrome/);
 		expect(serverHooks).toContain("await import('virtual:azure-net-kit/program')");
 		expect(serverHooks).not.toContain("import { register } from 'virtual:azure-net-kit/program';");
 		expect(serverHooks).toContain('export const init = async () => (await getRegister()).serverInit();');
-		expect(serverHooks).toContain('export const handleFetch = (input) => withRequestContext');
-		expect(serverHooks).toContain('export const handleValidationError = (input) => withRequestContext');
 		expect(serverHooks).toContain('export const reroute = async (input) => (await getRegister()).reroute(input);');
 		expect(serverHooks).toContain('export const getTransport = async () => (await getRegister()).transport;');
-		expect(serverHooks).toContain('await options.transformPageChunk(chunk) : undefined) ?? chunk.html');
 		expect(serverHooks).not.toContain('await register.serverInit?.();');
-		expect(serverHooks).toContain('export const handleError = async');
-		expect(serverHooks).toContain('await edgesHandleRaw(event, async () => {');
-		expect(serverHooks).toContain('result = await register.serverError');
-		expect(serverHooks).toContain('return new Response(null, { status: 204 });');
-		expect(serverHooks).toContain(', false);');
 		expect(clientHooks).toContain("await import('virtual:azure-net-kit/program')");
 		expect(clientHooks).toContain('export const transport = {};');
 		expect(clientHooks).toContain("export const decoders = createCodecView('decode');");
@@ -162,7 +163,7 @@ export async function get_hooks() {
 		expect(transformed).toContain('handle: __azureNetServerHooks.handle');
 		expect(transformed).toContain('handleFetch: __azureNetServerHooks.handleFetch');
 		expect(transformed).toContain('handleError: __azureNetServerHooks.handleError');
-		expect(transformed).toContain('handleValidationError: __azureNetServerHooks.handleValidationError');
+		expect(transformed).not.toContain('handleValidationError:');
 		expect(transformed).toContain('init: __azureNetServerHooks.init');
 		expect(transformed).toContain('reroute: __azureNetServerHooks.reroute');
 		expect(transformed).toContain('transport: await __azureNetServerHooks.getTransport()');
@@ -257,4 +258,20 @@ export const encoders = Object.fromEntries(Object.entries(hooks.transport).map((
 			await expect(runTransform(code, id)).resolves.toBeNull();
 		}
 	});
+});
+
+it.each(['build', 'dev'])('wraps Kit 3 %s server and client entry points', async (mode) => {
+	const server = await runTransform('export async function get_hooks() {\n return {};\n}', '/app/.svelte-kit/generated/' + mode + '/server.js');
+	expect(server).toContain('handle: __azureNetServerHooks.handle');
+	const client = await runTransform(
+		`export const hooks = {
+ handleError: (({ kind, error }) => { if (kind === 'unknown') { console.error(error); } }),
+ reroute: (() => {}),
+ transport: {}
+};
+export const decoders = Object.fromEntries(Object.entries(hooks.transport).map(([k, v]) => [k, v.decode]));
+export const encoders = Object.fromEntries(Object.entries(hooks.transport).map(([k, v]) => [k, v.encode]));`,
+		'/app/.svelte-kit/generated/' + mode + '/client/app.js'
+	);
+	expect(client).toContain('init: __azureNetClientHooks.init');
 });

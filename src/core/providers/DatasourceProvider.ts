@@ -1,12 +1,12 @@
 import { MockApiDatasource } from '../datasources/index.js';
-import { createHttpServiceInstance } from '$lib/infra.js';
-import { createBoundaryProvider, UniversalCookie } from '$lib/index.js';
+import { HttpServiceInstance } from '#lib/infra.js';
+import { CreateDiContainer, UniversalCookie } from '#lib/index.js';
 
-export const DatasourceProvider = createBoundaryProvider('CoreDatasourceProvider', {
+export const DatasourceProvider = CreateDiContainer('CoreDatasourceProvider', {
 	register: () => ({
 		KosmoPartsRest: () =>
 			new MockApiDatasource({
-				http: createHttpServiceInstance({
+				http: new HttpServiceInstance({
 					prefixUrl: 'https://cb784374e7b649a4b5ced37b17042896.fake-api.io',
 					onRequest: (request) => {
 						request.headers.set('X-Custom', 'Custom');

@@ -1,8 +1,8 @@
 import { PrivateRepository, PublicRepository } from '../http/repositories/index.js';
-import { createBoundaryProvider } from '$lib/index.js';
+import { CreateDiContainer } from '#lib/index.js';
 import { DatasourceProvider } from '../../../../../core/providers/index.js';
 
-export const InfrastructureProvider = createBoundaryProvider('Shared-kernelInfrastructureProvider', {
+export const InfrastructureProvider = CreateDiContainer('Shared-kernelInfrastructureProvider', {
 	dependsOn: { DatasourceProvider },
 	register: ({ DatasourceProvider }) => ({
 		PrivateRepository: () => new PrivateRepository(DatasourceProvider.KosmoPartsRest),

@@ -1,5 +1,5 @@
 import { BROWSER } from '../../external/tools/index.js';
-import { RequestContext } from '../../external/edges/ServerContext.js';
+import { RequestContext } from '../../shared/request-context/Internal.js';
 
 export type SearchParamsInit = string | string[][] | Record<string, string> | URLSearchParams | undefined;
 export type SearchParamsOption = SearchParamsInit | Record<string, string | number | boolean | undefined> | Array<Array<string | number | boolean>>;
@@ -74,7 +74,7 @@ export class HttpServiceError<T> extends Error implements IHttpServiceError<T> {
 	}
 }
 
-export interface HttpInstanceNormalizedRequest {
+export interface IHttpInstanceNormalizedRequest {
 	url: string | URL;
 	method: HttpInstanceFetchMethods;
 	headers: Headers;
@@ -88,10 +88,10 @@ export interface HttpInstanceNormalizedRequest {
 	requestInit: Omit<RequestInit, 'method' | 'headers' | 'body'>;
 }
 
-export type HttpInstanceOnRequest = (request: HttpInstanceNormalizedRequest) => void | Promise<void>;
-export type HttpInstanceOnError = (error: HttpServiceError<unknown>, request: HttpInstanceNormalizedRequest) => void | Promise<void>;
+export type IHttpInstanceOnRequest = (request: IHttpInstanceNormalizedRequest) => void | Promise<void>;
+export type IHttpInstanceOnError = (error: HttpServiceError<unknown>, request: IHttpInstanceNormalizedRequest) => void | Promise<void>;
 
-export type HttpInstanceDoFetch = <T = unknown>(request: HttpInstanceNormalizedRequest) => Promise<IHttpServiceResponse<T>>;
+export type IHttpInstanceDoFetch = <T = unknown>(request: IHttpInstanceNormalizedRequest) => Promise<IHttpServiceResponse<T>>;
 
 export interface IHttpInstanceOptions<T = unknown> extends Omit<RequestInit, 'headers' | 'method'> {
 	headers?: NonNullable<RequestInit['headers']> | Record<string, string | undefined>;
@@ -103,22 +103,22 @@ export interface IHttpInstanceOptions<T = unknown> extends Omit<RequestInit, 'he
 	retry?: number;
 	includeRaw?: boolean;
 	responseFormat?: 'json' | 'blob' | 'text' | 'arrayBuffer' | 'body';
-	onRequest?: HttpInstanceOnRequest;
-	onError?: HttpInstanceOnError;
+	onRequest?: IHttpInstanceOnRequest;
+	onError?: IHttpInstanceOnError;
 	onResponse?: (response: IHttpServiceResponse<T>) => void | Promise<void>;
-	doFetch?: HttpInstanceDoFetch;
+	doFetch?: IHttpInstanceDoFetch;
 }
 
-export type HttpInstanceRequestMethod = <T = unknown>(url: string | URL, options?: IHttpInstanceOptions<T>) => Promise<IHttpServiceResponse<T>>;
+export type IHttpInstanceRequestMethod = <T = unknown>(url: string | URL, options?: IHttpInstanceOptions<T>) => Promise<IHttpServiceResponse<T>>;
 
 export interface IHttpServiceInstance {
-	get: HttpInstanceRequestMethod;
-	post: HttpInstanceRequestMethod;
-	put: HttpInstanceRequestMethod;
-	delete: HttpInstanceRequestMethod;
-	patch: HttpInstanceRequestMethod;
-	head: HttpInstanceRequestMethod;
-	options: HttpInstanceRequestMethod;
+	get: IHttpInstanceRequestMethod;
+	post: IHttpInstanceRequestMethod;
+	put: IHttpInstanceRequestMethod;
+	delete: IHttpInstanceRequestMethod;
+	patch: IHttpInstanceRequestMethod;
+	head: IHttpInstanceRequestMethod;
+	options: IHttpInstanceRequestMethod;
 }
 
 const stringifyJsonFunc = (data: unknown) => {
@@ -232,7 +232,7 @@ const resolveUrl = (target: string | URL, baseUrl?: string | URL, searchParams?:
 	return mergeQueryToRelativeUrl(rawUrl, normalizedSearchParams);
 };
 
-const parseBodyByFormat = async <T>(response: Response, format: HttpInstanceNormalizedRequest['responseFormat']): Promise<T> => {
+const parseBodyByFormat = async <T>(response: Response, format: IHttpInstanceNormalizedRequest['responseFormat']): Promise<T> => {
 	switch (format) {
 		case 'blob':
 			return (await response.blob()) as T;
@@ -292,7 +292,7 @@ const normalizeUnknownError = (error: unknown): Error => {
 	return new Error(String(error));
 };
 
-const parseResponse = async <T>(response: Response, request: HttpInstanceNormalizedRequest) => {
+const parseResponse = async <T>(response: Response, request: IHttpInstanceNormalizedRequest) => {
 	const raw = request.includeRaw && typeof response?.clone === 'function' ? response?.clone() : undefined;
 	const hasNoBody = request.method === HttpInstanceFetchMethods.HEAD || response.status === 204 || response.status === 205;
 	let data = undefined as T;
@@ -320,7 +320,7 @@ const parseResponse = async <T>(response: Response, request: HttpInstanceNormali
 	return { data, headers: Object.fromEntries(response.headers.entries()), status: response.status, raw };
 };
 
-const defaultDoFetch: HttpInstanceDoFetch = async <T = unknown>(request: HttpInstanceNormalizedRequest): Promise<IHttpServiceResponse<T>> => {
+const defaultDoFetch: IHttpInstanceDoFetch = async <T = unknown>(request: IHttpInstanceNormalizedRequest): Promise<IHttpServiceResponse<T>> => {
 	const maxAttempts = Math.max(1, Math.floor(request.retry) + 1);
 	let lastError: unknown;
 
@@ -358,7 +358,7 @@ const defaultDoFetch: HttpInstanceDoFetch = async <T = unknown>(request: HttpIns
 	throw lastError;
 };
 
-const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOptions): HttpInstanceRequestMethod => {
+const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOptions): IHttpInstanceRequestMethod => {
 	return async <T = unknown>(url: string | URL, options: IHttpInstanceOptions<T> = {}): Promise<IHttpServiceResponse<T>> => {
 		const merged = mergeOptions<T>(defaults, options);
 		const stringifyJson = merged.stringifyJson ?? stringifyJsonFunc;
@@ -378,7 +378,7 @@ const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOpt
 			headers.set('accept', 'application/json');
 		}
 
-		const normalizedRequest: HttpInstanceNormalizedRequest = {
+		const normalizedRequest: IHttpInstanceNormalizedRequest = {
 			url: resolveUrl(url, merged.prefixUrl, merged.searchParams),
 			method,
 			headers,
@@ -435,16 +435,24 @@ const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOpt
 	};
 };
 
-export const createHttpServiceInstance = (config: IHttpInstanceOptions = {}): IHttpServiceInstance => {
-	const defaults: IHttpInstanceOptions = { ...config };
+export class HttpServiceInstance implements IHttpServiceInstance {
+	private readonly defaults: IHttpInstanceOptions;
+	public readonly get: IHttpInstanceRequestMethod;
+	public readonly post: IHttpInstanceRequestMethod;
+	public readonly put: IHttpInstanceRequestMethod;
+	public readonly delete: IHttpInstanceRequestMethod;
+	public readonly patch: IHttpInstanceRequestMethod;
+	public readonly head: IHttpInstanceRequestMethod;
+	public readonly options: IHttpInstanceRequestMethod;
 
-	return {
-		get: makeMethod(HttpInstanceFetchMethods.GET, defaults),
-		post: makeMethod(HttpInstanceFetchMethods.POST, defaults),
-		put: makeMethod(HttpInstanceFetchMethods.PUT, defaults),
-		delete: makeMethod(HttpInstanceFetchMethods.DELETE, defaults),
-		patch: makeMethod(HttpInstanceFetchMethods.PATCH, defaults),
-		head: makeMethod(HttpInstanceFetchMethods.HEAD, defaults),
-		options: makeMethod(HttpInstanceFetchMethods.OPTIONS, defaults)
-	};
-};
+	constructor(config: IHttpInstanceOptions = {}) {
+		this.defaults = { ...config };
+		this.get = makeMethod(HttpInstanceFetchMethods.GET, this.defaults);
+		this.post = makeMethod(HttpInstanceFetchMethods.POST, this.defaults);
+		this.put = makeMethod(HttpInstanceFetchMethods.PUT, this.defaults);
+		this.delete = makeMethod(HttpInstanceFetchMethods.DELETE, this.defaults);
+		this.patch = makeMethod(HttpInstanceFetchMethods.PATCH, this.defaults);
+		this.head = makeMethod(HttpInstanceFetchMethods.HEAD, this.defaults);
+		this.options = makeMethod(HttpInstanceFetchMethods.OPTIONS, this.defaults);
+	}
+}

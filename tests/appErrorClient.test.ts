@@ -4,10 +4,71 @@ vi.mock('@azure-net/tools/environment', async (importOriginal) => ({
 	...(await importOriginal<typeof import('@azure-net/tools/environment')>()),
 	BROWSER: true
 }));
-import { createAsyncHelpers } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
+import { createAsyncAction as asyncAction } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
 import { createApp } from '../src/lib/shared/app/index.js';
+import { beforeNavigate } from '$app/navigation';
+
+vi.mock('$app/navigation', () => ({ beforeNavigate: vi.fn(), goto: vi.fn() }));
+
+describe('async useClient navigation registration', () => {
+	it('registers synchronously and reads middleware installed after await', async () => {
+		vi.mocked(beforeNavigate).mockClear();
+		let resume!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			resume = resolve;
+		});
+		const middleware = vi.fn(({ next }) => next());
+		const app = createApp((builder) =>
+			builder.useClient(async ({ useMiddlewares }) => {
+				await gate;
+				useMiddlewares([middleware]);
+			})
+		);
+		const pending = app.register();
+		expect(beforeNavigate).toHaveBeenCalledTimes(1);
+		const navigate = vi.mocked(beforeNavigate).mock.calls.at(-1)![0];
+		const navigation = { to: { url: new URL('https://example.com/a') }, from: null, cancel: vi.fn() };
+		navigate(navigation as never);
+		expect(middleware).not.toHaveBeenCalled();
+		resume();
+		await pending;
+		navigate(navigation as never);
+		expect(middleware).toHaveBeenCalledTimes(1);
+		app.register();
+		expect(beforeNavigate).toHaveBeenCalledTimes(1);
+	});
+
+	it('preserves rejected async lifecycle results without delayed registration', async () => {
+		vi.mocked(beforeNavigate).mockClear();
+		const failure = new Error('initialization failed');
+		const app = createApp((builder) =>
+			builder.useClient(async () => {
+				throw failure;
+			})
+		);
+		const result = app.register();
+		expect(beforeNavigate).toHaveBeenCalledTimes(1);
+		await expect(result).rejects.toBe(failure);
+	});
+});
 
 describe('createApp client error runtime', () => {
+	it('runs client init without a container or arguments after universal setup', async () => {
+		const init = vi.fn();
+		const universal = vi.fn(async (context) => {
+			expect(context).not.toHaveProperty('Container');
+			await Promise.resolve();
+			expect(init).not.toHaveBeenCalled();
+		});
+		const client = vi.fn((context) => expect(context).not.toHaveProperty('Container'));
+		const app = createApp((builder) => builder.use(universal).useClientInit(init).useClient(client));
+		expect(Object.keys(app)).toEqual(['register']);
+		await app.register.clientInit();
+		await app.register.clientInit();
+		expect(init).toHaveBeenCalledExactlyOnceWith();
+		await app.register();
+		expect(client).toHaveBeenCalledTimes(1);
+	});
 	it('binds the application hook during client init', async () => {
 		const app = createApp((builder) =>
 			builder.useAzureNetKitError(({ error, isClient, isServer, requestContext, event }) => {
@@ -20,7 +81,7 @@ describe('createApp client error runtime', () => {
 		);
 		await app.register.clientInit();
 
-		const result = await createAsyncHelpers<{ source: string }>().createAsyncAction(async () => {
+		const result = await asyncAction<never, never, { source: string }>(async () => {
 			throw new Error('client failure');
 		});
 
@@ -33,7 +94,7 @@ describe('createApp client error runtime', () => {
 		await first.register.clientInit();
 		await second.register.clientInit();
 
-		const result = await createAsyncHelpers<{ app: string }>().createAsyncAction(async () => {
+		const result = await asyncAction<never, never, { app: string }>(async () => {
 			throw new Error('client failure');
 		});
 
@@ -46,7 +107,7 @@ describe('createApp client error runtime', () => {
 
 		const plain = createApp((builder) => builder);
 		await plain.register.clientInit();
-		const result = await createAsyncHelpers<{ stale?: boolean }>().createAsyncAction(async () => {
+		const result = await asyncAction<never, never, { stale?: boolean }>(async () => {
 			throw new Error('client failure');
 		});
 

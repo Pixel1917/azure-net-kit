@@ -1,2 +1,2 @@
 export * from './PublicPresenter.js';
-export * from './PublicStore.js';
+export * from './PublicStore.svelte.js';

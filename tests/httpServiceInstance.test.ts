@@ -1,15 +1,16 @@
+import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { RequestContext } from '@azure-net/edges/context';
+import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
 import {
-	createHttpServiceInstance,
+	HttpServiceInstance,
 	HttpInstanceFetchMethods,
-	type HttpInstanceDoFetch,
-	type HttpInstanceNormalizedRequest
+	type IHttpInstanceDoFetch,
+	type IHttpInstanceNormalizedRequest
 } from '../src/lib/infra/http-service/HttpServiceInstance.js';
 import { HttpServiceError, HttpServiceResponse } from '../src/lib/infra/http-service/HttpServiceInstance.js';
 
 const setRequestContextFetch = (fetchImpl: typeof fetch) => {
-	RequestContext.init(
+	initializeRequestContext(
 		() =>
 			({
 				event: {
@@ -47,7 +48,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => jsonResponse(200, { ok: true }, { 'x-id': 'r1' }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = createHttpServiceInstance();
+		const instance = new HttpServiceInstance();
 		const result = await instance.get<{ ok: boolean }>('https://api.example.com/users');
 
 		expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -62,7 +63,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => jsonResponse(200, { ok: true }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = createHttpServiceInstance({
+		const instance = new HttpServiceInstance({
 			prefixUrl: 'https://api.example.com/v1/',
 			searchParams: { lang: 'ru' }
 		});
@@ -80,7 +81,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => jsonResponse(200, { ok: true }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = createHttpServiceInstance({
+		const instance = new HttpServiceInstance({
 			searchParams: { fromDefault: 1 }
 		});
 
@@ -96,7 +97,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => jsonResponse(201, { created: true }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = createHttpServiceInstance();
+		const instance = new HttpServiceInstance();
 		await instance.post('/users', { json: { name: 'Ada' } });
 
 		const [, init] = getFetchCall(fetchMock);
@@ -114,7 +115,7 @@ describe('HttpServiceInstance', () => {
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 		const stringifyJson = vi.fn(() => 'encoded=1');
 
-		const instance = createHttpServiceInstance();
+		const instance = new HttpServiceInstance();
 		await instance.post('/encode', {
 			json: { a: 1 },
 			stringifyJson
@@ -130,14 +131,14 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => jsonResponse(200, { ok: true }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const defaultHook = vi.fn((request: HttpInstanceNormalizedRequest) => {
+		const defaultHook = vi.fn((request: IHttpInstanceNormalizedRequest) => {
 			request.headers.set('x-from-default', '1');
 		});
-		const requestHook = vi.fn((request: HttpInstanceNormalizedRequest) => {
+		const requestHook = vi.fn((request: IHttpInstanceNormalizedRequest) => {
 			request.headers.set('x-from-request', '1');
 		});
 
-		const instance = createHttpServiceInstance({ onRequest: defaultHook });
+		const instance = new HttpServiceInstance({ onRequest: defaultHook });
 		await instance.get('/hook-1');
 		await instance.get('/hook-2', { onRequest: requestHook });
 
@@ -158,7 +159,7 @@ describe('HttpServiceInstance', () => {
 			.mockResolvedValueOnce(jsonResponse(200, { ok: true }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = createHttpServiceInstance({ retry: 1 });
+		const instance = new HttpServiceInstance({ retry: 1 });
 		const result = await instance.get<{ ok: boolean }>('/unstable');
 
 		expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -170,7 +171,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => jsonResponse(404, { reason: 'missing' }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = createHttpServiceInstance({ retry: 3 });
+		const instance = new HttpServiceInstance({ retry: 3 });
 		await expect(instance.get('/missing')).rejects.toMatchObject({ status: 404, type: 'external' });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
@@ -182,7 +183,7 @@ describe('HttpServiceInstance', () => {
 			.mockResolvedValueOnce(jsonResponse(200, { ok: true }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = createHttpServiceInstance({ retry: 1 });
+		const instance = new HttpServiceInstance({ retry: 1 });
 		const result = await instance.get<{ ok: boolean }>('/network');
 
 		expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -195,7 +196,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => Promise.reject(abortError));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = createHttpServiceInstance({ retry: 3 });
+		const instance = new HttpServiceInstance({ retry: 3 });
 		await expect(instance.get('/timeout')).rejects.toBeInstanceOf(HttpServiceError);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
@@ -218,7 +219,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => responseLike);
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = createHttpServiceInstance();
+		const instance = new HttpServiceInstance();
 		const result = await instance.get<{ data: boolean }>('/raw', { includeRaw: true });
 
 		expect(clone).toHaveBeenCalledTimes(1);
@@ -231,7 +232,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => new Response('plain-text', { status: 200 }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = createHttpServiceInstance();
+		const instance = new HttpServiceInstance();
 		const result = await instance.get<string>('/doc', { responseFormat: 'text' });
 
 		expect(result.data).toBe('plain-text');
@@ -241,7 +242,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const result = await createHttpServiceInstance().delete('/resource');
+		const result = await new HttpServiceInstance().delete('/resource');
 
 		expect(result.status).toBe(204);
 		expect(result.data).toBeUndefined();
@@ -251,7 +252,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const result = await createHttpServiceInstance().get('/empty');
+		const result = await new HttpServiceInstance().get('/empty');
 
 		expect(result.status).toBe(200);
 		expect(result.data).toBeUndefined();
@@ -261,7 +262,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const result = await createHttpServiceInstance().head('/resource');
+		const result = await new HttpServiceInstance().head('/resource');
 
 		expect(result.status).toBe(200);
 		expect(result.data).toBeUndefined();
@@ -271,7 +272,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => new Response('not-json', { status: 500, statusText: 'Server Error' }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = createHttpServiceInstance();
+		const instance = new HttpServiceInstance();
 		await expect(instance.get('/broken-json')).rejects.toMatchObject({
 			type: 'external',
 			status: 500
@@ -282,7 +283,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => new Response('not-json', { status: 200 }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = createHttpServiceInstance();
+		const instance = new HttpServiceInstance();
 		await expect(instance.get('/parse-failed')).rejects.toMatchObject({
 			type: 'internal',
 			status: 200
@@ -295,14 +296,14 @@ describe('HttpServiceInstance', () => {
 		});
 		const onError = vi.fn(async () => {});
 
-		const instance = createHttpServiceInstance({
+		const instance = new HttpServiceInstance({
 			doFetch,
 			onError
 		});
 
 		await expect(instance.get('/oops')).rejects.toBeInstanceOf(HttpServiceError);
 		expect(onError).toHaveBeenCalledTimes(1);
-		const firstCallError = (onError.mock.calls[0] as unknown as [HttpServiceError<unknown>, HttpInstanceNormalizedRequest])[0];
+		const firstCallError = (onError.mock.calls[0] as unknown as [HttpServiceError<unknown>, IHttpInstanceNormalizedRequest])[0];
 		expect(firstCallError).toBeInstanceOf(HttpServiceError);
 		expect(firstCallError.status).toBe(500);
 	});
@@ -312,7 +313,7 @@ describe('HttpServiceInstance', () => {
 			throw new Error('boom');
 		});
 
-		const instance = createHttpServiceInstance({
+		const instance = new HttpServiceInstance({
 			doFetch,
 			onError: async () => {}
 		});
@@ -325,7 +326,7 @@ describe('HttpServiceInstance', () => {
 
 	it('supports fully custom doFetch implementation contract', async () => {
 		const doFetchSpy = vi.fn();
-		const doFetch: HttpInstanceDoFetch = async <T>(request: HttpInstanceNormalizedRequest) => {
+		const doFetch: IHttpInstanceDoFetch = async <T>(request: IHttpInstanceNormalizedRequest) => {
 			doFetchSpy(request);
 			expect(request.method).toBe(HttpInstanceFetchMethods.DELETE);
 			expect(request.url).toBe('/custom');
@@ -339,7 +340,7 @@ describe('HttpServiceInstance', () => {
 			});
 		};
 
-		const instance = createHttpServiceInstance({ doFetch });
+		const instance = new HttpServiceInstance({ doFetch });
 		const result = await instance.delete<{ from: string }>('/custom');
 
 		expect(doFetchSpy).toHaveBeenCalledTimes(1);

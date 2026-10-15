@@ -1,8 +1,8 @@
 import { error, redirect, type RequestEvent } from '@sveltejs/kit';
 import { ensureRoute, type EnsureRoute } from './Shared.js';
 import { BROWSER } from '../../../external/tools/index.js';
-import { RequestContext } from '../../../external/edges/ServerContext.js';
-import type { RedirectStatus } from '../../redirect/index.js';
+import { RequestContext } from '../../../shared/request-context/Internal.js';
+import type { RedirectStatus } from '../../../svelte/redirect/index.js';
 
 export type IServerMiddleware = (middlewareData: {
 	to: RequestEvent['url'];

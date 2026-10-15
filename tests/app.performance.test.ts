@@ -1,11 +1,13 @@
+import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { performance } from 'node:perf_hooks';
-import { RequestContext } from '@azure-net/edges/context';
+import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/lib/shared/app/index.js';
 import type { IServerMiddleware } from '../src/lib/shared/app/index.js';
-import { createAsyncHelpers } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
+import { createAsyncAction as asyncAction } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
 
 const createServerContext = () => ({
+	state: {},
 	data: {},
 	event: {
 		fetch,
@@ -45,53 +47,9 @@ describe('createApp performance', () => {
 		expect(result.avg).toBeLessThan(0.05);
 	});
 
-	it('creates app instances with registered dependencies cheaply', () => {
-		const result = measure('create app with 10 deps', 10_000, () => {
-			createApp((app) =>
-				app.dependencies({
-					A: () => 1,
-					B: () => 2,
-					C: () => 3,
-					D: () => 4,
-					E: () => 5,
-					F: () => 6,
-					G: () => 7,
-					H: () => 8,
-					I: () => 9,
-					J: () => 10
-				})
-			);
-		});
-
-		expect(result.avg).toBeLessThan(0.08);
-	});
-
-	it('resolves first dependency and cached dependency reads quickly', () => {
-		const context = createServerContext();
-		RequestContext.init(() => context as never);
-
-		const { Container } = createApp((app) =>
-			app.dependencies({
-				Service: () => ({ value: 42 })
-			})
-		);
-
-		const firstRead = measure('first dependency read', 10_000, () => {
-			context.data = {};
-			void Container.Service.value;
-		});
-
-		const cachedRead = measure('cached dependency read', 200_000, () => {
-			void Container.Service.value;
-		});
-
-		expect(firstRead.avg).toBeLessThan(0.05);
-		expect(cachedRead.avg).toBeLessThan(0.01);
-	});
-
 	it('runs handle baseline and lifecycle path with low sync overhead', async () => {
 		let context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		const baseline = createApp((app) => app);
 		const resolve = () => new Response('ok');
@@ -114,7 +72,7 @@ describe('createApp performance', () => {
 
 	it('runs server middleware chain with low overhead', async () => {
 		let context = createServerContext();
-		RequestContext.init(() => context as never);
+		initializeRequestContext(() => context as never);
 
 		const middleware: IServerMiddleware = ({ next }) => next();
 		const middlewares = [middleware, middleware, middleware, middleware, middleware];
@@ -136,7 +94,7 @@ describe('createApp performance', () => {
 	});
 
 	it('converts default async helper errors with low overhead', async () => {
-		const { createAsyncAction } = createAsyncHelpers();
+		const createAsyncAction = asyncAction;
 		const error = new Error('expected');
 		const result = await measureAsync('default helper error conversion', 5_000, async () => {
 			await createAsyncAction(async () => {
@@ -149,8 +107,8 @@ describe('createApp performance', () => {
 
 	it('runs the request-scoped custom error hook with low overhead', async () => {
 		const context = createServerContext();
-		RequestContext.init(() => context as never);
-		const { createAsyncAction } = createAsyncHelpers<{ code: string }>();
+		initializeRequestContext(() => context as never);
+		const createAsyncAction = asyncAction<never, never, { code: string }>;
 		const error = new Error('expected');
 		let result!: { avg: number };
 		const app = createApp((builder) => builder.useAzureNetKitError(({ error }) => error.toPlainObject({ code: 'EXPECTED' })));

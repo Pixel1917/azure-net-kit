@@ -1,12 +1,16 @@
-import { createApp } from '$lib/index.js';
-import { PublicStore } from './app/mock-api-context/layers/delivery/public/index.js';
+import { PublicStore } from './app/mock-api-context/layers/delivery/public/PublicStore.svelte.js';
+import { RequestContext } from './lib/shared/request-context/Internal.js';
+import { createApp } from '#lib/index.js';
 import { TranslationManager } from './core/translations/index.js';
 
-export const { register, Container } = createApp((app) =>
+export const { register } = createApp((app) =>
 	app
+		.useTranslations(TranslationManager)
+		.useBoot(({ state }) => {
+			PublicStore().store.value = state.demoMessage ?? 'csr';
+		})
 		.useServer(async ({ resolve, event, useMiddlewares }) => {
-			const { preloadTranslation, applyHtmlLocaleAttr } = TranslationManager();
-			await preloadTranslation();
+			RequestContext.current().state.demoMessage = 'from-server';
 			await useMiddlewares([
 				({ to, next, event }) => {
 					if (to.pathname === '/' && !event?.cookies.get('test')) {
@@ -15,7 +19,7 @@ export const { register, Container } = createApp((app) =>
 					next();
 				}
 			]);
-			return resolve(event, { transformPageChunk: ({ html }) => applyHtmlLocaleAttr(html) });
+			return resolve(event);
 		})
 		.useServerError(({ message }) => {
 			console.log(message);
@@ -38,9 +42,5 @@ export const { register, Container } = createApp((app) =>
 			console.log(event);
 			console.log(error);
 			console.log(status);
-		})
-		.dependencies({
-			storeValue: () => PublicStore().store,
-			translationManager: () => TranslationManager()
 		})
 );

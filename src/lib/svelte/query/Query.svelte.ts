@@ -113,7 +113,9 @@ export const createQuery = <T extends Record<string, unknown>>(initialValue: T, 
 	const syncEnabled = Boolean(searchParamsSync);
 	const parseSearchParams = syncSettings?.fromSearchParams ?? fromSearchParams<T>;
 	const serializeSearchParams = syncSettings?.toSearchParams ?? toSearchParams<T>;
-	const parsedInitial = syncEnabled ? parseSearchParams(new URLSearchParams(page.url.searchParams), cloneStateValue(baseInitial)) : undefined;
+	const parsedInitial = syncEnabled
+		? parseSearchParams(new URLSearchParams(page.url.searchParams.toString()), cloneStateValue(baseInitial))
+		: undefined;
 	let data = $state<T>(parsedInitial ? { ...cloneStateValue(baseInitial), ...cloneStateValue(parsedInitial) } : cloneStateValue(baseInitial));
 
 	const reset = () => {
@@ -152,7 +154,7 @@ export const createQuery = <T extends Record<string, unknown>>(initialValue: T, 
 				if (nextParams.toString() === initialParams.toString()) return;
 			}
 
-			const url = new URL(page.url);
+			const url = new URL(page.url.href);
 			for (const key of managedKeys) url.searchParams.delete(key);
 			for (const [key, value] of nextParams) url.searchParams.append(key, value);
 

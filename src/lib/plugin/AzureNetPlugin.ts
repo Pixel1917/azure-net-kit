@@ -1,13 +1,8 @@
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import type { Plugin } from 'vite';
 
-export interface AzureNetPluginOptions {
-	silentChromeDevtools?: boolean;
-}
-
-const VIRTUAL_SERVER_UTILS_ID = 'virtual:azure-net-kit/server-utils';
-const RESOLVED_VIRTUAL_SERVER_UTILS_ID = `\0${VIRTUAL_SERVER_UTILS_ID}`;
 const VIRTUAL_SERVER_HOOKS_ID = 'virtual:azure-net-kit/hooks.server';
 const VIRTUAL_CLIENT_HOOKS_ID = 'virtual:azure-net-kit/hooks.client';
 const RESOLVED_VIRTUAL_SERVER_HOOKS_ID = `\0${VIRTUAL_SERVER_HOOKS_ID}`;
@@ -28,63 +23,16 @@ const findStaticImportInsertPosition = (sourceCode: string): number => {
 	return lastMatch ? lastMatch.index + lastMatch[0].length : 0;
 };
 
-const createVirtualServerHooks = (silentChromeDevtools: boolean) => `// ${GENERATED_MARKER}
-import { edgesHandle, edgesHandleRaw } from '${VIRTUAL_SERVER_UTILS_ID}';
-import { RequestContext } from '@azure-net/kit/server-context';
-
+const createVirtualServerHooks = () => `// ${GENERATED_MARKER}
+import { runRequest } from '@azure-net/kit/internal/server';
 const getRegister = async () => (await import('${VIRTUAL_PROGRAM_ID}')).register;
-
-const withRequestContext = (event, callback) => {
-	try {
-		RequestContext.current();
-	} catch {
-		return edgesHandleRaw(event, callback);
-	}
-
-	return callback();
-};
-
 export const init = async () => (await getRegister()).serverInit();
-export const handleFetch = (input) => withRequestContext(input.event, async () => (await getRegister()).serverFetch(input));
-export const handleValidationError = (input) => withRequestContext(
-	input.event,
-	async () => (await getRegister()).serverValidationError(input)
-);
+export const handle = (input) => runRequest(input.event, async () => (await getRegister()).handle(input));
+export const handleFetch = (input) => runRequest(input.event, async () => (await getRegister()).serverFetch(input));
+export const handleError = (input) => runRequest(input.event, async () => (await getRegister()).serverError(input));
 export const reroute = async (input) => (await getRegister()).reroute(input);
 export const getTransport = async () => (await getRegister()).transport;
-
-export const handle = edgesHandle(async ({ serialize, edgesEvent, resolve }) => {
-	const register = await getRegister();
-
-	return register.handle({
-		event: edgesEvent,
-		resolve: (event, options) =>
-			resolve(event, {
-				...options,
-				transformPageChunk: async (chunk) => {
-					const html = (options?.transformPageChunk ? await options.transformPageChunk(chunk) : undefined) ?? chunk.html;
-					return serialize(html);
-				}
-			})
-	});
-}
-${silentChromeDevtools ? ')' : ', false)'};
-
-export const handleError = async ({ error, event, status, message }) => {
-	let result;
-
-	await edgesHandleRaw(event, async () => {
-		const register = await getRegister();
-		result = await register.serverError({ error, event, status, message });
-
-		return new Response(null, { status: 204 });
-	});
-
-	return result;
-};
 `;
-
-const createVirtualServerUtils = () => "export { edgesHandle, edgesHandleRaw } from '@azure-net/kit/edges/internal-package/utils';";
 
 const createVirtualClientHooks = () => `// ${GENERATED_MARKER}
 const getRegister = async () => (await import('${VIRTUAL_PROGRAM_ID}')).register;
@@ -181,7 +129,6 @@ const transformGeneratedServerInternal = (sourceCode: string) => {
 \t\thandle: __azureNetServerHooks.handle,
 \t\thandleFetch: __azureNetServerHooks.handleFetch,
 \t\thandleError: __azureNetServerHooks.handleError,
-\t\thandleValidationError: __azureNetServerHooks.handleValidationError,
 \t\tinit: __azureNetServerHooks.init,
 \t\treroute: __azureNetServerHooks.reroute,
 \t\ttransport: await __azureNetServerHooks.getTransport()
@@ -200,7 +147,8 @@ const transformGeneratedClientApp = (sourceCode: string) => {
 		);
 	}
 
-	const handleErrorPattern = /handleError:\s*\(\(\{\s*error\s*\}\)\s*=>\s*\{\s*console\.error\(error\)\s*\}\)/m;
+	const handleErrorPattern =
+		/handleError:\s*\(\(\{\s*(?:kind,\s*)?error\s*\}\)\s*=>\s*\{\s*(?:if\s*\(kind === ['"]unknown['"]\)\s*\{\s*)?console\.error\(error\);?\s*\}\s*(?:\}\s*)?\)/m;
 	if (!handleErrorPattern.test(sourceCode)) {
 		throw new Error('[AzureNetPlugin] Unsupported SvelteKit generated client app: default handleError was not found.');
 	}
@@ -232,9 +180,7 @@ const transformGeneratedClientApp = (sourceCode: string) => {
 	return transformed;
 };
 
-export const AzureNetPlugin = (options?: AzureNetPluginOptions): Plugin => {
-	const { silentChromeDevtools = true } = options ?? {};
-
+export const AzureNetPlugin = (): Plugin => {
 	let root = process.cwd();
 
 	return {
@@ -259,7 +205,10 @@ export const AzureNetPlugin = (options?: AzureNetPluginOptions): Plugin => {
 		},
 
 		resolveId(id) {
-			if (id === VIRTUAL_SERVER_UTILS_ID) return RESOLVED_VIRTUAL_SERVER_UTILS_ID;
+			if (id === '@azure-net/kit/internal/server') {
+				const runtime = fileURLToPath(new URL('../server/Context/Runtime.js', import.meta.url));
+				return fs.existsSync(runtime) ? runtime : runtime.replace(/\.js$/, '.ts');
+			}
 			if (id === VIRTUAL_SERVER_HOOKS_ID) return RESOLVED_VIRTUAL_SERVER_HOOKS_ID;
 			if (id === VIRTUAL_CLIENT_HOOKS_ID) return RESOLVED_VIRTUAL_CLIENT_HOOKS_ID;
 			if (id === VIRTUAL_PROGRAM_ID) return RESOLVED_VIRTUAL_PROGRAM_ID;
@@ -267,8 +216,7 @@ export const AzureNetPlugin = (options?: AzureNetPluginOptions): Plugin => {
 		},
 
 		load(id) {
-			if (id === RESOLVED_VIRTUAL_SERVER_UTILS_ID) return createVirtualServerUtils();
-			if (id === RESOLVED_VIRTUAL_SERVER_HOOKS_ID) return createVirtualServerHooks(silentChromeDevtools);
+			if (id === RESOLVED_VIRTUAL_SERVER_HOOKS_ID) return createVirtualServerHooks();
 			if (id === RESOLVED_VIRTUAL_CLIENT_HOOKS_ID) return createVirtualClientHooks();
 			if (id === RESOLVED_VIRTUAL_PROGRAM_ID) return createVirtualProgram(root);
 			return null;
@@ -277,12 +225,15 @@ export const AzureNetPlugin = (options?: AzureNetPluginOptions): Plugin => {
 		transform(code, id) {
 			const normalizedId = id.split('?')[0].split(path.sep).join('/');
 
-			if (normalizedId.endsWith('/.svelte-kit/generated/server/internal.js')) {
+			if (
+				normalizedId.endsWith('/.svelte-kit/generated/server/internal.js') ||
+				/\/.svelte-kit\/generated\/(?:build|dev)\/server\.js$/.test(normalizedId)
+			) {
 				const transformed = transformGeneratedServerInternal(code);
 				return transformed ? { code: transformed, map: null } : null;
 			}
 
-			if (normalizedId.endsWith('/.svelte-kit/generated/client/app.js') || normalizedId.endsWith('/.svelte-kit/generated/client-optimized/app.js')) {
+			if (/\/.svelte-kit\/generated\/(?:(?:build|dev)\/)?client(?:-optimized)?\/app\.js$/.test(normalizedId)) {
 				const transformed = transformGeneratedClientApp(code);
 				return transformed ? { code: transformed, map: null } : null;
 			}

@@ -1,38 +1,35 @@
+import { getTranslationLifecycle, type TranslationManagerFactory } from '../../i18n/Internal.js';
+import { hydratable } from 'svelte';
+import { getContextInternals } from '../../shared/request-context/Internal.js';
 import { BROWSER } from '../../external/tools/index.js';
-import { RequestContext, type ContextData } from '../../external/edges/ServerContext.js';
-import { createBoundaryProvider } from '../boundary-provider/Provider.js';
+import { RequestContext, type ContextData } from '../../shared/request-context/Internal.js';
 import { AppError, AzureNetKitInternalError, type IAppError } from '../app-error/AppError.js';
 import { bindAzureNetKitErrorResolver, type AsyncHelperRetry, type AzureNetKitErrorResolver } from '../app-error/ErrorRuntime.js';
-import { AppEvents } from '../event-bus/EventBus.js';
 import { executeServerMiddlewares, type IServerMiddleware } from './middleware/ServerMiddleware.js';
-import type {
-	Handle,
-	HandleClientError,
-	HandleFetch,
-	HandleServerError,
-	HandleValidationError,
-	RequestEvent,
-	Reroute,
-	ServerInit,
-	Transport
-} from '@sveltejs/kit';
+import type { Handle, HandleFetch, HandleServerError, HandleClientError, Reroute, ServerInit, Transport } from '@sveltejs/kit/hooks';
+import type { RequestEvent } from '@sveltejs/kit';
 import { beforeNavigate } from '$app/navigation';
 import { executeClientMiddlewares, type IClientMiddleware } from './middleware/ClientMiddleware.js';
 import { useLogger } from '../logger/index.js';
 
+// Kit 3 nests safe status/message inside caught errors; unknown errors keep safe defaults.
+const errorDetails = (input: { error: unknown; kind?: string }) => {
+	const legacy = input as { status?: unknown; message?: unknown };
+	const error =
+		input.kind !== 'unknown' && input.error && typeof input.error === 'object' ? (input.error as { status?: unknown; message?: unknown }) : {};
+	return {
+		status: typeof legacy.status === 'number' ? legacy.status : typeof error.status === 'number' ? error.status : 500,
+		message: typeof legacy.message === 'string' ? legacy.message : typeof error.message === 'string' ? error.message : 'Internal Error'
+	};
+};
+
 type MaybePromise<T> = T | Promise<T>;
 type HandleInput = Parameters<Handle>[0];
 type Resolve = HandleInput['resolve'];
-type AppDependencyFactory<TApp, TReturn = unknown> = (app: TApp) => TReturn;
-type AppDependencyFactories<TApp> = Record<string, AppDependencyFactory<TApp>>;
-type ServiceFactories<TDependencies> = {
-	[K in keyof TDependencies]: () => ResolvedDependencies<TDependencies>[K];
-};
-type ResolvedDependencies<T> = {
-	[K in keyof T]: T[K] extends (...args: never[]) => infer TReturn ? TReturn : never;
-};
 type BuilderFlags = Partial<
 	Record<
+		| 'useTranslations'
+		| 'useBoot'
 		| 'use'
 		| 'useClient'
 		| 'useClientInit'
@@ -49,72 +46,45 @@ type BuilderFlags = Partial<
 	>
 >;
 type WithFlag<TFlags extends BuilderFlags, TKey extends keyof BuilderFlags> = TFlags & Record<TKey, true>;
-type BuilderDependencies<TBuilder> = TBuilder extends { readonly __types__?: infer TDependencies } ? TDependencies : never;
 
 type OnceMethod<TFlags extends BuilderFlags, TKey extends keyof BuilderFlags, TMethod> = TFlags[TKey] extends true ? object : TMethod;
 
-export type AppContainer<TDependencies extends Record<string, unknown>> = Readonly<TDependencies>;
-
-export interface AppUniversalLifecycleContext<TDependencies extends Record<string, unknown>> {
-	Container: AppContainer<TDependencies>;
+export interface AppUniversalLifecycleContext {
 	isClient: boolean;
 	isServer: boolean;
 	requestContext?: ContextData;
 	event?: RequestEvent;
 }
 
-export interface AppClientLifecycleContext<TDependencies extends Record<string, unknown>> {
-	Container: AppContainer<TDependencies>;
+export interface AppClientLifecycleContext {
 	useMiddlewares: (middlewares: IClientMiddleware[]) => void;
 }
 
-export interface AppClientInitLifecycleContext<TDependencies extends Record<string, unknown>> {
-	Container: AppContainer<TDependencies>;
-}
+export type AppClientInitLifecycleContext = void;
 
-export interface AppClientErrorContext<TDependencies extends Record<string, unknown>> extends Omit<
-	AppClientLifecycleContext<TDependencies>,
-	'useMiddlewares'
-> {
-	error: unknown;
-	event: Parameters<HandleClientError>[0]['event'];
-	status: number;
-	message: string;
-}
+export type AppClientErrorContext = Parameters<HandleClientError>[0] & { status: number; message: string };
 
 export type AppServerInitLifecycleContext = void;
 
-export interface AppServerLifecycleContext<TDependencies extends Record<string, unknown>> {
-	Container: AppContainer<TDependencies>;
+export interface AppServerLifecycleContext {
 	requestContext: ContextData;
 	event: RequestEvent;
 	resolve: Resolve;
 	useMiddlewares: (middlewares: IServerMiddleware[]) => Promise<void>;
 }
 
-export interface AppServerErrorContext<TDependencies extends Record<string, unknown>> {
-	Container: AppContainer<TDependencies>;
+export type AppServerErrorContext = Parameters<HandleServerError>[0] & {
 	requestContext: ContextData;
-	error: unknown;
-	event: RequestEvent;
 	status: number;
 	message: string;
 	useLogger: typeof useLogger;
-}
+};
 
-export type AppServerFetchContext<TDependencies extends Record<string, unknown>> = Parameters<HandleFetch>[0] & {
-	Container: AppContainer<TDependencies>;
+export type AppServerFetchContext = Parameters<HandleFetch>[0] & {
 	requestContext: ContextData;
 };
 
-export type AppServerValidationErrorContext<TDependencies extends Record<string, unknown>> = Parameters<HandleValidationError>[0] & {
-	Container: AppContainer<TDependencies>;
-	requestContext: ContextData;
-};
-
-export interface AppAzureNetKitErrorContext<TDependencies extends Record<string, unknown>> {
-	Container: AppContainer<TDependencies>;
-	AppEvents: typeof AppEvents;
+export interface AppAzureNetKitErrorContext {
 	error: AppError;
 	retry: AsyncHelperRetry;
 	isClient: boolean;
@@ -123,111 +93,81 @@ export interface AppAzureNetKitErrorContext<TDependencies extends Record<string,
 	event?: RequestEvent;
 }
 
-export type AppUniversalLifecycleCallback<TDependencies extends Record<string, unknown>> = (
-	context: AppUniversalLifecycleContext<TDependencies>
-) => MaybePromise<void>;
-export type AppClientLifecycleCallback<TDependencies extends Record<string, unknown>> = (
-	context: AppClientLifecycleContext<TDependencies>
-) => MaybePromise<void>;
-export type AppClientInitLifecycleCallback<TDependencies extends Record<string, unknown>> = (
-	context: AppClientInitLifecycleContext<TDependencies>
-) => MaybePromise<void>;
-export type AppClientErrorCallback<TDependencies extends Record<string, unknown>> = (
-	context: AppClientErrorContext<TDependencies>
-) => ReturnType<HandleClientError>;
+export type AppUniversalLifecycleCallback = (context: AppUniversalLifecycleContext) => MaybePromise<void>;
+export type AppClientLifecycleCallback = (context: AppClientLifecycleContext) => MaybePromise<void>;
+export type AppClientInitLifecycleCallback = (context: AppClientInitLifecycleContext) => MaybePromise<void>;
+export type AppClientErrorCallback = (context: AppClientErrorContext) => ReturnType<HandleClientError>;
 export type AppServerInitLifecycleCallback = ServerInit;
-export type AppServerLifecycleCallback<TDependencies extends Record<string, unknown>> = (
-	context: AppServerLifecycleContext<TDependencies>
-) => MaybePromise<Response | void>;
-export type AppServerErrorCallback<TDependencies extends Record<string, unknown>> = (
-	context: AppServerErrorContext<TDependencies>
-) => ReturnType<HandleServerError>;
-export type AppServerFetchCallback<TDependencies extends Record<string, unknown>> = (
-	context: AppServerFetchContext<TDependencies>
-) => ReturnType<HandleFetch>;
-export type AppServerValidationErrorCallback<TDependencies extends Record<string, unknown>> = (
-	context: AppServerValidationErrorContext<TDependencies>
-) => ReturnType<HandleValidationError>;
-export type AppAzureNetKitErrorCallback<TDependencies extends Record<string, unknown>> = (
-	context: AppAzureNetKitErrorContext<TDependencies>
-) => MaybePromise<IAppError & object>;
+export type AppServerLifecycleCallback = (context: AppServerLifecycleContext) => MaybePromise<Response | void>;
+export type AppServerErrorCallback = (context: AppServerErrorContext) => ReturnType<HandleServerError>;
+export type AppServerFetchCallback = (context: AppServerFetchContext) => ReturnType<HandleFetch>;
+export type AppAzureNetKitErrorCallback = (context: AppAzureNetKitErrorContext) => MaybePromise<IAppError & object>;
 export type AppRerouteCallback = Reroute;
 
-export type CreateAppBuilder<TDependencies extends Record<string, unknown>, TFlags extends BuilderFlags = object> = {
-	readonly __types__?: TDependencies;
-	dependencies<TNext extends AppDependencyFactories<AppContainer<TDependencies>>>(
-		dependencies: TNext
-	): CreateAppBuilder<TDependencies & ResolvedDependencies<TNext>, TFlags>;
-} & OnceMethod<
+export interface AppBootContext {
+	state: App.RequestContextState;
+}
+export type AppBootCallback = (context: AppBootContext) => undefined;
+
+export type CreateAppBuilder<TFlags extends BuilderFlags = object> = OnceMethod<
 	TFlags,
-	'use',
-	{ use(callback: AppUniversalLifecycleCallback<TDependencies>): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'use'>> }
+	'useBoot',
+	{
+		useBoot(callback: AppBootCallback): CreateAppBuilder<WithFlag<TFlags, 'useBoot'>>;
+	}
 > &
 	OnceMethod<
 		TFlags,
-		'useClient',
-		{ useClient(callback: AppClientLifecycleCallback<TDependencies>): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useClient'>> }
+		'useTranslations',
+		{ useTranslations(manager: TranslationManagerFactory): CreateAppBuilder<WithFlag<TFlags, 'useTranslations'>> }
 	> &
+	OnceMethod<TFlags, 'use', { use(callback: AppUniversalLifecycleCallback): CreateAppBuilder<WithFlag<TFlags, 'use'>> }> &
+	OnceMethod<TFlags, 'useClient', { useClient(callback: AppClientLifecycleCallback): CreateAppBuilder<WithFlag<TFlags, 'useClient'>> }> &
 	OnceMethod<
 		TFlags,
 		'useClientInit',
 		{
-			useClientInit(callback: AppClientInitLifecycleCallback<TDependencies>): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useClientInit'>>;
+			useClientInit(callback: AppClientInitLifecycleCallback): CreateAppBuilder<WithFlag<TFlags, 'useClientInit'>>;
 		}
 	> &
 	OnceMethod<
 		TFlags,
 		'useClientError',
 		{
-			useClientError(callback: AppClientErrorCallback<TDependencies>): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useClientError'>>;
+			useClientError(callback: AppClientErrorCallback): CreateAppBuilder<WithFlag<TFlags, 'useClientError'>>;
 		}
 	> &
 	OnceMethod<
 		TFlags,
 		'useServerInit',
 		{
-			useServerInit(callback: AppServerInitLifecycleCallback): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useServerInit'>>;
+			useServerInit(callback: AppServerInitLifecycleCallback): CreateAppBuilder<WithFlag<TFlags, 'useServerInit'>>;
 		}
 	> &
-	OnceMethod<
-		TFlags,
-		'useServer',
-		{ useServer(callback: AppServerLifecycleCallback<TDependencies>): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useServer'>> }
-	> &
+	OnceMethod<TFlags, 'useServer', { useServer(callback: AppServerLifecycleCallback): CreateAppBuilder<WithFlag<TFlags, 'useServer'>> }> &
 	OnceMethod<
 		TFlags,
 		'useServerError',
 		{
-			useServerError(callback: AppServerErrorCallback<TDependencies>): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useServerError'>>;
+			useServerError(callback: AppServerErrorCallback): CreateAppBuilder<WithFlag<TFlags, 'useServerError'>>;
 		}
 	> &
 	OnceMethod<
 		TFlags,
 		'useServerFetch',
 		{
-			useServerFetch(callback: AppServerFetchCallback<TDependencies>): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useServerFetch'>>;
-		}
-	> &
-	OnceMethod<
-		TFlags,
-		'useServerValidationError',
-		{
-			useServerValidationError(
-				callback: AppServerValidationErrorCallback<TDependencies>
-			): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useServerValidationError'>>;
+			useServerFetch(callback: AppServerFetchCallback): CreateAppBuilder<WithFlag<TFlags, 'useServerFetch'>>;
 		}
 	> &
 	OnceMethod<
 		TFlags,
 		'useAzureNetKitError',
 		{
-			useAzureNetKitError(
-				callback: AppAzureNetKitErrorCallback<TDependencies>
-			): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useAzureNetKitError'>>;
+			useAzureNetKitError(callback: AppAzureNetKitErrorCallback): CreateAppBuilder<WithFlag<TFlags, 'useAzureNetKitError'>>;
 		}
 	> &
-	OnceMethod<TFlags, 'useReroute', { useReroute(callback: AppRerouteCallback): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useReroute'>> }> &
-	OnceMethod<TFlags, 'useTransport', { useTransport(transport: Transport): CreateAppBuilder<TDependencies, WithFlag<TFlags, 'useTransport'>> }>;
+	OnceMethod<TFlags, 'useReroute', { useReroute(callback: AppRerouteCallback): CreateAppBuilder<WithFlag<TFlags, 'useReroute'>> }> &
+	OnceMethod<TFlags, 'useTransport', { useTransport(transport: Transport): CreateAppBuilder<WithFlag<TFlags, 'useTransport'>> }>;
 
 export interface AppRegistrar {
 	(): MaybePromise<void>;
@@ -236,37 +176,34 @@ export interface AppRegistrar {
 	serverInit: ServerInit;
 	serverError: HandleServerError;
 	serverFetch: HandleFetch;
-	serverValidationError: HandleValidationError;
 	handle: Handle;
 	reroute: Reroute;
 	transport: Transport;
 }
 
-export interface CreateAppInstance<TDependencies extends Record<string, unknown>> {
-	Container: AppContainer<TDependencies>;
+export interface CreateAppInstance {
 	register: AppRegistrar;
 }
 
-type LifecycleKind = 'client' | 'clientInit' | 'serverInit' | 'server';
-type UntypedDependencyFactory = AppDependencyFactory<AppContainer<Record<string, unknown>>>;
+type LifecycleKind = 'boot' | 'client' | 'clientInit' | 'serverInit' | 'server';
 type LifecycleFlags = Partial<Record<LifecycleKind, true>>;
 
 interface AppCallbacks {
-	use?: AppUniversalLifecycleCallback<Record<string, unknown>>;
-	useClient?: AppClientLifecycleCallback<Record<string, unknown>>;
-	useClientInit?: AppClientInitLifecycleCallback<Record<string, unknown>>;
-	useClientError?: AppClientErrorCallback<Record<string, unknown>>;
+	useTranslations?: TranslationManagerFactory;
+	useBoot?: AppBootCallback;
+	use?: AppUniversalLifecycleCallback;
+	useClient?: AppClientLifecycleCallback;
+	useClientInit?: AppClientInitLifecycleCallback;
+	useClientError?: AppClientErrorCallback;
 	useServerInit?: AppServerInitLifecycleCallback;
-	useServer?: AppServerLifecycleCallback<Record<string, unknown>>;
-	useServerError?: AppServerErrorCallback<Record<string, unknown>>;
-	useServerFetch?: AppServerFetchCallback<Record<string, unknown>>;
-	useServerValidationError?: AppServerValidationErrorCallback<Record<string, unknown>>;
-	useAzureNetKitError?: AppAzureNetKitErrorCallback<Record<string, unknown>>;
+	useServer?: AppServerLifecycleCallback;
+	useServerError?: AppServerErrorCallback;
+	useServerFetch?: AppServerFetchCallback;
+	useAzureNetKitError?: AppAzureNetKitErrorCallback;
 	useReroute?: AppRerouteCallback;
 	useTransport?: Transport;
 }
 
-const DEFAULT_APP_NAME = '__AzureNetKitGlobalAppContainer__';
 const clientLifecycleFlags = new WeakMap<object, LifecycleFlags>();
 
 const getRequestContext = (): ContextData | undefined => {
@@ -299,7 +236,7 @@ const getLifecycleFlags = (appKey: object, requestContext?: ContextData): Lifecy
 		throw new AzureNetKitInternalError('[createApp] RequestContext is not initialized on server.');
 	}
 
-	const flagsMap = (context.data.appLifecycleFlags ??= new WeakMap<object, LifecycleFlags>()) as WeakMap<object, LifecycleFlags>;
+	const flagsMap = (getContextInternals(context).appLifecycleFlags ??= new WeakMap<object, LifecycleFlags>()) as WeakMap<object, LifecycleFlags>;
 
 	let flags = flagsMap.get(appKey);
 	if (!flags) {
@@ -317,24 +254,32 @@ const setCallback = <TKey extends keyof AppCallbacks>(callbacks: AppCallbacks, k
 	callbacks[key] = callback;
 };
 
-const createBuilder = (dependencies: Map<string, UntypedDependencyFactory>, callbacks: AppCallbacks): CreateAppBuilder<Record<string, never>> => {
+const createBuilder = (callbacks: AppCallbacks): CreateAppBuilder => {
 	const builder = {
-		use(callback: AppUniversalLifecycleCallback<Record<string, unknown>>) {
+		useTranslations(manager: TranslationManagerFactory) {
+			setCallback(callbacks, 'useTranslations', manager);
+			return builder;
+		},
+		useBoot(callback: AppBootCallback) {
+			setCallback(callbacks, 'useBoot', callback);
+			return builder;
+		},
+		use(callback: AppUniversalLifecycleCallback) {
 			setCallback(callbacks, 'use', callback);
 			return builder;
 		},
 
-		useClient(callback: AppClientLifecycleCallback<Record<string, unknown>>) {
+		useClient(callback: AppClientLifecycleCallback) {
 			setCallback(callbacks, 'useClient', callback);
 			return builder;
 		},
 
-		useClientInit(callback: AppClientInitLifecycleCallback<Record<string, unknown>>) {
+		useClientInit(callback: AppClientInitLifecycleCallback) {
 			setCallback(callbacks, 'useClientInit', callback);
 			return builder;
 		},
 
-		useClientError(callback: AppClientErrorCallback<Record<string, unknown>>) {
+		useClientError(callback: AppClientErrorCallback) {
 			setCallback(callbacks, 'useClientError', callback);
 			return builder;
 		},
@@ -344,27 +289,22 @@ const createBuilder = (dependencies: Map<string, UntypedDependencyFactory>, call
 			return builder;
 		},
 
-		useServer(callback: AppServerLifecycleCallback<Record<string, unknown>>) {
+		useServer(callback: AppServerLifecycleCallback) {
 			setCallback(callbacks, 'useServer', callback);
 			return builder;
 		},
 
-		useServerError(callback: AppServerErrorCallback<Record<string, unknown>>) {
+		useServerError(callback: AppServerErrorCallback) {
 			setCallback(callbacks, 'useServerError', callback);
 			return builder;
 		},
 
-		useServerFetch(callback: AppServerFetchCallback<Record<string, unknown>>) {
+		useServerFetch(callback: AppServerFetchCallback) {
 			setCallback(callbacks, 'useServerFetch', callback);
 			return builder;
 		},
 
-		useServerValidationError(callback: AppServerValidationErrorCallback<Record<string, unknown>>) {
-			setCallback(callbacks, 'useServerValidationError', callback);
-			return builder;
-		},
-
-		useAzureNetKitError(callback: AppAzureNetKitErrorCallback<Record<string, unknown>>) {
+		useAzureNetKitError(callback: AppAzureNetKitErrorCallback) {
 			setCallback(callbacks, 'useAzureNetKitError', callback);
 			return builder;
 		},
@@ -377,75 +317,25 @@ const createBuilder = (dependencies: Map<string, UntypedDependencyFactory>, call
 		useTransport(transport: Transport) {
 			setCallback(callbacks, 'useTransport', transport);
 			return builder;
-		},
-
-		dependencies(nextDependencies: AppDependencyFactories<AppContainer<Record<string, unknown>>>) {
-			for (const [key, factory] of Object.entries(nextDependencies)) {
-				dependencies.set(key, factory as UntypedDependencyFactory);
-			}
-
-			return builder;
 		}
 	};
 
-	return builder as unknown as CreateAppBuilder<Record<string, never>>;
+	return builder as unknown as CreateAppBuilder;
 };
 
-export const createApp = <TBuilder>(
-	callback: (app: CreateAppBuilder<Record<string, never>>) => TBuilder,
-	name = DEFAULT_APP_NAME
-): CreateAppInstance<BuilderDependencies<TBuilder> & Record<string, unknown>> => {
+export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateAppInstance => {
 	const appKey = {};
-	const dependencies = new Map<string, UntypedDependencyFactory>();
 	const callbacks: AppCallbacks = {};
 	let clientInitialized = false;
+	let translationInitPromise: Promise<void> | undefined;
 	let serverInitPromise: Promise<void> | undefined;
 
-	callback(createBuilder(dependencies, callbacks));
-
-	const AppProvider = createBoundaryProvider(name, {
-		register: () => {
-			const factories = {} as ServiceFactories<Record<string, UntypedDependencyFactory>>;
-
-			for (const [key, factory] of dependencies.entries()) {
-				factories[key] = () => factory(Container as AppContainer<Record<string, unknown>>);
-			}
-
-			return factories;
-		}
-	});
-
-	const Container = new Proxy({} as AppContainer<BuilderDependencies<TBuilder> & Record<string, unknown>>, {
-		get(_, key: string | symbol) {
-			if (typeof key === 'symbol') return undefined;
-			return AppProvider()[key];
-		},
-
-		has(_, key: string | symbol) {
-			return typeof key === 'string' && key in AppProvider();
-		},
-
-		ownKeys() {
-			return Reflect.ownKeys(AppProvider());
-		},
-
-		getOwnPropertyDescriptor(_, key: string | symbol) {
-			if (typeof key !== 'string' || !(key in AppProvider())) return undefined;
-
-			return {
-				configurable: true,
-				enumerable: true,
-				value: AppProvider()[key]
-			};
-		}
-	});
+	callback(createBuilder(callbacks));
 
 	const errorResolver: AzureNetKitErrorResolver | undefined = callbacks.useAzureNetKitError
 		? (error, retry) => {
 				const requestContext = BROWSER ? undefined : getRequestContext();
 				return callbacks.useAzureNetKitError!({
-					Container,
-					AppEvents,
 					error,
 					retry,
 					isClient: BROWSER,
@@ -465,42 +355,45 @@ export const createApp = <TBuilder>(
 		bindErrorResolver();
 
 		const flags = getLifecycleFlags(appKey);
-		if (flags[kind]) return undefined;
+		if (flags[kind]) return kind === 'clientInit' ? translationInitPromise : undefined;
 		flags[kind] = true;
 
 		if (kind === 'clientInit') {
-			const universalContext: AppUniversalLifecycleContext<Record<string, unknown>> = {
-				Container,
-				isClient: true,
-				isServer: false
-			};
-			const universalResult = callbacks.use?.(universalContext);
-			if (universalResult && typeof (universalResult as Promise<void>).then === 'function') {
-				return (universalResult as Promise<void>).then(() => callbacks.useClientInit?.({ Container }));
-			}
+			const initialize = () => {
+				const universalContext: AppUniversalLifecycleContext = {
+					isClient: true,
+					isServer: false
+				};
+				const universalResult = callbacks.use?.(universalContext);
+				if (universalResult && typeof (universalResult as Promise<void>).then === 'function') {
+					return (universalResult as Promise<void>).then(() => callbacks.useClientInit?.());
+				}
 
-			return callbacks.useClientInit?.({ Container });
+				return callbacks.useClientInit?.();
+			};
+			if (!callbacks.useTranslations) return initialize();
+			translationInitPromise = getTranslationLifecycle(callbacks.useTranslations())
+				.initializeClient()
+				.then(initialize)
+				.catch((error: unknown) => {
+					delete flags.clientInit;
+					translationInitPromise = undefined;
+					throw error;
+				});
+			return translationInitPromise;
 		}
 		let internalMiddlewares: IClientMiddleware[] = [];
-		const clientResult = callbacks.useClient?.({
-			Container,
+		if (!clientInitialized) {
+			beforeNavigate((navigation) => {
+				executeClientMiddlewares(internalMiddlewares, navigation);
+			});
+			clientInitialized = true;
+		}
+		return callbacks.useClient?.({
 			useMiddlewares: (middlewares: IClientMiddleware[]) => {
 				internalMiddlewares = middlewares;
 			}
 		});
-		const registerNavigation = () => {
-			if (clientInitialized) return;
-			clientInitialized = true;
-			beforeNavigate((navigation) => {
-				executeClientMiddlewares(internalMiddlewares, navigation);
-			});
-		};
-
-		if (clientResult && typeof (clientResult as Promise<void>).then === 'function') {
-			return (clientResult as Promise<void>).then(registerNavigation);
-		}
-
-		registerNavigation();
 	};
 
 	const runServerInit: ServerInit = () => {
@@ -509,17 +402,16 @@ export const createApp = <TBuilder>(
 		return serverInitPromise;
 	};
 
-	const runServerError: HandleServerError = ({ error, event, status, message }) => {
+	const runServerError: HandleServerError = (input) => {
+		const { status, message } = errorDetails(input);
 		if (BROWSER) return undefined;
 		const requestContext = getServerRequestContext();
 		bindErrorResolver(requestContext);
 
 		try {
 			const result = callbacks.useServerError?.({
-				Container,
 				requestContext,
-				error,
-				event,
+				...input,
 				status,
 				message,
 				useLogger
@@ -537,14 +429,13 @@ export const createApp = <TBuilder>(
 		}
 	};
 
-	const runClientError: HandleClientError = ({ error, event, status, message }) => {
+	const runClientError: HandleClientError = (input) => {
+		const { status, message } = errorDetails(input);
 		if (!BROWSER) return undefined;
 		bindErrorResolver();
 
 		return callbacks.useClientError?.({
-			Container,
-			error,
-			event,
+			...input,
 			status,
 			message
 		});
@@ -555,27 +446,22 @@ export const createApp = <TBuilder>(
 
 		return callbacks.useServerFetch({
 			...input,
-			Container,
-			requestContext: getServerRequestContext()
-		});
-	};
 
-	const runServerValidationError: HandleValidationError = (input) => {
-		if (!callbacks.useServerValidationError) {
-			console.error('Remote function schema validation failed:', input.issues);
-			return { message: 'Bad Request' };
-		}
-
-		return callbacks.useServerValidationError({
-			...input,
-			Container,
 			requestContext: getServerRequestContext()
 		});
 	};
 
 	const reroute: Reroute = (input) => callbacks.useReroute?.(input);
 
-	const handle: Handle = async ({ event, resolve }) => {
+	const handle: Handle = async ({ event, resolve: originalResolve }) => {
+		const translations = callbacks.useTranslations ? getTranslationLifecycle(callbacks.useTranslations()) : undefined;
+		const resolve: Resolve = translations
+			? (event, options) =>
+					originalResolve(event, {
+						...options,
+						transformPageChunk: async (chunk) => translations.transformHtml((await options?.transformPageChunk?.(chunk)) ?? chunk.html)
+					})
+			: originalResolve;
 		const requestContext = getServerRequestContext();
 		bindErrorResolver(requestContext);
 
@@ -584,9 +470,9 @@ export const createApp = <TBuilder>(
 
 			if (!flags.server) {
 				flags.server = true;
+				if (translations) await translations.preloadTranslation();
 
 				const universalResult = callbacks.use?.({
-					Container,
 					isClient: false,
 					isServer: true,
 					requestContext,
@@ -598,7 +484,6 @@ export const createApp = <TBuilder>(
 				}
 
 				const serverResult = await callbacks.useServer?.({
-					Container,
 					requestContext,
 					event,
 					resolve,
@@ -614,20 +499,37 @@ export const createApp = <TBuilder>(
 		}
 	};
 
-	const register = Object.assign(() => runClient('client'), {
-		clientInit: () => runClient('clientInit'),
-		clientError: runClientError,
-		serverInit: runServerInit,
-		serverError: runServerError,
-		serverFetch: runServerFetch,
-		serverValidationError: runServerValidationError,
-		handle,
-		reroute,
-		transport: callbacks.useTransport ?? {}
-	}) as AppRegistrar;
+	const runBoot = () => {
+		if (!callbacks.useBoot && !callbacks.useTranslations) return;
+		const flags = getLifecycleFlags(appKey);
+		if (flags.boot) return;
+		flags.boot = true;
+		const state = hydratable('@azure-net/kit:initial-state:v1', () => (BROWSER ? ({} as App.RequestContextState) : RequestContext.current().state));
+		if (callbacks.useTranslations) getTranslationLifecycle(callbacks.useTranslations()).syncFromState(state);
+		const result = callbacks.useBoot?.({ state }) as unknown;
+		if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
+			void Promise.resolve(result).catch(() => undefined);
+			throw new AzureNetKitInternalError('[createApp] useBoot must be synchronous.');
+		}
+	};
+	const register = Object.assign(
+		() => {
+			runBoot();
+			return runClient('client');
+		},
+		{
+			clientInit: () => runClient('clientInit'),
+			clientError: runClientError,
+			serverInit: runServerInit,
+			serverError: runServerError,
+			serverFetch: runServerFetch,
+			handle,
+			reroute,
+			transport: callbacks.useTransport ?? {}
+		}
+	) as AppRegistrar;
 
 	return {
-		Container,
 		register
 	};
 };

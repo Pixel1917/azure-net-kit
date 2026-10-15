@@ -1,6 +1,7 @@
+import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { RequestContext } from '@azure-net/edges/context';
-import { edgesHandleRaw } from '@azure-net/edges/server';
+import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
+import { runRequest } from '../src/lib/server/Context/Runtime.js';
 import { UniversalCookie, type CookieOptions } from '../src/lib/shared/cookie/UniversalCookie.js';
 
 type CookieRecord = { name: string; value: string };
@@ -22,7 +23,7 @@ describe('UniversalCookie on the server', () => {
 
 	beforeEach(() => {
 		cookies = createCookieJar();
-		RequestContext.init(
+		initializeRequestContext(
 			() =>
 				({
 					event: { cookies },
@@ -56,7 +57,7 @@ describe('UniversalCookie on the server', () => {
 			legacyJson: encodeURIComponent(JSON.stringify({ id: 1 })),
 			legacyText: encodeURIComponent('hello world')
 		});
-		RequestContext.init(() => ({ event: { cookies }, data: {} }) as never);
+		initializeRequestContext(() => ({ event: { cookies }, data: {} }) as never);
 
 		expect(UniversalCookie.get('legacyJson')).toEqual({ id: 1 });
 		expect(UniversalCookie.get('legacyText')).toBe('hello world');
@@ -101,7 +102,7 @@ describe('UniversalCookie on the server', () => {
 
 	it('does not throw for a malformed legacy escape sequence', () => {
 		cookies = createCookieJar({ malformed: '100% invalid' });
-		RequestContext.init(() => ({ event: { cookies }, data: {} }) as never);
+		initializeRequestContext(() => ({ event: { cookies }, data: {} }) as never);
 
 		expect(UniversalCookie.get('malformed')).toBe('100% invalid');
 	});
@@ -183,12 +184,12 @@ describe('UniversalCookie on the server', () => {
 			releaseFirst = resolve;
 		});
 
-		const firstRequest = edgesHandleRaw({ cookies: firstCookies, url: new URL('https://example.com/first') } as never, async () => {
+		const firstRequest = runRequest({ cookies: firstCookies, url: new URL('https://example.com/first') } as never, async () => {
 			session.set('first');
 			await firstBarrier;
 			return new Response(session.get());
 		});
-		const secondRequest = edgesHandleRaw({ cookies: secondCookies, url: new URL('https://example.com/second') } as never, async () => {
+		const secondRequest = runRequest({ cookies: secondCookies, url: new URL('https://example.com/second') } as never, async () => {
 			session.set('second');
 			releaseFirst();
 			return new Response(session.get());

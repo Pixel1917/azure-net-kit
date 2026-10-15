@@ -27,3 +27,4 @@ export {
 } from './active-form/ActiveForm.svelte.js';
 export { createEffect, type EffectCallback, type EffectCleanup, type EffectDependency } from './effect/Effect.svelte.js';
 export { createQuery, type CreateQueryOptions, type QueryController, type QueryPath, type QuerySearchParamsSync } from './query/Query.svelte.js';
+export { useRedirect, type IRedirectSettings, type RedirectStatus } from './redirect/index.js';

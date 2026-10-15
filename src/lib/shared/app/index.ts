@@ -8,7 +8,6 @@ export {
 	type AppClientInitLifecycleContext,
 	type AppClientLifecycleCallback,
 	type AppClientLifecycleContext,
-	type AppContainer,
 	type AppRegistrar,
 	type AppServerErrorCallback,
 	type AppServerErrorContext,
@@ -18,8 +17,6 @@ export {
 	type AppServerInitLifecycleContext,
 	type AppServerLifecycleCallback,
 	type AppServerLifecycleContext,
-	type AppServerValidationErrorCallback,
-	type AppServerValidationErrorContext,
 	type AppRerouteCallback,
 	type AppUniversalLifecycleCallback,
 	type AppUniversalLifecycleContext,
@@ -28,3 +25,5 @@ export {
 export type { IClientMiddleware } from './middleware/ClientMiddleware.js';
 export type { IServerMiddleware } from './middleware/ServerMiddleware.js';
 export type { EnsureRoute, EnsureRouteSource, EnsureRouteTarget } from './middleware/Shared.js';
+
+export type { AppBootContext, AppBootCallback } from './App.js';

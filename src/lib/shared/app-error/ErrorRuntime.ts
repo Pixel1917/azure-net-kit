@@ -1,5 +1,6 @@
+import { getContextInternals } from '../../shared/request-context/Internal.js';
 import { BROWSER } from '../../external/tools/index.js';
-import { RequestContext, type ContextData } from '../../external/edges/ServerContext.js';
+import { RequestContext, type ContextData } from '../../shared/request-context/Internal.js';
 import { AppError, AzureNetKitInternalError, type IAppError } from './AppError.js';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -22,10 +23,10 @@ let clientBinding: ErrorRuntimeBinding | undefined;
 const createBinding = (resolver: AzureNetKitErrorResolver): ErrorRuntimeBinding => ({ resolver });
 
 const getServerData = (requestContext?: ContextData): Record<PropertyKey, unknown> | undefined => {
-	if (requestContext) return requestContext.data as Record<PropertyKey, unknown>;
+	if (requestContext) return getContextInternals(requestContext) as Record<PropertyKey, unknown>;
 
 	try {
-		return RequestContext.current().data as Record<PropertyKey, unknown>;
+		return getContextInternals(RequestContext.current()) as Record<PropertyKey, unknown>;
 	} catch {
 		return undefined;
 	}

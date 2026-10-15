@@ -2,7 +2,7 @@ export { BaseHttpDatasource, type CreateRequestCallbackType } from './datasource
 export { DTOMapper, type IDTOMapper } from './resource/index.js';
 export {
 	HttpStatusCode,
-	createHttpServiceInstance,
+	HttpServiceInstance,
 	HttpInstanceFetchMethods,
 	HttpErrorTypes,
 	HttpServiceResponse,
@@ -11,17 +11,11 @@ export {
 	type IHttpServiceResponse,
 	type IHttpServiceInstance,
 	type IHttpInstanceOptions,
-	type HttpInstanceNormalizedRequest,
-	type HttpInstanceOnRequest,
-	type HttpInstanceOnError,
-	type HttpInstanceDoFetch,
-	type HttpInstanceRequestMethod
+	type IHttpInstanceNormalizedRequest,
+	type IHttpInstanceOnRequest,
+	type IHttpInstanceOnError,
+	type IHttpInstanceDoFetch,
+	type IHttpInstanceRequestMethod
 } from './http-service/index.js';
 export { ResponseBuilder } from './response/index.js';
-export {
-	createQueryInstance,
-	type IQueryBuilderInstance,
-	type ArrayFormat,
-	type ObjectFormat,
-	type IQueryBuilderSettings
-} from './query/QueryBuilder.js';
+export { QueryBuilder, type IQueryBuilderInstance, type ArrayFormat, type ObjectFormat, type IQueryBuilderSettings } from './query/QueryBuilder.js';

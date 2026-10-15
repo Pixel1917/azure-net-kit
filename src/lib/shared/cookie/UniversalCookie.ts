@@ -1,5 +1,5 @@
 import { BROWSER, Cookies } from '../../external/tools/index.js';
-import { RequestContext } from '../../external/edges/ServerContext.js';
+import { RequestContext } from '../../shared/request-context/Internal.js';
 
 export type CookieOptions = {
 	expires?: Date | number;

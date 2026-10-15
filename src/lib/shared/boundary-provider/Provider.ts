@@ -1,4 +1,5 @@
-import { RequestContext } from '../../external/edges/ServerContext.js';
+import { getContextInternals } from '../../shared/request-context/Internal.js';
+import { RequestContext } from '../../shared/request-context/Internal.js';
 import { BROWSER } from '../../external/tools/index.js';
 import { AzureNetKitInternalError } from '../app-error/AppError.js';
 
@@ -38,22 +39,28 @@ const getProviderCache = (providerName: string): Map<string, unknown> => {
 		return clientCache.get(providerName)!;
 	} else {
 		const context = RequestContext.current();
-		if (!context.data.azureNetKitBoundaryProviders) {
-			context.data.azureNetKitBoundaryProviders = new Map();
+		if (!getContextInternals(context).azureNetKitBoundaryProviders) {
+			getContextInternals(context).azureNetKitBoundaryProviders = new Map();
 		}
 
-		const providers = context.data.azureNetKitBoundaryProviders as Map<string, Map<string, unknown>>;
+		const providers = getContextInternals(context).azureNetKitBoundaryProviders as Map<string, Map<string, unknown>>;
 		if (!providers.has(providerName)) {
 			providers.set(providerName, new Map());
 		}
 
-		if (!context.data.azureNetKitBoundaryProvidersToCleanup) {
-			context.data.azureNetKitBoundaryProvidersToCleanup = new Set<string>();
+		if (!getContextInternals(context).azureNetKitBoundaryProvidersToCleanup) {
+			getContextInternals(context).azureNetKitBoundaryProvidersToCleanup = new Set<string>();
 		}
-		(context.data.azureNetKitBoundaryProvidersToCleanup as Set<string>).add(providerName);
+		(getContextInternals(context).azureNetKitBoundaryProvidersToCleanup as Set<string>).add(providerName);
 
 		return providers.get(providerName)!;
 	}
+};
+
+const getProxyCache = (): Map<string, ResolvedServices<ServiceMap>> => {
+	if (BROWSER) return providerProxyCache;
+	const context = RequestContext.current();
+	return (getContextInternals(context).azureNetKitBoundaryProviderProxies ??= new Map()) as Map<string, ResolvedServices<ServiceMap>>;
 };
 
 const getBootFlag = (providerName: string): boolean => {
@@ -61,10 +68,10 @@ const getBootFlag = (providerName: string): boolean => {
 		return clientBootFlags.get(providerName) ?? false;
 	} else {
 		const context = RequestContext.current();
-		if (!context.data.bootFlags) {
-			context.data.bootFlags = new Map<string, boolean>();
+		if (!getContextInternals(context).bootFlags) {
+			getContextInternals(context).bootFlags = new Map<string, boolean>();
 		}
-		const bootFlags = context.data.bootFlags as Map<string, boolean>;
+		const bootFlags = getContextInternals(context).bootFlags as Map<string, boolean>;
 		return bootFlags.get(providerName) ?? false;
 	}
 };
@@ -74,10 +81,10 @@ const setBootFlag = (providerName: string, value: boolean): void => {
 		clientBootFlags.set(providerName, value);
 	} else {
 		const context = RequestContext.current();
-		if (!context.data.bootFlags) {
-			context.data.bootFlags = new Map<string, boolean>();
+		if (!getContextInternals(context).bootFlags) {
+			getContextInternals(context).bootFlags = new Map<string, boolean>();
 		}
-		const bootFlags = context.data.bootFlags as Map<string, boolean>;
+		const bootFlags = getContextInternals(context).bootFlags as Map<string, boolean>;
 		bootFlags.set(providerName, value);
 	}
 };
@@ -85,7 +92,7 @@ const setBootFlag = (providerName: string, value: boolean): void => {
 const getConstructionStack = (): string[] => {
 	if (BROWSER) return clientConstructionStack;
 	const context = RequestContext.current();
-	return (context.data.boundaryProviderConstructionStack ??= []) as string[];
+	return (getContextInternals(context).boundaryProviderConstructionStack ??= []) as string[];
 };
 
 const runWithCycleGuard = <T>(key: string, callback: () => T): T => {
@@ -105,7 +112,7 @@ const runWithCycleGuard = <T>(key: string, callback: () => T): T => {
 	}
 };
 
-export const createBoundaryProvider = <T extends ServiceMap, D extends Record<string, ProviderWithType<ServiceMap>>>(
+export const CreateDiContainer = <T extends ServiceMap, D extends Record<string, ProviderWithType<ServiceMap>>>(
 	name: string,
 	settings: ProviderSettings<T, D>
 ): ProviderWithType<T> => {
@@ -113,8 +120,9 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 	type Deps = { [K in keyof D]: InferProviderType<D[K]> };
 
 	const providerFn = () => {
-		if (BROWSER && providerProxyCache.has(name)) {
-			return providerProxyCache.get(name) as ResolvedServices<T>;
+		const proxies = getProxyCache();
+		if (proxies.has(name)) {
+			return proxies.get(name) as ResolvedServices<T>;
 		}
 
 		const cache = getProviderCache(name);
@@ -141,7 +149,7 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 				);
 			}
 
-			factories = register(deps as Deps);
+			factories = runWithCycleGuard(`${name}.register`, () => register(deps as Deps));
 
 			return factories;
 		};
@@ -205,21 +213,23 @@ export const createBoundaryProvider = <T extends ServiceMap, D extends Record<st
 			}
 		});
 
-		if (BROWSER) {
-			providerProxyCache.set(name, providerProxy);
-		}
+		proxies.set(name, providerProxy);
 
-		if (boot && !getBootFlag(name)) {
-			getFactories();
+		try {
+			if (boot && !getBootFlag(name)) {
+				getFactories();
 
-			const bootResult = boot(providerProxy) as unknown;
-			if (bootResult && typeof (bootResult as PromiseLike<unknown>).then === 'function') {
-				void Promise.resolve(bootResult).catch(() => undefined);
-				throw new AzureNetKitInternalError(`[BoundaryProvider] Boot for provider '${name}' must be synchronous.`);
+				const bootResult = boot(providerProxy) as unknown;
+				if (bootResult && typeof (bootResult as PromiseLike<unknown>).then === 'function') {
+					void Promise.resolve(bootResult).catch(() => undefined);
+					throw new AzureNetKitInternalError(`[BoundaryProvider] Boot for provider '${name}' must be synchronous.`);
+				}
+				setBootFlag(name, true);
 			}
-			setBootFlag(name, true);
+		} catch (error) {
+			proxies.delete(name);
+			throw error;
 		}
-
 		return providerProxy;
 	};
 
@@ -253,7 +263,10 @@ export async function cleanupProvider(name: string): Promise<void> {
 		if (cache) await cleanupCache(cache);
 	} else {
 		const context = RequestContext.current();
-		const providers = context.data.azureNetKitBoundaryProviders as Map<string, Map<string, unknown>> | undefined;
+		const providers = getContextInternals(context).azureNetKitBoundaryProviders as Map<string, Map<string, unknown>> | undefined;
+		getProxyCache().delete(name);
+		setBootFlag(name, false);
+		(getContextInternals(context).azureNetKitBoundaryProvidersToCleanup as Set<string> | undefined)?.delete(name);
 		if (providers?.has(name)) {
 			const cache = providers.get(name)!;
 			providers.delete(name);

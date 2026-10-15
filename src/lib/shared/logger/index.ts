@@ -1,6 +1,6 @@
 import { AppError, AzureNetKitInternalError, type IAppError } from '../app-error/index.js';
 import { BROWSER } from '../../external/tools/index.js';
-import { RequestContext } from '../../external/edges/ServerContext.js';
+import { RequestContext } from '../../shared/request-context/Internal.js';
 import { BackgroundTask } from '../background-task/index.js';
 
 export enum LoggerErrors {

@@ -8,6 +8,7 @@ export default mergeConfig(
 			include: ['tests/**/*.test.ts'],
 			exclude: [
 				'tests/appErrorClient.test.ts',
+				'tests/i18nClient.test.ts',
 				'tests/queryReactivity.test.ts',
 				'tests/querySearchParams.test.ts',
 				'tests/activeFormReactivity.test.ts',

@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "6.0.0-next.1",
+	"version": "6.0.0-next.2",
 	"license": "MIT",
 	"author": "Pixel1917",
 	"description": "Universal toolkit and library collection, developed as part of the Azure-net ecosystem",
@@ -32,7 +32,8 @@
 		"test:integration": "vitest --config vitest.integration.config.ts --run",
 		"test": "pnpm test:unit -- --run && pnpm test:client -- --run && pnpm test:integration && pnpm test:e2e",
 		"test:e2e": "playwright test",
-		"commit": "pnpm format && git add ."
+		"commit": "pnpm format && git add .",
+		"test:retention": "vitest --config vitest.retention.config.ts --run"
 	},
 	"files": [
 		"dist",
@@ -68,29 +69,26 @@
 			"import": "./dist/plugin/index.js"
 		},
 		"./server-context": {
-			"types": "./dist/external/edges/ServerContext.d.ts",
-			"svelte": "./dist/external/edges/ServerContext.js"
-		},
-		"./edges/dev": {
-			"types": "./dist/external/edges/Dev.d.ts",
-			"svelte": "./dist/external/edges/Dev.js"
+			"types": "./dist/server/Context/index.d.ts",
+			"svelte": "./dist/server/Context/index.js",
+			"import": "./dist/server/Context/index.js"
 		},
 		"./tools": {
 			"types": "./dist/external/tools/index.d.ts",
 			"svelte": "./dist/external/tools/index.js"
 		},
 		"./i18n": {
-			"types": "./dist/external/i18n/index.d.ts",
-			"svelte": "./dist/external/i18n/index.js"
+			"types": "./dist/i18n/index.d.ts",
+			"svelte": "./dist/i18n/index.js",
+			"import": "./dist/i18n/index.js"
 		},
-		"./edges/internal-package/utils": {
-			"types": "./dist/external/edges/_edges.d.ts",
-			"svelte": "./dist/external/edges/_edges.js",
-			"import": "./dist/external/edges/_edges.js"
+		"./internal/server": {
+			"types": "./dist/server/Context/Runtime.d.ts",
+			"import": "./dist/server/Context/Runtime.js"
 		}
 	},
 	"peerDependencies": {
-		"@sveltejs/kit": ">=2.57.1",
+		"@sveltejs/kit": ">=3.0.0",
 		"svelte": ">=5.55.4"
 	},
 	"devDependencies": {
@@ -98,11 +96,13 @@
 		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.59.1",
 		"@sveltejs/adapter-auto": "^7.0.1",
-		"@sveltejs/kit": "^2.70.2",
+		"@sveltejs/kit": "^3.0.0",
+		"@sveltejs/load-config": "^0.2.2",
 		"@sveltejs/package": "^2.5.7",
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/svelte": "^5.3.1",
+		"@types/node": "^22",
 		"env-cmd": "^11.0.0",
 		"eslint": "^10.2.1",
 		"eslint-config-prettier": "^10.1.8",
@@ -112,9 +112,9 @@
 		"prettier": "^3.8.3",
 		"prettier-plugin-svelte": "^3.5.1",
 		"publint": "^0.3.18",
-		"svelte": "^5.56.9",
-		"svelte-check": "^4.4.6",
-		"typescript": "^5.0.0",
+		"svelte": "^5.57.1",
+		"svelte-check": "^4.7.6",
+		"typescript": "^6.0.2",
 		"typescript-eslint": "^8.58.2",
 		"vite": "^8.0.8",
 		"vitest": "^4.1.4"
@@ -136,8 +136,17 @@
 	},
 	"packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
 	"dependencies": {
-		"@azure-net/edges": "^2.0.0",
-		"@azure-net/edges-translations": "^2.0.0",
 		"@azure-net/tools": "^2.0.0"
+	},
+	"imports": {
+		"#lib": "./src/lib/index.ts",
+		"#lib/*": {
+			"types": [
+				"./src/lib/*.ts",
+				"./src/lib/*/index.ts",
+				"./src/lib/*"
+			],
+			"default": "./src/lib/*"
+		}
 	}
 }

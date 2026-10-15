@@ -1,1 +1,1 @@
-export { AzureNetPlugin, type AzureNetPluginOptions } from './AzureNetPlugin.js';
+export { AzureNetPlugin } from './AzureNetPlugin.js';

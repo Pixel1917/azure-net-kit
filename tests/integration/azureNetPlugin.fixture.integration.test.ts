@@ -14,6 +14,7 @@ afterAll(() => {
 
 describe('AzureNetPlugin SvelteKit fixture', () => {
 	it('builds a real SvelteKit app and handles an SSR request', async () => {
+		execFileSync('pnpm', ['prepack'], { cwd: packageRoot, stdio: 'pipe' });
 		const viteBin = path.join(packageRoot, 'node_modules/vite/bin/vite.js');
 		execFileSync(process.execPath, [viteBin, 'build', '--config', 'vite.config.ts'], {
 			cwd: fixtureRoot,
@@ -37,6 +38,21 @@ describe('AzureNetPlugin SvelteKit fixture', () => {
 		expect(response.status).toBe(200);
 		expect(html).toContain('AzureNetPlugin fixture');
 		expect(html).toContain('handled:true');
+		expect(html).toContain('boot-ready');
+		expect(html).toContain('Fixture EN');
+		expect(html).not.toContain('UNUSED_DICTIONARY_SENTINEL');
+		expect(html).toContain('data-azure-net-locale="en"');
+		expect(html).not.toContain('data-edges-state');
+		const users = await Promise.all(
+			['alice', 'bob'].map(async (user) => {
+				const response = await server.respond(new Request(`http://fixture.local/?user=${user}`), { getClientAddress: () => '127.0.0.1' });
+				return response.text();
+			})
+		);
+		expect(users[0]).toContain('alice');
+		expect(users[0]).not.toContain('bob');
+		expect(users[1]).toContain('bob');
+		expect(users[1]).not.toContain('alice');
 		expect(html).toContain('intercepted:transported');
 		expect(response.headers.get('set-cookie')).toContain('fixture-cookie=hello%20world');
 		expect(response.headers.get('set-cookie')).not.toContain('%2520');
