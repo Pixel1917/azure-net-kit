@@ -2,7 +2,7 @@ import { initializeRequestContext } from '../src/lib/shared/request-context/Inte
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
-import { cleanupProvider, CreateDiContainer } from '../src/lib/shared/boundary-provider/Provider.js';
+import { cleanupProvider, CreateServiceContainer } from '../src/lib/shared/boundary-provider/Provider.js';
 import type { ProviderWithType } from '../src/lib/shared/boundary-provider/Provider.js';
 
 describe('CreateDiContainer', () => {
@@ -18,7 +18,7 @@ describe('CreateDiContainer', () => {
 
 	it('creates and caches service instances per request context', () => {
 		let constructCount = 0;
-		const AppProvider = CreateDiContainer('AppProviderTest', {
+		const AppProvider = CreateServiceContainer('AppProviderTest', {
 			register: () => ({
 				svc: () => ({ id: ++constructCount })
 			})
@@ -34,7 +34,7 @@ describe('CreateDiContainer', () => {
 	it('shares proxy and register work only within a request, and resets on cleanup', async () => {
 		const register = vi.fn(() => ({ first: () => ({}), second: () => ({}) }));
 		const boot = vi.fn();
-		const provider = CreateDiContainer('RequestProxyCache', { register, boot });
+		const provider = CreateServiceContainer('RequestProxyCache', { register, boot });
 		const first = provider();
 		expect(provider()).toBe(first);
 		void first.first;
@@ -52,7 +52,7 @@ describe('CreateDiContainer', () => {
 
 	it('does not cache a proxy after boot fails', () => {
 		let fail = true;
-		const provider = CreateDiContainer('RetryFailedBoot', {
+		const provider = CreateServiceContainer('RetryFailedBoot', {
 			register: () => ({ value: () => 1 }),
 			boot: () => {
 				if (fail) throw new Error('boot failed');
@@ -67,7 +67,7 @@ describe('CreateDiContainer', () => {
 		const storage = new AsyncLocalStorage<{ event: { id: number }; data: Record<string, unknown> }>();
 		initializeRequestContext(() => storage.getStore() as never);
 		let calls = 0;
-		const provider = CreateDiContainer('ConcurrentRequests', {
+		const provider = CreateServiceContainer('ConcurrentRequests', {
 			register: () => {
 				calls++;
 				const id = storage.getStore()!.event.id;
@@ -91,7 +91,7 @@ describe('CreateDiContainer', () => {
 	});
 
 	it('throws for missing service key', () => {
-		const AppProvider = CreateDiContainer('MissingServiceProvider', {
+		const AppProvider = CreateServiceContainer('MissingServiceProvider', {
 			register: () => ({
 				svc: () => ({ ok: true })
 			})
@@ -102,7 +102,7 @@ describe('CreateDiContainer', () => {
 
 	it('supports object enumeration, serialization and Promise resolution', async () => {
 		let constructCount = 0;
-		const AppProvider = CreateDiContainer('ObjectInteropProvider', {
+		const AppProvider = CreateServiceContainer('ObjectInteropProvider', {
 			register: () => ({
 				svc: () => ({ id: ++constructCount })
 			})
@@ -121,7 +121,7 @@ describe('CreateDiContainer', () => {
 	});
 
 	it('throws when service factory returns Promise', () => {
-		const AppProvider = CreateDiContainer('PromiseServiceProvider', {
+		const AppProvider = CreateServiceContainer('PromiseServiceProvider', {
 			register: () => ({
 				svc: () => Promise.resolve({ ok: true })
 			})
@@ -132,7 +132,7 @@ describe('CreateDiContainer', () => {
 
 	it('runs boot only once per provider in same request context', () => {
 		const boot = vi.fn();
-		const AppProvider = CreateDiContainer('BootProvider', {
+		const AppProvider = CreateServiceContainer('BootProvider', {
 			register: () => ({
 				svc: () => ({ ok: true })
 			}),
@@ -146,7 +146,7 @@ describe('CreateDiContainer', () => {
 	});
 
 	it('rejects asynchronous boot at runtime', () => {
-		const AppProvider = CreateDiContainer('AsyncBootProvider', {
+		const AppProvider = CreateServiceContainer('AsyncBootProvider', {
 			register: () => ({ svc: () => ({ ok: true }) }),
 			boot: (async () => undefined) as never
 		});
@@ -156,7 +156,7 @@ describe('CreateDiContainer', () => {
 
 	it('cleanupProvider calls dispose on cached services', async () => {
 		const dispose = vi.fn(async () => undefined);
-		const AppProvider = CreateDiContainer('CleanupProvider', {
+		const AppProvider = CreateServiceContainer('CleanupProvider', {
 			register: () => ({
 				svc: () => ({ dispose })
 			})
@@ -175,7 +175,7 @@ describe('CreateDiContainer', () => {
 					finishDispose = resolve;
 				})
 		);
-		const AppProvider = CreateDiContainer('AwaitCleanupProvider', {
+		const AppProvider = CreateServiceContainer('AwaitCleanupProvider', {
 			register: () => ({ svc: () => ({ dispose }) })
 		});
 
@@ -199,13 +199,13 @@ describe('CreateDiContainer', () => {
 		const getProviderA = (): ReturnType<ProviderAType> => providers.ProviderA();
 		const getProviderB = (): ReturnType<ProviderBType> => providers.ProviderB();
 
-		providers.ProviderA = CreateDiContainer('CycleProviderA', {
+		providers.ProviderA = CreateServiceContainer('CycleProviderA', {
 			register: () => ({
 				svcA: () => getProviderB().svcB
 			})
 		});
 
-		providers.ProviderB = CreateDiContainer('CycleProviderB', {
+		providers.ProviderB = CreateServiceContainer('CycleProviderB', {
 			register: () => ({
 				svcB: () => getProviderA().svcA
 			})

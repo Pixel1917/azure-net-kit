@@ -112,7 +112,7 @@ const runWithCycleGuard = <T>(key: string, callback: () => T): T => {
 	}
 };
 
-export const CreateDiContainer = <T extends ServiceMap, D extends Record<string, ProviderWithType<ServiceMap>>>(
+export const CreateServiceContainer = <T extends ServiceMap, D extends Record<string, ProviderWithType<ServiceMap>>>(
 	name: string,
 	settings: ProviderSettings<T, D>
 ): ProviderWithType<T> => {

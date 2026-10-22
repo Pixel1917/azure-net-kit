@@ -5,24 +5,24 @@ vi.mock('@azure-net/tools/environment', async (importOriginal) => ({
 	BROWSER: true
 }));
 
-import { cleanupProvider, CreateDiContainer } from '../src/lib/shared/boundary-provider/Provider.js';
+import { cleanupProvider, CreateServiceContainer } from '../src/lib/shared/boundary-provider/Provider.js';
 
 describe('CreateDiContainer in browser', () => {
 	it('does not share factories between providers that reuse the same register callback', () => {
-		const DependencyA = CreateDiContainer('FactoryIsolationDependencyA', {
+		const DependencyA = CreateServiceContainer('FactoryIsolationDependencyA', {
 			register: () => ({ value: () => 'A' })
 		});
-		const DependencyB = CreateDiContainer('FactoryIsolationDependencyB', {
+		const DependencyB = CreateServiceContainer('FactoryIsolationDependencyB', {
 			register: () => ({ value: () => 'B' })
 		});
 		const register = ({ Dependency }: { Dependency: { value: string } }) => ({
 			value: () => Dependency.value
 		});
-		const ProviderA = CreateDiContainer('FactoryIsolationProviderA', {
+		const ProviderA = CreateServiceContainer('FactoryIsolationProviderA', {
 			dependsOn: { Dependency: DependencyA },
 			register
 		});
-		const ProviderB = CreateDiContainer('FactoryIsolationProviderB', {
+		const ProviderB = CreateServiceContainer('FactoryIsolationProviderB', {
 			dependsOn: { Dependency: DependencyB },
 			register
 		});
@@ -40,7 +40,7 @@ describe('CreateDiContainer in browser', () => {
 				})
 		);
 		let instance = 0;
-		const Provider = CreateDiContainer('BrowserCleanupProvider', {
+		const Provider = CreateServiceContainer('BrowserCleanupProvider', {
 			register: () => ({ service: () => ({ id: ++instance, dispose }) })
 		});
 

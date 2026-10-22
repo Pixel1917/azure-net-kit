@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { runRequest } from '../src/lib/server/Context/Runtime.js';
-import { CreateDiContainer } from '../src/lib/shared/boundary-provider/Provider.js';
+import { CreateServiceContainer } from '../src/lib/shared/boundary-provider/Provider.js';
 
 describe('kit request context', () => {
 	it('exposes only event and state and rejects access outside requests', () => {
@@ -16,7 +16,7 @@ describe('kit request context', () => {
 		expect(() => RequestContext.current()).toThrow('No active RequestContext');
 	});
 	it('isolates interleaved requests and their DI instances', async () => {
-		const di = CreateDiContainer('context-test', { register: () => ({ User: () => ({ id: RequestContext.current().state.testId }) }) });
+		const di = CreateServiceContainer('context-test', { register: () => ({ User: () => ({ id: RequestContext.current().state.testId }) }) });
 		await Promise.all(
 			Array.from({ length: 80 }, (_, index) =>
 				runRequest({} as never, async () => {

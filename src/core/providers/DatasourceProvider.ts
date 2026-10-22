@@ -1,8 +1,8 @@
 import { MockApiDatasource } from '../datasources/index.js';
 import { HttpServiceInstance } from '#lib/infra.js';
-import { CreateDiContainer, UniversalCookie } from '#lib/index.js';
+import { CreateServiceContainer, UniversalCookie } from '#lib/index.js';
 
-export const DatasourceProvider = CreateDiContainer('CoreDatasourceProvider', {
+export const DatasourceProvider = CreateServiceContainer('CoreDatasourceProvider', {
 	register: () => ({
 		KosmoPartsRest: () =>
 			new MockApiDatasource({

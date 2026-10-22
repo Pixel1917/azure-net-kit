@@ -202,7 +202,7 @@ script and serialization. No custom HTML parser is used by the kit.
 
 ## DI naming
 
-`createBoundaryProvider` is replaced by `CreateDiContainer` (no compatibility alias):
+`createBoundaryProvider` is replaced by `CreateServiceContainer` (no compatibility alias):
 
 ```ts
 const ApplicationProvider = CreateDiContainer('ApplicationProvider', {
