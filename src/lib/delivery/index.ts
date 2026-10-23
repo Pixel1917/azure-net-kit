@@ -7,6 +7,7 @@ export {
 	type AsyncActionResponse
 } from './injectable-dependencies/index.js';
 export { RegisterProvider, type ProviderLifecycle } from './presenter/RegisterProvider.js';
+export { Bound } from './presenter/Bound.js';
 
 export {
 	createSchemaFactory,
