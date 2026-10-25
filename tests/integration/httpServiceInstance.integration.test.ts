@@ -1,6 +1,5 @@
 import { initializeRequestContext } from '../../src/lib/shared/request-context/Internal.js';
 import { describe, expect, it } from 'vitest';
-import { RequestContext } from '../../src/lib/shared/request-context/Internal.js';
 import { HttpServiceInstance } from '../../src/lib/infra/http-service/HttpServiceInstance.js';
 
 describe('HttpServiceInstance integration', () => {

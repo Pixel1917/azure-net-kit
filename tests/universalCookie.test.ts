@@ -1,6 +1,5 @@
 import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { runRequest } from '../src/lib/server/Context/Runtime.js';
 import { UniversalCookie, type CookieOptions } from '../src/lib/shared/cookie/UniversalCookie.js';
 

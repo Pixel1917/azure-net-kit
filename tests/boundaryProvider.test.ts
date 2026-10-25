@@ -1,7 +1,6 @@
 import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { cleanupProvider, CreateServiceContainer } from '../src/lib/shared/boundary-provider/Provider.js';
 import type { ProviderWithType } from '../src/lib/shared/boundary-provider/Provider.js';
 

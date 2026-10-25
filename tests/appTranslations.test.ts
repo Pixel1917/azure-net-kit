@@ -23,7 +23,7 @@ describe('useTranslations integration', () => {
 					expect(RequestContext.current().state).toEqual({ currLocale: 'ru', i18n: { default: { locale: 'ru' } } });
 					return new Response(await options?.transformPageChunk?.({ html: '<html lang="%lang%"><head></head></html>', done: true }));
 				}
-			} as never);
+			});
 			expect(await response.text()).toContain('lang="ru" data-azure-net-locale="ru"');
 		});
 	});
@@ -58,7 +58,7 @@ describe('useTranslations integration', () => {
 					expect(html).toContain('data-azure-net-locale="ru"');
 					return new Response(html);
 				}
-			} as never)
+			})
 		);
 		expect(order).toEqual(['Russian', 'server', 'boot']);
 	});

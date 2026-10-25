@@ -1,5 +1,4 @@
 import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
-import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/lib/shared/app/index.js';
 import { AzureNetKitInternalError } from '../src/lib/shared/app-error/index.js';

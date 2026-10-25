@@ -9,25 +9,27 @@ import QueryHarness from './fixtures/QueryHarness.svelte';
 const navigation = vi.hoisted(() => ({
 	page: {
 		state: {} as Record<string, unknown>,
+		shallow: null as { url: URL } | null,
 		url: new URL('http://localhost/')
 	},
-	replaceState: vi.fn()
+	goto: vi.fn()
 }));
 
 vi.mock('$app/state', () => ({ page: navigation.page }));
 vi.mock('$app/navigation', () => ({
-	replaceState: (url: string | URL, state: Record<string, unknown>) => {
-		navigation.replaceState(url, state);
-		navigation.page.url = new URL(url, navigation.page.url);
-		navigation.page.state = state;
+	goto: async (url: string | URL, options: { state: Record<string, unknown>; shallow: boolean; replace: boolean; reset: boolean }) => {
+		navigation.goto(url, options);
+		navigation.page.shallow = { url: new URL(url, navigation.page.url) };
+		navigation.page.state = options.state;
 	}
 }));
 
 describe('createQuery search params synchronization', () => {
 	beforeEach(() => {
 		navigation.page.url = new URL('http://localhost/');
+		navigation.page.shallow = null;
 		navigation.page.state = { preserved: true };
-		navigation.replaceState.mockClear();
+		navigation.goto.mockClear();
 	});
 
 	it('hydrates known query keys with inferred basic types before the first effect', async () => {
@@ -64,7 +66,7 @@ describe('createQuery search params synchronization', () => {
 		});
 
 		await tick();
-		expect(navigation.replaceState).not.toHaveBeenCalled();
+		expect(navigation.goto).not.toHaveBeenCalled();
 		view.unmount();
 	});
 
@@ -85,14 +87,14 @@ describe('createQuery search params synchronization', () => {
 		query.data.tags.push('kit', 'svelte');
 		await tick();
 
-		expect(navigation.replaceState).toHaveBeenCalledTimes(1);
-		expect(navigation.replaceState).toHaveBeenCalledWith(expect.any(URL), { preserved: true });
-		expect(navigation.page.url.pathname).toBe('/catalog');
-		expect(navigation.page.url.hash).toBe('#results');
-		expect(navigation.page.url.searchParams.get('utm_source')).toBe('test');
-		expect(navigation.page.url.searchParams.get('page')).toBe('3');
-		expect(navigation.page.url.searchParams.get('search')).toBe('azure net');
-		expect(navigation.page.url.searchParams.getAll('tags')).toEqual(['kit', 'svelte']);
+		expect(navigation.goto).toHaveBeenCalledTimes(1);
+		expect(navigation.goto).toHaveBeenCalledWith(expect.any(URL), { state: { preserved: true }, shallow: true, replace: true, reset: false });
+		expect(navigation.page.shallow!.url.pathname).toBe('/catalog');
+		expect(navigation.page.shallow!.url.hash).toBe('#results');
+		expect(navigation.page.shallow!.url.searchParams.get('utm_source')).toBe('test');
+		expect(navigation.page.shallow!.url.searchParams.get('page')).toBe('3');
+		expect(navigation.page.shallow!.url.searchParams.get('search')).toBe('azure net');
+		expect(navigation.page.shallow!.url.searchParams.getAll('tags')).toEqual(['kit', 'svelte']);
 		view.unmount();
 	});
 
@@ -111,8 +113,8 @@ describe('createQuery search params synchronization', () => {
 
 		expect(query.data.page).toBe(2);
 		await tick();
-		expect(navigation.replaceState).toHaveBeenCalledTimes(1);
-		expect(navigation.page.url.searchParams.get('page')).toBe('2');
+		expect(navigation.goto).toHaveBeenCalledTimes(1);
+		expect(navigation.page.shallow!.url.searchParams.get('page')).toBe('2');
 		view.unmount();
 	});
 
@@ -129,7 +131,7 @@ describe('createQuery search params synchronization', () => {
 
 		expect(query.data).toEqual({ page: 1, enabled: false, createdAt: new Date('2026-01-01T00:00:00.000Z') });
 		await tick();
-		expect(navigation.replaceState).not.toHaveBeenCalled();
+		expect(navigation.goto).not.toHaveBeenCalled();
 		view.unmount();
 	});
 
@@ -155,13 +157,13 @@ describe('createQuery search params synchronization', () => {
 
 		expect(query.data).toEqual({ page: 7, search: '' });
 		await tick();
-		expect(navigation.replaceState).not.toHaveBeenCalled();
+		expect(navigation.goto).not.toHaveBeenCalled();
 
 		query.patch({ page: 8, search: 'azure' });
 		await tick();
-		expect(navigation.page.url.searchParams.get('p')).toBe('8');
-		expect(navigation.page.url.searchParams.get('q')).toBe('azure');
-		expect(navigation.page.url.searchParams.get('utm_source')).toBe('test');
+		expect(navigation.page.shallow!.url.searchParams.get('p')).toBe('8');
+		expect(navigation.page.shallow!.url.searchParams.get('q')).toBe('azure');
+		expect(navigation.page.shallow!.url.searchParams.get('utm_source')).toBe('test');
 		view.unmount();
 	});
 
@@ -182,7 +184,7 @@ describe('createQuery search params synchronization', () => {
 		query.reset();
 		await tick();
 		expect(query.data.page).toBe(1);
-		expect(navigation.page.url.searchParams.get('page')).toBe('1');
+		expect(navigation.page.shallow!.url.searchParams.get('page')).toBe('1');
 		view.unmount();
 	});
 
@@ -200,7 +202,51 @@ describe('createQuery search params synchronization', () => {
 		expect(query.data.page).toBe(1);
 		query.data.page = 2;
 		await tick();
-		expect(navigation.replaceState).not.toHaveBeenCalled();
+		expect(navigation.goto).not.toHaveBeenCalled();
 		view.unmount();
 	});
+});
+
+it('merges URL parameters over closure defaults and resets without calling the closure again', async () => {
+	navigation.page.url = new URL('http://localhost/?page=7');
+	const initial = vi.fn(() => ({ page: 1, perPage: 12 }));
+	let query!: QueryController<Record<string, unknown>>;
+	const view = render(QueryHarness, {
+		initial,
+		options: { syncWithSearchParams: true },
+		expose: (value) => {
+			query = value;
+		}
+	});
+	await tick();
+	expect(query.data).toEqual({ page: 7, perPage: 12 });
+	query.reset();
+	await tick();
+	expect(query.data).toEqual({ page: 1, perPage: 12 });
+	expect(initial).toHaveBeenCalledTimes(1);
+	view.unmount();
+});
+
+it('uses the shallow URL for initialization and subsequent updates instead of the stale page URL', async () => {
+	navigation.page.url = new URL('http://localhost/catalog?page=1');
+	navigation.page.shallow = { url: new URL('http://localhost/catalog?page=4&utm_source=shallow#anchor') };
+	let query!: QueryController<Record<string, unknown>>;
+	const view = render(QueryHarness, {
+		initial: { page: 1 },
+		options: { syncWithSearchParams: true },
+		expose: (value) => {
+			query = value;
+		}
+	});
+	await tick();
+	expect(query.data.page).toBe(4);
+	query.patch({ page: 5 });
+	await tick();
+	query.reset();
+	await tick();
+	expect(navigation.page.url.searchParams.get('page')).toBe('1');
+	expect(navigation.page.shallow.url.searchParams.get('page')).toBe('1');
+	expect(navigation.page.shallow.url.searchParams.get('utm_source')).toBe('shallow');
+	expect(navigation.page.shallow.url.hash).toBe('#anchor');
+	view.unmount();
 });

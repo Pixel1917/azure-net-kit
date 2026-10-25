@@ -1,6 +1,6 @@
 import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { RequestContext, type ContextData } from '../src/lib/shared/request-context/Internal.js';
+import type { ContextData } from '../src/lib/shared/request-context/Internal.js';
 import { describe, expect, it } from 'vitest';
 import { createAsyncAction as asyncAction } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
 import { HttpErrorTypes, HttpServiceError } from '../src/lib/infra/http-service/HttpServiceInstance.js';

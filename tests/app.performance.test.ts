@@ -1,6 +1,5 @@
 import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { performance } from 'node:perf_hooks';
-import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/lib/shared/app/index.js';
 import type { IServerMiddleware } from '../src/lib/shared/app/index.js';

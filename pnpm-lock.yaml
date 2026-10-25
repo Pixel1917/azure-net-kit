@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@azure-net/tools':
-        specifier: ^2.0.0
-        version: 2.0.0
+        specifier: ^2.1.0
+        version: 2.1.0
     devDependencies:
       '@eslint/compat':
         specifier: ^2.0.5
@@ -111,8 +111,8 @@ packages:
   '@asamuzakjp/nwsapi@2.3.9':
     resolution: {integrity: sha512-n8GuYSrI9bF7FFZ/SjhwevlHc8xaVlb/7HmHelnc/PZXBD2ZR49NnN9sMMuDdEGPeeRQ5d0hqlSlEpgCX3Wl0Q==}
 
-  '@azure-net/tools@2.0.0':
-    resolution: {integrity: sha512-wyfW9Ftg3c0hZXbXOdnHHdYPdLsmfHQu5Kb+tEI1+PYGHIfoSOMzMrOwCTzL6trp/5LkPhJdbra+T2lV60LrkA==}
+  '@azure-net/tools@2.1.0':
+    resolution: {integrity: sha512-B7I5Ix2VSg04LRqZYa4o0k4guIB7hASr8dPZ7hwn1NtVLDm5nY2a/7GkFJztfcR0K9hRzNcE26rLxshM/cP18Q==}
 
   '@babel/code-frame@7.29.0':
     resolution: {integrity: sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw==}
@@ -1537,7 +1537,7 @@ snapshots:
 
   '@asamuzakjp/nwsapi@2.3.9': {}
 
-  '@azure-net/tools@2.0.0': {}
+  '@azure-net/tools@2.1.0': {}
 
   '@babel/code-frame@7.29.0':
     dependencies:

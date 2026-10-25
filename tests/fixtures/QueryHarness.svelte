@@ -7,7 +7,7 @@
 		setup,
 		expose
 	}: {
-		initial: Record<string, unknown>;
+		initial: Record<string, unknown> | (() => Record<string, unknown>);
 		options?: unknown;
 		setup?: (query: QueryController<Record<string, unknown>>) => void;
 		expose: (query: QueryController<Record<string, unknown>>) => void;

@@ -164,3 +164,39 @@ describe('createQuery.patch', () => {
 		expect(Object.keys(query.data)).not.toContain('hidden');
 	});
 });
+
+describe('createQuery initializer', () => {
+	it('infers fields from a closure and captures an isolated snapshot once', () => {
+		let calls = 0;
+		const settings = { page: 1, filters: { search: 'original' } };
+		const query = createQuery(() => {
+			calls++;
+			return settings;
+		});
+		expectTypeOf(query).toEqualTypeOf<QueryController<typeof settings>>();
+		expect(calls).toBe(1);
+		settings.filters.search = 'external';
+		query.patch({ page: 4 });
+		expect(query.data.filters.search).toBe('original');
+		query.reset();
+		expect(query.data).toEqual({ page: 1, filters: { search: 'original' } });
+		expect(query.getInitial()).toEqual(query.data);
+		expect(calls).toBe(1);
+	});
+	it('supports explicit types and does not share defaults across instances', () => {
+		type Query = { page: number; perPage: number };
+		const source = () => ({ page: 1, perPage: 12 });
+		const first = createQuery<Query>(source);
+		const second = createQuery<Query>(source);
+		first.data.page = 8;
+		expect(second.data.page).toBe(1);
+		expectTypeOf(first.data).toEqualTypeOf<Query>();
+	});
+	it('propagates initialization errors', () => {
+		expect(() =>
+			createQuery(() => {
+				throw new Error('initialization failed');
+			})
+		).toThrow('initialization failed');
+	});
+});

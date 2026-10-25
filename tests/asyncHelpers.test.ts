@@ -1,5 +1,4 @@
 import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
-import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAsyncAction as asyncAction, createAsyncResource as asyncResource } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
 import { createApp, type AppAzureNetKitErrorCallback } from '../src/lib/shared/app/index.js';

@@ -4,3 +4,5 @@ pnpm-lock.yaml
 yarn.lock
 bun.lock
 bun.lockb
+test-results
+tests/fixtures/plugin-app/.svelte-kit

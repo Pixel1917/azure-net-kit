@@ -1,5 +1,6 @@
-import { replaceState } from '$app/navigation';
+import { goto } from '$app/navigation';
 import { page } from '$app/state';
+import { untrack } from 'svelte';
 import { createEffect, type EffectCallback, type EffectDependency } from '../effect/Effect.svelte.js';
 import { cloneStateValue } from '../shared/cloneStateValue.js';
 import { fromSearchParams, toSearchParams } from './SearchParamsSync.js';
@@ -106,15 +107,16 @@ export interface QueryController<T extends Record<string, unknown>> {
 	createEffect: (callback: EffectCallback, dependencies?: readonly QueryPath<T>[]) => void;
 }
 
-export const createQuery = <T extends Record<string, unknown>>(initialValue: T, options?: CreateQueryOptions<T>): QueryController<T> => {
-	const baseInitial = cloneStateValue(initialValue);
+export const createQuery = <T extends Record<string, unknown>>(initialValue: T | (() => T), options?: CreateQueryOptions<T>): QueryController<T> => {
+	// Capture defaults once; reset restores this snapshot rather than rerunning the initializer.
+	const baseInitial = untrack(() => cloneStateValue(typeof initialValue === 'function' ? initialValue() : initialValue));
 	const searchParamsSync = options?.syncWithSearchParams;
 	const syncSettings = typeof searchParamsSync === 'object' ? searchParamsSync : undefined;
 	const syncEnabled = Boolean(searchParamsSync);
 	const parseSearchParams = syncSettings?.fromSearchParams ?? fromSearchParams<T>;
 	const serializeSearchParams = syncSettings?.toSearchParams ?? toSearchParams<T>;
 	const parsedInitial = syncEnabled
-		? parseSearchParams(new URLSearchParams(page.url.searchParams.toString()), cloneStateValue(baseInitial))
+		? parseSearchParams(new URLSearchParams((page.shallow?.url ?? page.url).searchParams.toString()), cloneStateValue(baseInitial))
 		: undefined;
 	let data = $state<T>(parsedInitial ? { ...cloneStateValue(baseInitial), ...cloneStateValue(parsedInitial) } : cloneStateValue(baseInitial));
 
@@ -154,11 +156,16 @@ export const createQuery = <T extends Record<string, unknown>>(initialValue: T, 
 				if (nextParams.toString() === initialParams.toString()) return;
 			}
 
-			const url = new URL(page.url.href);
+			const currentUrl = page.shallow?.url ?? page.url;
+			const url = new URL(currentUrl.href);
 			for (const key of managedKeys) url.searchParams.delete(key);
 			for (const [key, value] of nextParams) url.searchParams.append(key, value);
 
-			if (url.search !== page.url.search) replaceState(url, page.state);
+			if (url.search !== currentUrl.search) {
+				void goto(url, { state: page.state, shallow: true, replace: true, reset: false }).catch((error: unknown) => {
+					console.error('[createQuery] Failed to synchronize search parameters', error);
+				});
+			}
 		}, [createDeepDependency(() => data)]);
 	}
 
