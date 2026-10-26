@@ -34,7 +34,7 @@ beforeEach(() => {
 
 describe('RegisterProvider', () => {
 	it('does not proxy or replace reactive class instances', () => {
-		const usePresenter = RegisterProvider(() => new ReactivePresenter(), 'singleton');
+		const usePresenter = RegisterProvider(() => new ReactivePresenter(), { lifecycle: 'singleton' });
 		const server = storage.run(context(), () => {
 			const value = usePresenter();
 			const { increment } = value;
@@ -68,7 +68,7 @@ describe('RegisterProvider', () => {
 				}
 			}
 			const factory = vi.fn(() => new Presenter());
-			const usePresenter = RegisterProvider(factory, lifecycle);
+			const usePresenter = RegisterProvider(factory, { lifecycle: lifecycle });
 			const instances = await Promise.all(
 				Array.from({ length: 100 }, (_, index) =>
 					storage.run(context(String(index)), async () => {
@@ -89,7 +89,7 @@ describe('RegisterProvider', () => {
 
 	for (const lifecycle of ['transient'] as const) {
 		it(`${lifecycle}: never caches, on either side`, () => {
-			const usePresenter = RegisterProvider(() => ({}), lifecycle);
+			const usePresenter = RegisterProvider(() => ({}), { lifecycle: lifecycle });
 			expect(usePresenter()).not.toBe(usePresenter());
 			storage.run(context(), () => expect(usePresenter()).not.toBe(usePresenter()));
 			environment.browser = true;
@@ -104,7 +104,7 @@ describe('RegisterProvider', () => {
 	});
 
 	it('singleton is shared in the browser, never with server requests', () => {
-		const usePresenter = RegisterProvider(() => ({}), 'singleton');
+		const usePresenter = RegisterProvider(() => ({}), { lifecycle: 'singleton' });
 		const server = storage.run(context(), usePresenter);
 		environment.browser = true;
 		const client = usePresenter();
@@ -116,8 +116,8 @@ describe('RegisterProvider', () => {
 
 	it('independent registrations of the same class do not collide', () => {
 		class Presenter {}
-		const first = RegisterProvider(() => new Presenter(), 'singleton');
-		const second = RegisterProvider(() => new Presenter(), 'singleton');
+		const first = RegisterProvider(() => new Presenter(), { lifecycle: 'singleton' });
+		const second = RegisterProvider(() => new Presenter(), { lifecycle: 'singleton' });
 		storage.run(context(), () => expect(first()).not.toBe(second()));
 		environment.browser = true;
 		expect(first()).not.toBe(second());
@@ -151,17 +151,191 @@ describe('RegisterProvider', () => {
 	});
 
 	it('rejects invalid lifecycles and invalid factory results', () => {
-		expect(() => RegisterProvider(() => ({}), 'global' as ProviderLifecycle)).toThrow('Unknown lifecycle');
-		const usePresenter = RegisterProvider(() => null as never, 'transient');
+		expect(() => RegisterProvider(() => ({}), { lifecycle: 'global' as ProviderLifecycle })).toThrow('Unknown lifecycle');
+		const usePresenter = RegisterProvider(() => null as never, { lifecycle: 'transient' });
 		expect(usePresenter).toThrow('Factory must return an instance');
 	});
 
 	it('rejects async factories without an unhandled rejection', async () => {
-		// @ts-expect-error Async factories are intentionally forbidden.
-		const usePresenter = RegisterProvider(async () => {
-			throw new Error('async failure');
-		}, 'transient');
+		const usePresenter = RegisterProvider(
+			// @ts-expect-error Async factories are intentionally forbidden.
+			async () => {
+				throw new Error('async failure');
+			},
+			{ lifecycle: 'transient' }
+		);
 		expect(usePresenter).toThrow('Factory must be synchronous');
 		await Promise.resolve();
 	});
+});
+
+describe('RegisterProvider method binding', () => {
+	it('does not inspect or change methods when disabled', () => {
+		const instance = Object.freeze({
+			run() {
+				return this;
+			},
+			get state() {
+				throw new Error('getter called');
+			}
+		});
+		for (const options of [{ lifecycle: 'transient' as const }, { lifecycle: 'transient' as const, bindMethods: false }]) {
+			const provider = RegisterProvider(() => instance, options);
+			expect(provider()).toBe(instance);
+			expect(provider().run).toBe(instance.run);
+		}
+	});
+	it('binds after construction, preserves identity and private fields, and skips accessors', async () => {
+		const getter = vi.fn(() => {
+			throw new Error('getter called');
+		});
+		class Base {
+			base() {
+				return this;
+			}
+			replaced() {
+				return 'base';
+			}
+		}
+		const symbol = Symbol('method');
+		class Presenter extends Base {
+			#value = 3;
+			initialized: boolean;
+			constructor() {
+				super();
+				this.initialized = !Object.hasOwn(this, 'read');
+			}
+			get state() {
+				return getter();
+			}
+			get callback() {
+				return getter();
+			}
+			read() {
+				return this.#value;
+			}
+			override replaced() {
+				return super.replaced() + this.read();
+			}
+			[symbol]() {
+				return this.#value;
+			}
+			async asyncRead() {
+				return this.#value;
+			}
+		}
+		const instance = new Presenter();
+		const provider = RegisterProvider(() => instance, { lifecycle: 'transient', bindMethods: true });
+		expect(provider()).toBe(instance);
+		expect(instance.initialized).toBe(true);
+		expect(instance).toBeInstanceOf(Presenter);
+		const { read, replaced, base, asyncRead, [symbol]: symbolic } = instance;
+		expect(read()).toBe(3);
+		expect(symbolic()).toBe(3);
+		expect(replaced()).toBe('base3');
+		expect(base()).toBe(instance);
+		await expect(asyncRead()).resolves.toBe(3);
+		expect(instance.read).toBe(read);
+		expect(getter).not.toHaveBeenCalled();
+		expect(Object.hasOwn(instance, 'state')).toBe(false);
+		expect(Object.hasOwn(instance, 'constructor')).toBe(false);
+		expect(Object.getOwnPropertyDescriptor(instance, 'read')?.enumerable).toBe(false);
+	});
+	it('binds only selected methods and snapshots the options', () => {
+		class Presenter {
+			value = 1;
+			read() {
+				return this.value;
+			}
+			other() {
+				return this.value;
+			}
+		}
+		const methods: ('read' | 'other')[] = ['read', 'read'];
+		const provider = RegisterProvider(() => new Presenter(), { bindMethods: methods });
+		methods.push('other');
+		storage.run(context(), () => {
+			const instance = provider();
+			const { read } = instance;
+			expect(read()).toBe(1);
+			expect(instance.other).toBe(Presenter.prototype.other);
+			expect(provider()).toBe(instance);
+		});
+	});
+	it('does not bind a shadowed base method or evaluate a selected accessor', () => {
+		class Base {
+			read() {
+				return this;
+			}
+		}
+		const getter = vi.fn(() => () => 1);
+		const instance = new Base();
+		Object.defineProperty(instance, 'read', { get: getter, configurable: true });
+		const all = RegisterProvider(() => instance, { lifecycle: 'transient', bindMethods: true });
+		expect(all()).toBe(instance);
+		expect(getter).not.toHaveBeenCalled();
+		const selected = RegisterProvider(() => instance, { lifecycle: 'transient', bindMethods: ['read'] });
+		expect(selected).toThrow('non-method');
+		expect(getter).not.toHaveBeenCalled();
+	});
+	it('fails before modifying any method on protected instances or invalid selections', () => {
+		class Presenter {
+			first() {
+				return this;
+			}
+			second() {
+				return this;
+			}
+		}
+		const instance = new Presenter();
+		Object.defineProperty(instance, 'second', { value: instance.second, configurable: false, writable: false });
+		expect(RegisterProvider(() => instance, { lifecycle: 'transient', bindMethods: true })).toThrow('protected method');
+		expect(Object.hasOwn(instance, 'first')).toBe(false);
+		expect(RegisterProvider(() => Object.freeze(new Presenter()), { lifecycle: 'transient', bindMethods: true })).toThrow('protected method');
+		expect(RegisterProvider(() => new Presenter(), { lifecycle: 'transient', bindMethods: ['missing'] as never })).toThrow('not found');
+	});
+	it('isolates bound methods across concurrent requests and browser singletons', async () => {
+		class Presenter {
+			id = RequestContext.current().state.testId;
+			read() {
+				return this.id;
+			}
+		}
+		const provider = RegisterProvider(() => new Presenter(), { lifecycle: 'singleton', bindMethods: true });
+		const values = await Promise.all(
+			Array.from({ length: 50 }, (_, i) =>
+				storage.run(context(String(i)), async () => {
+					const { read } = provider();
+					await Promise.resolve();
+					expect(provider().read).toBe(read);
+					return read();
+				})
+			)
+		);
+		expect(values).toEqual(Array.from({ length: 50 }, (_, i) => String(i)));
+		environment.browser = true;
+		class Client {
+			read() {
+				return this;
+			}
+		}
+		const client = RegisterProvider(() => new Client(), { lifecycle: 'singleton', bindMethods: true });
+		const { read } = client();
+		expect(read()).toBe(client());
+	});
+});
+
+it('binds rune class methods without replacing reactive accessors', () => {
+	environment.browser = true;
+	const instance = new ReactivePresenter();
+	const before = Object.getOwnPropertyDescriptor(ReactivePresenter.prototype, 'count');
+	const hadOwnCount = Object.hasOwn(instance, 'count');
+	const provider = RegisterProvider(() => instance, { bindMethods: true });
+	const { add } = provider();
+	add(2);
+	expect(instance.count).toBe(2);
+	expect(instance.doubled).toBe(4);
+	expect(Object.hasOwn(instance, 'count')).toBe(hadOwnCount);
+	expect(Object.hasOwn(instance, 'doubled')).toBe(false);
+	expect(Object.getOwnPropertyDescriptor(ReactivePresenter.prototype, 'count')).toEqual(before);
 });

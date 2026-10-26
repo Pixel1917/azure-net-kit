@@ -68,27 +68,51 @@ import type { OrdersUseCases } from '#contexts/Orders/Application/UseCases/Order
 export class OrdersPresenter {
 	constructor(private readonly useCases: OrdersUseCases) {}
 
-	collection = () => createAsyncResource(() => this.useCases.collection());
+	collection() {
+		return createAsyncResource(() => this.useCases.collection());
+	}
 }
 
-export const useOrdersPresenter = RegisterProvider(() => {
-	const { Orders } = ApplicationProvider();
-	return new OrdersPresenter(Orders);
-}, 'scoped');
+export const useOrdersPresenter = RegisterProvider(
+	() => {
+		const { Orders } = ApplicationProvider();
+		return new OrdersPresenter(Orders);
+	},
+	{ lifecycle: 'scoped', bindMethods: true }
+);
 ```
 
 Call `useOrdersPresenter()` during component initialization, not at module scope.
 The registration itself is safe at module scope and does not resolve dependencies.
-Arrow fields remain callable after destructuring. `RegisterProvider` returns the
-actual class instance, without a proxy or automatic method binding.
+`RegisterProvider` returns the actual class instance, without a proxy. The optional
+second argument is an options object: `{ lifecycle?: ..., bindMethods?: ... }`.
+Defaults are `lifecycle: 'scoped'` and `bindMethods: false`. The old string argument
+is no longer supported. With binding disabled, methods and property descriptors are
+left untouched.
+
+Use `bindMethods: true` to bind function-valued data properties, including inherited
+methods, or `bindMethods: ['collection']` to select typed method names. Binding runs
+only after the factory returns, once for each newly created instance. Accessors are
+never evaluated or replaced, including Svelte rune accessors. Constructors and
+Object.prototype methods are excluded. A selected accessor (even one returning a
+function), missing method, or protected property throws instead of silently failing.
+TypeScript cannot distinguish a function-returning getter from a method, so the
+accessor check also happens at runtime.
+
+Method references are stable after binding. Frozen/non-extensible instances cannot
+receive inherited bound methods. Arbitrary proxies and exotic built-in objects are
+not supported binding targets. Function-valued fields are also bound with `true`;
+use an explicit list if the instance holds component constructors or other callable
+dependencies. No global cache retains instances or bound functions. Binding does not
+apply retroactively to callbacks captured during construction or methods replaced later.
 Classes using Svelte runes such as `$state` must be placed in a `.svelte.ts` module
 (or declared inside a Svelte component), not a regular `.ts` file.
 
-| Lifecycle                                  | Server                                    | Browser                       |
-| ------------------------------------------ | ----------------------------------------- | ----------------------------- |
-| `scoped` (default)                         | One instance per registration per request | New instance per call         |
-| `transient` (`trancient` is also accepted) | New instance per call                     | New instance per call         |
-| `singleton`                                | One instance per registration per request | One instance per registration |
+| Lifecycle          | Server                                    | Browser                       |
+| ------------------ | ----------------------------------------- | ----------------------------- |
+| `scoped` (default) | One instance per registration per request | New instance per call         |
+| `transient`        | New instance per call                     | New instance per call         |
+| `singleton`        | One instance per registration per request | One instance per registration |
 
 Server caching requires `AzureNetPlugin` request context and fails
 outside it. There is no process-wide server singleton. Request caches have weak

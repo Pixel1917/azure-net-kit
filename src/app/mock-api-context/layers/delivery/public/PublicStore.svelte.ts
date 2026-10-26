@@ -5,4 +5,4 @@ class PublicState {
 		this.store.value = 'TestPublicStoreChanged';
 	};
 }
-export const PublicStore = RegisterProvider(() => new PublicState(), 'singleton');
+export const PublicStore = RegisterProvider(() => new PublicState(), { lifecycle: 'singleton' });

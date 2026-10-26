@@ -6,7 +6,7 @@ export {
 	type AsyncResourceSettings,
 	type AsyncActionResponse
 } from './injectable-dependencies/index.js';
-export { RegisterProvider, type ProviderLifecycle } from './presenter/RegisterProvider.js';
+export { RegisterProvider, type ProviderLifecycle, type RegisterProviderOptions, type ProviderMethodKey } from './presenter/RegisterProvider.js';
 export { Bound } from './presenter/Bound.js';
 
 export {

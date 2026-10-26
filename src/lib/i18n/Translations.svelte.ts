@@ -67,223 +67,226 @@ export const createTranslations = <
 		return base ? (normalizedLocales.get(base) ?? localeVariants.get(base)) : undefined;
 	};
 
-	const factory = RegisterProvider(() => {
-		const translations = new Map<AvailableLocale, Translation>();
-		const pendingLoads = new Map<AvailableLocale, Promise<Translation>>();
-		const localeListeners = new Set<(locale: AvailableLocale) => void>();
-		let locale = $state.raw<AvailableLocale>(params.initLang);
-		let activeMessages = $state.raw<Translation>({});
-		let synchronized = false;
-		let initializationPromise: Promise<void> | undefined;
-		let switchRevision = 0;
+	const factory = RegisterProvider(
+		() => {
+			const translations = new Map<AvailableLocale, Translation>();
+			const pendingLoads = new Map<AvailableLocale, Promise<Translation>>();
+			const localeListeners = new Set<(locale: AvailableLocale) => void>();
+			let locale = $state.raw<AvailableLocale>(params.initLang);
+			let activeMessages = $state.raw<Translation>({});
+			let synchronized = false;
+			let initializationPromise: Promise<void> | undefined;
+			let switchRevision = 0;
 
-		const loadTranslation = (requestedLocale: string): Promise<Translation> => {
-			const resolvedLocale = resolveLocale(requestedLocale);
-			if (!resolvedLocale) {
-				return Promise.reject(new Error(`[AzureNetKit:i18n] Locale "${requestedLocale}" is not present in messages.`));
-			}
-
-			const cached = translations.get(resolvedLocale);
-			if (cached) return Promise.resolve(cached);
-
-			const pending = pendingLoads.get(resolvedLocale);
-			if (pending) return pending;
-
-			const request = Promise.resolve()
-				.then(() => params.messages[resolvedLocale]())
-				.then((loaded) => {
-					// Imported dictionaries are module-cached; request state must not expose that shared object.
-					const messages = BROWSER ? loaded : structuredClone(loaded);
-					translations.set(resolvedLocale, messages);
-					return messages;
-				})
-				.finally(() => {
-					if (pendingLoads.get(resolvedLocale) === request) pendingLoads.delete(resolvedLocale);
-				});
-
-			pendingLoads.set(resolvedLocale, request);
-			return request;
-		};
-
-		const getLocaleFromRequest = () => {
-			const event = RequestContext.current().event;
-			if (!event) throw new Error('[AzureNetKit:i18n] RequestContext has no RequestEvent.');
-
-			const cookieLocale = params.cookieName ? resolveLocale(event.cookies.get(params.cookieName)) : undefined;
-			if (cookieLocale) return cookieLocale;
-
-			if (params.initLangFromAcceptLanguage) {
-				for (const requestedLocale of parseAcceptLanguage(event.request.headers.get('accept-language'))) {
-					if (requestedLocale === '*') return params.initLang;
-					const resolvedLocale = resolveLocale(requestedLocale);
-					if (resolvedLocale) return resolvedLocale;
-				}
-			}
-
-			return params.initLang;
-		};
-
-		const preloadTranslation = async (resolver?: () => string | Promise<string>) => {
-			if (BROWSER) throw new Error('[AzureNetKit:i18n] preloadTranslation() is server-only.');
-
-			const revision = ++switchRevision;
-			const requestedLocale = resolver ? await resolver() : getLocaleFromRequest();
-			const resolvedLocale = resolveLocale(requestedLocale) ?? params.initLang;
-			const messages = await loadTranslation(resolvedLocale);
-			if (revision !== switchRevision) return;
-			locale = resolvedLocale;
-			activeMessages = messages;
-			const state = RequestContext.current().state;
-			state.currLocale = resolvedLocale;
-			const snapshots = (state.i18n ??= {});
-			Object.defineProperty(snapshots, snapshotKey, { value: { locale }, enumerable: true, configurable: true, writable: true });
-		};
-
-		const getTranslation = (messageKey: string): string | undefined => {
-			let current: Translation | undefined = activeMessages;
-
-			for (const key of messageKey.split('.')) {
-				if (typeof current === 'string' || !current || !Object.hasOwn(current, key)) return undefined;
-				current = current[key];
-			}
-
-			return typeof current === 'string' ? current : undefined;
-		};
-
-		const translate = (messageKey: string, vars: TranslationVariables = {}): string => {
-			let result = getTranslation(messageKey);
-			if (result === undefined) return messageKey;
-			if (!result.includes('{{')) return result;
-
-			result = result.replace(PLURAL_PATTERN, (_, variableName: string, titlesString: string) => {
-				const count = Number(vars[variableName]);
-				if (Number.isNaN(count)) {
-					console.warn(`[AzureNetKit:i18n] Plural variable "${variableName}" is not numeric.`);
-					return '';
+			const loadTranslation = (requestedLocale: string): Promise<Translation> => {
+				const resolvedLocale = resolveLocale(requestedLocale);
+				if (!resolvedLocale) {
+					return Promise.reject(new Error(`[AzureNetKit:i18n] Locale "${requestedLocale}" is not present in messages.`));
 				}
 
-				return TextUtil.pluralize(
-					count,
-					titlesString.split(',').map((title) => title.trim())
-				);
-			});
+				const cached = translations.get(resolvedLocale);
+				if (cached) return Promise.resolve(cached);
 
-			return result.replace(VARIABLE_PATTERN, (_, key: string) => (vars[key] === undefined ? '' : String(vars[key])));
-		};
+				const pending = pendingLoads.get(resolvedLocale);
+				if (pending) return pending;
 
-		const t = (translation?: MessageKey | TranslationExtended | string, vars?: TranslationVariables): string => {
-			if (!translation) return '';
-			const extended = typeof translation === 'object' ? translation : undefined;
-			return translate(String(extended?.key ?? translation), extended?.vars ?? vars);
-		};
+				const request = Promise.resolve()
+					.then(() => params.messages[resolvedLocale]())
+					.then((loaded) => {
+						// Imported dictionaries are module-cached; request state must not expose that shared object.
+						const messages = BROWSER ? loaded : structuredClone(loaded);
+						translations.set(resolvedLocale, messages);
+						return messages;
+					})
+					.finally(() => {
+						if (pendingLoads.get(resolvedLocale) === request) pendingLoads.delete(resolvedLocale);
+					});
 
-		const syncFromState = (state: App.RequestContextState): void => {
-			if (synchronized) return;
-			const snapshot = state.i18n && Object.hasOwn(state.i18n, snapshotKey) ? state.i18n[snapshotKey] : undefined;
-			const nextLocale = resolveLocale(snapshot?.locale ?? state.currLocale);
-			if (snapshot && !nextLocale) throw new Error('[AzureNetKit:i18n] Unsupported boot locale.');
-			synchronized = true;
-			++switchRevision;
-			initializationPromise = undefined;
-			if (nextLocale) locale = nextLocale;
-			activeMessages = translations.get(locale) ?? {};
-		};
+				pendingLoads.set(resolvedLocale, request);
+				return request;
+			};
 
-		const updateHtmlLocale = (currentLocale: AvailableLocale) => {
-			document.documentElement.lang = currentLocale;
-		};
+			const getLocaleFromRequest = () => {
+				const event = RequestContext.current().event;
+				if (!event) throw new Error('[AzureNetKit:i18n] RequestContext has no RequestEvent.');
 
-		const initializeClient = (): Promise<void> => {
-			if (!BROWSER) return Promise.resolve();
-			if (initializationPromise) return initializationPromise;
+				const cookieLocale = params.cookieName ? resolveLocale(event.cookies.get(params.cookieName)) : undefined;
+				if (cookieLocale) return cookieLocale;
 
-			// SSR marker is available before SvelteKit starts hydration; boot runs later.
-			const serverLocale = document.documentElement.getAttribute('data-azure-net-locale');
-			locale =
-				resolveLocale(serverLocale ?? undefined) ??
-				resolveLocale((params.cookieName ? Cookies.get(params.cookieName) : undefined) ?? undefined) ??
-				(params.initLangFromAcceptLanguage ? navigator.languages.map(resolveLocale).find(Boolean) : undefined) ??
-				locale;
-			const revision = switchRevision;
-			const request = loadTranslation(locale)
-				.then((messages) => {
-					if (revision !== switchRevision) {
-						if (initializationPromise === request) initializationPromise = undefined;
-						return;
+				if (params.initLangFromAcceptLanguage) {
+					for (const requestedLocale of parseAcceptLanguage(event.request.headers.get('accept-language'))) {
+						if (requestedLocale === '*') return params.initLang;
+						const resolvedLocale = resolveLocale(requestedLocale);
+						if (resolvedLocale) return resolvedLocale;
 					}
-					activeMessages = messages;
-					updateHtmlLocale(locale);
-				})
-				.catch((error: unknown) => {
-					if (initializationPromise === request) initializationPromise = undefined;
-					throw error;
+				}
+
+				return params.initLang;
+			};
+
+			const preloadTranslation = async (resolver?: () => string | Promise<string>) => {
+				if (BROWSER) throw new Error('[AzureNetKit:i18n] preloadTranslation() is server-only.');
+
+				const revision = ++switchRevision;
+				const requestedLocale = resolver ? await resolver() : getLocaleFromRequest();
+				const resolvedLocale = resolveLocale(requestedLocale) ?? params.initLang;
+				const messages = await loadTranslation(resolvedLocale);
+				if (revision !== switchRevision) return;
+				locale = resolvedLocale;
+				activeMessages = messages;
+				const state = RequestContext.current().state;
+				state.currLocale = resolvedLocale;
+				const snapshots = (state.i18n ??= {});
+				Object.defineProperty(snapshots, snapshotKey, { value: { locale }, enumerable: true, configurable: true, writable: true });
+			};
+
+			const getTranslation = (messageKey: string): string | undefined => {
+				let current: Translation | undefined = activeMessages;
+
+				for (const key of messageKey.split('.')) {
+					if (typeof current === 'string' || !current || !Object.hasOwn(current, key)) return undefined;
+					current = current[key];
+				}
+
+				return typeof current === 'string' ? current : undefined;
+			};
+
+			const translate = (messageKey: string, vars: TranslationVariables = {}): string => {
+				let result = getTranslation(messageKey);
+				if (result === undefined) return messageKey;
+				if (!result.includes('{{')) return result;
+
+				result = result.replace(PLURAL_PATTERN, (_, variableName: string, titlesString: string) => {
+					const count = Number(vars[variableName]);
+					if (Number.isNaN(count)) {
+						console.warn(`[AzureNetKit:i18n] Plural variable "${variableName}" is not numeric.`);
+						return '';
+					}
+
+					return TextUtil.pluralize(
+						count,
+						titlesString.split(',').map((title) => title.trim())
+					);
 				});
 
-			initializationPromise = request;
-			return request;
-		};
+				return result.replace(VARIABLE_PATTERN, (_, key: string) => (vars[key] === undefined ? '' : String(vars[key])));
+			};
 
-		const switchLocale = async (requestedLocale: AvailableLocale) => {
-			if (!BROWSER) throw new Error('[AzureNetKit:i18n] switchLocale() is client-only.');
+			const t = (translation?: MessageKey | TranslationExtended | string, vars?: TranslationVariables): string => {
+				if (!translation) return '';
+				const extended = typeof translation === 'object' ? translation : undefined;
+				return translate(String(extended?.key ?? translation), extended?.vars ?? vars);
+			};
 
-			const resolvedLocale = resolveLocale(requestedLocale);
-			if (!resolvedLocale) throw new Error(`[AzureNetKit:i18n] Locale "${requestedLocale}" is not present in messages.`);
+			const syncFromState = (state: App.RequestContextState): void => {
+				if (synchronized) return;
+				const snapshot = state.i18n && Object.hasOwn(state.i18n, snapshotKey) ? state.i18n[snapshotKey] : undefined;
+				const nextLocale = resolveLocale(snapshot?.locale ?? state.currLocale);
+				if (snapshot && !nextLocale) throw new Error('[AzureNetKit:i18n] Unsupported boot locale.');
+				synchronized = true;
+				++switchRevision;
+				initializationPromise = undefined;
+				if (nextLocale) locale = nextLocale;
+				activeMessages = translations.get(locale) ?? {};
+			};
 
-			const revision = ++switchRevision;
-			const messages = await loadTranslation(resolvedLocale);
-			if (revision !== switchRevision) return;
+			const updateHtmlLocale = (currentLocale: AvailableLocale) => {
+				document.documentElement.lang = currentLocale;
+			};
 
-			locale = resolvedLocale;
-			activeMessages = messages;
-			if (params.cookieName) {
-				Cookies.set(params.cookieName, resolvedLocale, {
-					path: '/',
-					sameSite: 'Lax',
-					...params.cookieOptions
-				});
-			}
-			updateHtmlLocale(resolvedLocale);
-			for (const listener of localeListeners) listener(resolvedLocale);
-		};
+			const initializeClient = (): Promise<void> => {
+				if (!BROWSER) return Promise.resolve();
+				if (initializationPromise) return initializationPromise;
 
-		const subscribeLocaleChangeEvent = (listener: (locale: AvailableLocale) => void): (() => void) => {
-			if (!BROWSER) throw new Error('[AzureNetKit:i18n] Locale change events are client-only.');
-			localeListeners.add(listener);
-			return () => localeListeners.delete(listener);
-		};
+				// SSR marker is available before SvelteKit starts hydration; boot runs later.
+				const serverLocale = document.documentElement.getAttribute('data-azure-net-locale');
+				locale =
+					resolveLocale(serverLocale ?? undefined) ??
+					resolveLocale((params.cookieName ? Cookies.get(params.cookieName) : undefined) ?? undefined) ??
+					(params.initLangFromAcceptLanguage ? navigator.languages.map(resolveLocale).find(Boolean) : undefined) ??
+					locale;
+				const revision = switchRevision;
+				const request = loadTranslation(locale)
+					.then((messages) => {
+						if (revision !== switchRevision) {
+							if (initializationPromise === request) initializationPromise = undefined;
+							return;
+						}
+						activeMessages = messages;
+						updateHtmlLocale(locale);
+					})
+					.catch((error: unknown) => {
+						if (initializationPromise === request) initializationPromise = undefined;
+						throw error;
+					});
 
-		const applyHtmlLocaleAttr = (html: string) => html.replaceAll('%lang%', () => locale);
+				initializationPromise = request;
+				return request;
+			};
 
-		const manager = {
-			switchLocale,
-			applyHtmlLocaleAttr,
-			subscribeLocaleChangeEvent,
-			t,
-			get locale() {
-				return locale;
-			},
-			locales
-		};
-		const escapeAttribute = (value: string) =>
-			value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-		bindTranslationLifecycle(manager, {
-			preloadTranslation,
-			initializeClient,
-			syncFromState,
-			transformHtml: (html) =>
-				applyHtmlLocaleAttr(html).replace(
-					/<html\b([^>]*)>/i,
-					(_, attrs: string) =>
-						'<html' +
-						attrs.replace(/\s+(?:data-azure-net-locale|lang)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '') +
-						' lang="' +
-						escapeAttribute(locale) +
-						'" data-azure-net-locale="' +
-						escapeAttribute(locale) +
-						'">'
-				)
-		});
-		return manager;
-	}, 'singleton');
+			const switchLocale = async (requestedLocale: AvailableLocale) => {
+				if (!BROWSER) throw new Error('[AzureNetKit:i18n] switchLocale() is client-only.');
+
+				const resolvedLocale = resolveLocale(requestedLocale);
+				if (!resolvedLocale) throw new Error(`[AzureNetKit:i18n] Locale "${requestedLocale}" is not present in messages.`);
+
+				const revision = ++switchRevision;
+				const messages = await loadTranslation(resolvedLocale);
+				if (revision !== switchRevision) return;
+
+				locale = resolvedLocale;
+				activeMessages = messages;
+				if (params.cookieName) {
+					Cookies.set(params.cookieName, resolvedLocale, {
+						path: '/',
+						sameSite: 'Lax',
+						...params.cookieOptions
+					});
+				}
+				updateHtmlLocale(resolvedLocale);
+				for (const listener of localeListeners) listener(resolvedLocale);
+			};
+
+			const subscribeLocaleChangeEvent = (listener: (locale: AvailableLocale) => void): (() => void) => {
+				if (!BROWSER) throw new Error('[AzureNetKit:i18n] Locale change events are client-only.');
+				localeListeners.add(listener);
+				return () => localeListeners.delete(listener);
+			};
+
+			const applyHtmlLocaleAttr = (html: string) => html.replaceAll('%lang%', () => locale);
+
+			const manager = {
+				switchLocale,
+				applyHtmlLocaleAttr,
+				subscribeLocaleChangeEvent,
+				t,
+				get locale() {
+					return locale;
+				},
+				locales
+			};
+			const escapeAttribute = (value: string) =>
+				value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+			bindTranslationLifecycle(manager, {
+				preloadTranslation,
+				initializeClient,
+				syncFromState,
+				transformHtml: (html) =>
+					applyHtmlLocaleAttr(html).replace(
+						/<html\b([^>]*)>/i,
+						(_, attrs: string) =>
+							'<html' +
+							attrs.replace(/\s+(?:data-azure-net-locale|lang)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '') +
+							' lang="' +
+							escapeAttribute(locale) +
+							'" data-azure-net-locale="' +
+							escapeAttribute(locale) +
+							'">'
+					)
+			});
+			return manager;
+		},
+		{ lifecycle: 'singleton' }
+	);
 	return factory as typeof factory & TranslationManagerFactory;
 };
