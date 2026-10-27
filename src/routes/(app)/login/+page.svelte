@@ -2,13 +2,12 @@
 	import { createAsyncSignal, createQuery } from '#lib/svelte/index.js';
 	import { PublicPresenter, PublicStore } from '../../../app/mock-api-context/layers/delivery/public/index.js';
 	import type { PageProps } from '../../../../.svelte-kit/types/src/routes/(app)/login/$types.js';
-	import { TranslationManager } from '../../../core/translations/index.js';
+	import { TranslationManager as translation, t } from '../../../core/translations/index.js';
 
 	const storeValue = PublicStore().store;
 
 	const { setNewVal } = PublicStore();
-	const translation = TranslationManager();
-	const { t, switchLocale } = translation;
+	const { switchLocale } = translation;
 
 	let { data }: PageProps = $props();
 

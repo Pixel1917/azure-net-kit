@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { PublicStore } from '../../app/mock-api-context/layers/delivery/public/PublicStore.svelte.js';
 	import { register } from '../../program.js';
-	import { TranslationManager } from '../../core/translations/index.js';
-	const translation = TranslationManager();
+	import { TranslationManager as translation, t } from '../../core/translations/index.js';
 	const publicState = PublicStore();
 	import { createQuery } from '../../lib/svelte/query/Query.svelte.js';
 
@@ -14,7 +13,7 @@
 
 <main>
 	<h1>AzureNet Kit E2E</h1>
-	<p data-testid="translation">{translation.locale}:{translation.t('publicData')}</p>
+	<p data-testid="translation">{translation.locale}:{t('publicData')}</p>
 	<button onclick={() => translation.switchLocale('ru')}>Russian</button>
 	<p data-testid="count">{count}</p>
 	<button onclick={() => (count += 1)}>Increment</button>

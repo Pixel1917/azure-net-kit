@@ -14,7 +14,7 @@ must remain synchronous.
 
 The plugin provides virtual hooks only. It does not create or rewrite page/layout
 modules. Manual `hooks.server`, `hooks.client` and `hooks` files are forbidden.
-Initial Edges SSR state is hydrated once; later navigation is client-owned.
+Initial request state is hydrated once through Svelte hydratable; later navigation is client-owned.
 
 `program.ts` is universal: a static server-only import does not become safe merely
 because it is used inside `useServer`. Use an explicit build-time browser guard
@@ -195,12 +195,10 @@ export const { register } = createApp((app) =>
 	app
 		.useServer(async ({ event, resolve, useMiddlewares }) => {
 			await useMiddlewares([ServerAuth]);
-			await TranslationManager().preloadTranslation();
 			return resolve(event);
 		})
 		.useBoot(({ state }) => {
 			useCurrentUser().setUser(state.currentUser ?? null);
-			TranslationManager().syncFromState(state);
 		})
 );
 ```
@@ -229,7 +227,7 @@ script and serialization. No custom HTML parser is used by the kit.
 `createBoundaryProvider` is replaced by `CreateServiceContainer` (no compatibility alias):
 
 ```ts
-const ApplicationProvider = CreateDiContainer('ApplicationProvider', {
+const ApplicationProvider = CreateServiceContainer('ApplicationProvider', {
 	register: () => ({ Users: () => new UsersUseCases(repository) })
 });
 const { Users } = ApplicationProvider();
@@ -239,4 +237,136 @@ The accessor remains lazy, synchronous and request-scoped on SSR. `RegisterProvi
 registers an individual class factory; `singleton` means one browser instance but
 one instance per request on the server, never a server process singleton.
 
-Built-in i18n: see [I18N.md](./I18N.md). preloadTranslation() fills request state automatically; syncFromState(state) restores it synchronously in useBoot. No separate translation package, writable/derived stores or edges adapter is required.
+Built-in i18n: see [I18N.md](./I18N.md). Register a `new TranslationManager(options)` through `app.useTranslations(manager)`. Server preparation, locale hydration and client dictionary loading run automatically before the corresponding user hooks. No separate translation package or manual lifecycle calls are required.
+
+## AsyncSignal SSR Hydration
+
+Client-only signals remain synchronous. Opt into SSR with a stable, non-empty key:
+
+```svelte
+<script lang="ts">
+	import { createAsyncSignal } from '@azure-net/kit';
+
+	const result = await createAsyncSignal(() => loadProfile(), {
+		server: true,
+		key: 'profile:current-user'
+	});
+</script>
+
+<p>{result.response?.name}</p>
+<button onclick={() => result.refresh()}>Refresh</button>
+```
+
+Call this during component initialization with Svelte experimental async enabled.
+Svelte's `hydratable` transfers the initial serializable result to the browser,
+which reuses it without a duplicate request; later refreshes execute normally.
+There is no module-global server request state. The handler must work in both
+environments. Keys must match across SSR/hydration and distinguish request inputs.
+
+`beforeSend` runs only for actual requests; success/error callbacks and `ready`
+settlement apply on both sides. Request errors produce an error-state signal.
+`immediate: false` keeps the signal idle and disables initial hydration. Batch
+factories stay synchronous and explicitly reject `server: true` at type-check and
+runtime; use individually awaited server signals instead.
+
+See [AsyncSignal details](./src/lib/svelte/async-signal/README.md) for lifecycle,
+serialization, errors, cancellation, CSP, and batch behavior.
+
+## SvelteKit 3 hooks and class middleware
+
+Error callbacks use the native discriminated `CaughtError` contract from
+`@sveltejs/kit/hooks`. `status` and `message` are no longer added at the top level.
+For `kind: 'app'`, `'framework'` or `'validation'`, read `error.status` and
+`error.message`. For `kind: 'unknown'`, `error` remains `unknown`: narrow it before
+logging and do not return its potentially private message to clients. Validation
+issues are available only in the `'validation'` branch. Return `{ status, message }`
+to override the public response, or return nothing to retain SvelteKit defaults.
+The removed `handleValidationError` hook is not generated.
+
+```ts
+app.useServerError(({ kind, error, useLogger }) => {
+	if (kind === 'unknown') {
+		useLogger(error, {});
+		return { status: 500, message: 'Internal Error' };
+	}
+	return error;
+});
+```
+
+Middleware arrays now contain **constructors**, not functions or existing instances.
+Constructors must accept no required arguments. A fresh instance is constructed
+only when its turn is reached, on every request/navigation. Resolve dependencies
+inside that instance, not into module-level request-specific variables.
+
+```ts
+import type { IServerMiddleware, ServerMiddlewareContext, IClientMiddleware, ClientMiddlewareContext } from '@azure-net/kit';
+
+class ServerAuth implements IServerMiddleware {
+	async execute({ event, next }: ServerMiddlewareContext) {
+		if (!event.cookies.get('session')) return next('/login', 303);
+		next();
+	}
+}
+
+class ClientGuard implements IClientMiddleware {
+	execute({ next, to, navigation }: ClientMiddlewareContext): undefined {
+		if (navigation?.shallow) return next();
+		if (to.pathname === '/private') return next('/login', { replace: true });
+		return next();
+	}
+}
+
+app
+	.useServer(async ({ useMiddlewares, event, resolve }) => {
+		await useMiddlewares([ServerAuth]);
+		return resolve(event);
+	})
+	.useClient(({ useMiddlewares }) => {
+		useMiddlewares([ClientGuard]);
+	});
+```
+
+`IMiddleware<Context, Result>` is the common interface. Client `execute` is strictly
+synchronous (`undefined` return, normally `return next()`); server `execute` can
+return `void` or `Promise<void>`. Omitting `next()` blocks the chain. Neither the
+chain nor the container automatically disposes subscriptions owned by middleware:
+keep middleware short-lived and do not attach long-lived listeners there.
+
+Client `next(location, options)` and `useRedirect(...).clientRedirectSettings`
+use SvelteKit's `GotoOptions` directly: `replace`, `reset`, `refreshAll`, `shallow`,
+`persistState`, `state` and `invalidate`. Client navigation data includes the native
+`navigation` event. In Kit 3 shallow changes also trigger navigation hooks; choose
+explicitly whether a guard should skip them. `goto` is for app routes, not external
+URLs; external navigation should use browser location APIs.
+
+## CompositionRoot
+
+`CreateServiceContainer` remains unchanged. `CompositionRoot` is a lazy class
+facade over it, with a unique internal container name. It can be created at module
+scope; `resolveContainer()` resolves against the current SSR request or browser
+cache, never a request captured by the constructor.
+
+```ts
+import { CompositionRoot } from '@azure-net/kit';
+
+export const Http = new CompositionRoot({
+	register: () => ({ Api: () => new ApiDatasource() })
+});
+
+export const Identity = new CompositionRoot({
+	dependsOn: { Http },
+	register: ({ Http }) => ({
+		Account: () => new AccountUseCases(new AccountRepository(Http.Api))
+	})
+});
+
+// Inside a presenter factory or an active request:
+const { Account } = Identity.resolveContainer();
+```
+
+Dependencies accept both other `CompositionRoot` instances and existing
+`CreateServiceContainer` accessors. Service types are inferred through the chain.
+Only registration metadata is wrapped; there is no extra proxy around services
+and no new caching layer. Repeated resolution preserves existing container/service
+identity. If explicit cleanup is needed, use `await cleanupProvider(Identity.name)`.
+Declare roots once, rather than creating new roots per component render.

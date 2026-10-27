@@ -7,6 +7,6 @@
 	const state = useBootState();
 </script>
 
-<p>{TranslationManager().t('title')}</p>
+<p>{TranslationManager.t('title')}</p>
 <p data-testid="boot-state">{state.value}</p>
 {@render children()}

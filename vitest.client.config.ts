@@ -1,5 +1,5 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
-import viteConfig from './vite.config';
+import viteConfig from './vite.config.ts';
 
 export default mergeConfig(
 	viteConfig,
@@ -9,6 +9,7 @@ export default mergeConfig(
 		},
 		test: {
 			include: [
+				'tests/compositionRootClient.test.ts',
 				'tests/registerPresenter.test.ts',
 				'tests/appErrorClient.test.ts',
 				'tests/i18nClient.test.ts',

@@ -1,11 +1,10 @@
-import { untrack } from 'svelte';
+import { hydratable, untrack } from 'svelte';
 import { BROWSER } from '../../external/tools/index.js';
 
 export type AsyncStatus = 'idle' | 'pending' | 'success' | 'error';
 export type AsyncSignalSource = 'auto' | 'manual' | 'global';
 
-export interface AsyncSignalOptions<TData, TError = Error> {
-	server?: boolean;
+interface AsyncSignalBaseOptions<TData, TError = Error> {
 	immediate?: boolean;
 	initialData?: TData | (() => TData);
 	beforeSend?: (meta: { initial: boolean; source: AsyncSignalSource }) => void | Promise<void>;
@@ -13,6 +12,10 @@ export interface AsyncSignalOptions<TData, TError = Error> {
 	onError?: (error: TError) => void | Promise<void>;
 	key?: string;
 }
+
+export type AsyncSignalOptions<TData, TError = Error> = AsyncSignalBaseOptions<TData, TError> & ({ server: true; key: string } | { server?: false });
+
+type AsyncSignalBatchSignalOptions<TData, TError> = Omit<AsyncSignalBaseOptions<TData, TError>, 'immediate'> & { server?: false };
 
 export interface AsyncSignalSvelte<TData, TError = Error> {
 	response?: TData;
@@ -33,7 +36,7 @@ export interface AsyncSignalBatchOptions {
 export interface AsyncSignalBatchFactory {
 	<TData, TError = Error>(
 		handler: (signal?: AbortSignal) => Promise<TData>,
-		options?: Omit<AsyncSignalOptions<TData, TError>, 'immediate'>
+		options?: AsyncSignalBatchSignalOptions<TData, TError>
 	): AsyncSignalSvelte<TData, TError>;
 }
 
@@ -127,9 +130,33 @@ const createAsyncSignalManager = () => {
 
 const asyncSignalManager = createAsyncSignalManager();
 
-export const createAsyncSignal = <TData, TError = Error>(
+export function createAsyncSignal<TData, TError = Error>(
+	handler: (signal?: AbortSignal) => Promise<TData>,
+	options: AsyncSignalBaseOptions<TData, TError> & { server: true; key: string }
+): Promise<AsyncSignalSvelte<TData, TError>>;
+export function createAsyncSignal<TData, TError = Error>(
+	handler: (signal?: AbortSignal) => Promise<TData>,
+	options?: AsyncSignalBaseOptions<TData, TError> & { server?: false }
+): AsyncSignalSvelte<TData, TError>;
+export function createAsyncSignal<TData, TError = Error>(
+	handler: (signal?: AbortSignal) => Promise<TData>,
+	options: AsyncSignalOptions<TData, TError>
+): AsyncSignalSvelte<TData, TError> | Promise<AsyncSignalSvelte<TData, TError>>;
+export function createAsyncSignal<TData, TError = Error>(
 	handler: (signal?: AbortSignal) => Promise<TData>,
 	options: AsyncSignalOptions<TData, TError> = {}
+): AsyncSignalSvelte<TData, TError> | Promise<AsyncSignalSvelte<TData, TError>> {
+	if (options.server && (typeof options.key !== 'string' || !options.key.trim())) {
+		throw new Error('[AsyncSignal] server: true requires a stable, non-empty key.');
+	}
+	const signal = createAsyncSignalInstance(handler, options, options.server && options.immediate !== false ? options.key : undefined);
+	return options.server ? signal.ready.then(() => signal) : signal;
+}
+
+const createAsyncSignalInstance = <TData, TError = Error>(
+	handler: (signal?: AbortSignal) => Promise<TData>,
+	options: AsyncSignalBaseOptions<TData, TError> & { server?: boolean } = {},
+	hydrationKey?: string
 ): AsyncSignalSvelte<TData, TError> => {
 	const { server = false, immediate = true, initialData = undefined, key } = options;
 	const resolvedInitialData = typeof initialData === 'function' ? (initialData as () => TData)() : initialData;
@@ -186,16 +213,39 @@ export const createAsyncSignal = <TData, TError = Error>(
 		error = undefined;
 
 		try {
-			if (options.beforeSend) {
-				const beforeSendResult = options.beforeSend({ initial, source });
-				if (beforeSendResult && typeof beforeSendResult.then === 'function') await beforeSendResult;
+			const request = async () => {
+				if (options.beforeSend) {
+					const beforeSendResult = options.beforeSend({ initial, source });
+					if (beforeSendResult && typeof beforeSendResult.then === 'function') await beforeSendResult;
+				}
+				if (runId !== currentRunId || abortController !== localController || localController.signal.aborted) {
+					return undefined;
+				}
+				return handler(localController.signal);
+			};
+			let result: TData | undefined;
+			if (initial && hydrationKey !== undefined) {
+				let originalError: { value: unknown } | undefined;
+				// Call before yielding: hydratable needs the component's active render context.
+				const outcome = await hydratable(`@azure-net/kit/async-signal:${hydrationKey}`, async () => {
+					try {
+						return { ok: true as const, data: await request() };
+					} catch (error) {
+						originalError = { value: error };
+						// Error instances are not devalue-serializable; do not expose server stacks.
+						return error instanceof Error
+							? { ok: false as const, native: true as const, error: { name: error.name, message: error.message } }
+							: { ok: false as const, native: false as const, error };
+					}
+				});
+				if (!outcome.ok) {
+					if (originalError) throw originalError.value;
+					throw outcome.native ? Object.assign(new Error(outcome.error.message), { name: outcome.error.name }) : outcome.error;
+				}
+				result = outcome.data;
+			} else {
+				result = await request();
 			}
-
-			if (runId !== currentRunId || abortController !== localController || localController.signal.aborted) {
-				return undefined;
-			}
-
-			const result = await handler(localController.signal);
 
 			if (runId !== currentRunId || abortController !== localController || localController.signal.aborted) {
 				return undefined;
@@ -204,7 +254,7 @@ export const createAsyncSignal = <TData, TError = Error>(
 			data = result;
 			status = 'success';
 			if (options.onSuccess) {
-				await options.onSuccess(result);
+				await options.onSuccess(result as TData);
 			}
 			return result;
 		} catch (err) {
@@ -268,8 +318,10 @@ export const createAsyncSignal = <TData, TError = Error>(
 	if (BROWSER) {
 		const signalKey = key ?? asyncSignalManager.generateKey();
 		const callback = (source: AsyncSignalSource) => startWhenUnlocked(source);
-		asyncSignalManager.register(signalKey, callback);
+		if (hydrationKey === undefined) asyncSignalManager.register(signalKey, callback);
 		$effect(() => {
+			// Async component initialization may be abandoned before this effect runs.
+			if (hydrationKey !== undefined) asyncSignalManager.register(signalKey, callback);
 			return () => {
 				asyncSignalManager.unregister(signalKey, callback);
 			};
@@ -277,12 +329,13 @@ export const createAsyncSignal = <TData, TError = Error>(
 	}
 
 	if (immediate) {
+		// Automatic runs have no caller to catch a rejected onError callback.
 		if (!BROWSER && server) {
 			untrack(() => {
-				void start('auto');
+				void start('auto').catch(() => undefined);
 			});
 		} else if (BROWSER) {
-			void start('auto');
+			void start('auto').catch(() => undefined);
 		}
 	}
 
@@ -362,9 +415,12 @@ export const createAsyncSignalBatch = <const TSignals extends readonly AsyncSign
 	const internals = new Map<AsyncSignalSvelte<unknown, unknown>, AsyncSignalBatchInternal>();
 	const createSignal: AsyncSignalBatchFactory = <TData, TError = Error>(
 		handler: (signal?: AbortSignal) => Promise<TData>,
-		signalOptions: Omit<AsyncSignalOptions<TData, TError>, 'immediate'> = {}
+		signalOptions: AsyncSignalBatchSignalOptions<TData, TError> = {}
 	) => {
-		const signal = createAsyncSignal(handler, { ...signalOptions, immediate: false }) as BatchManagedAsyncSignal<TData, TError>;
+		if (signalOptions.server) {
+			throw new Error('[AsyncSignalBatch] server: true is not supported. Await createAsyncSignal during component initialization instead.');
+		}
+		const signal = createAsyncSignalInstance(handler, { ...signalOptions, immediate: false }) as BatchManagedAsyncSignal<TData, TError>;
 		const internal = signal[ASYNC_SIGNAL_BATCH_INTERNAL];
 		internal.lock();
 		internals.set(signal, internal);

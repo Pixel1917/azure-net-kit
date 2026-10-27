@@ -213,16 +213,14 @@ describe('createApp', () => {
 		app.register.serverError({
 			error,
 			event: context.event,
-			status: 500,
-			message: 'Internal error'
+			kind: 'unknown'
 		} as never);
 
 		expect(callback).toHaveBeenCalledWith({
 			requestContext: context,
 			error,
 			event: context.event,
-			status: 500,
-			message: 'Internal error',
+			kind: 'unknown',
 			useLogger
 		});
 	});
@@ -263,9 +261,10 @@ describe('createApp', () => {
 		initializeRequestContext(() => context as never);
 		const issues = [{ message: 'Invalid value' }];
 		const app = createApp((app) =>
-			app.useServerError(({ requestContext, event, issues: receivedIssues, kind, status }) => {
+			app.useServerError(({ requestContext, event, issues: receivedIssues, kind, error }) => {
 				expect(kind).toBe('validation');
-				expect(status).toBe(400);
+				if (kind !== 'validation') throw new Error('Expected validation');
+				expect(error.status).toBe(400);
 				expect(requestContext).toBe(context);
 				expect(event).toBe(context.event);
 				expect(receivedIssues).toBe(issues);
@@ -408,11 +407,11 @@ describe('createApp', () => {
 		initializeRequestContext(() => context as never);
 
 		const calls: string[] = [];
-		const first: IServerMiddleware = ({ to, from, event, ensureRoute, next }) => {
+		const first: IServerMiddleware['execute'] = ({ to, from, event, ensureRoute, next }) => {
 			calls.push(`first:${to.pathname}:${from?.pathname}:${event === context.event}:${ensureRoute('/dashboard', to.pathname)}`);
 			next();
 		};
-		const second: IServerMiddleware = async ({ next }) => {
+		const second: IServerMiddleware['execute'] = async ({ next }) => {
 			await Promise.resolve();
 			calls.push('second');
 			next();
@@ -420,7 +419,14 @@ describe('createApp', () => {
 
 		const app = createApp((app) =>
 			app.useServer(async ({ useMiddlewares }) => {
-				await useMiddlewares([first, second]);
+				await useMiddlewares([
+					class {
+						execute = first;
+					},
+					class {
+						execute = second;
+					}
+				]);
 			})
 		);
 
@@ -438,7 +444,11 @@ describe('createApp', () => {
 
 		const app = createApp((app) =>
 			app.useServer(async ({ useMiddlewares }) => {
-				await useMiddlewares([() => undefined]);
+				await useMiddlewares([
+					class {
+						execute() {}
+					}
+				]);
 			})
 		);
 
@@ -457,7 +467,11 @@ describe('createApp', () => {
 		const resolve = vi.fn(() => new Response('ok'));
 		const app = createApp((app) =>
 			app.useServer(async ({ useMiddlewares }) => {
-				await useMiddlewares([() => undefined]);
+				await useMiddlewares([
+					class {
+						execute() {}
+					}
+				]);
 			})
 		);
 
@@ -483,5 +497,27 @@ describe('createApp', () => {
 
 		expect(server).toHaveBeenCalledTimes(1);
 		expect(resolve).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe('Kit 3 server error contract', () => {
+	it('passes native caught errors unchanged and allows status overrides', async () => {
+		const context = createServerContext();
+		initializeRequestContext(() => context as never);
+		const callback = vi.fn(() => ({ status: 503, message: 'Try later' }));
+		const app = createApp((builder) => builder.useServerError(callback));
+		for (const error of [
+			{ kind: 'unknown', error: new Error('secret') },
+			{ kind: 'app', error: { status: 401, message: 'Login' } },
+			{ kind: 'framework', error: { status: 404, message: 'Not found' } },
+			{ kind: 'validation', error: { status: 400, message: 'Invalid' }, issues: [{ message: 'field' }] }
+		]) {
+			const input = { ...error, event: context.event };
+			expect(await app.register.serverError(input as never)).toEqual({ status: 503, message: 'Try later' });
+			const received = callback.mock.calls.at(-1)! as unknown as [Record<string, unknown>];
+			expect(received[0]).toEqual({ ...input, requestContext: context, useLogger });
+			expect(received[0]).not.toHaveProperty('status');
+			expect(received[0]).not.toHaveProperty('message');
+		}
 	});
 });

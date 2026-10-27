@@ -1,18 +1,11 @@
-import { goto } from '$app/navigation';
+import { goto, type GotoOptions } from '$app/navigation';
 import { redirect } from '@sveltejs/kit';
 import { BROWSER } from '@azure-net/tools/environment';
 
 export type RedirectStatus = 300 | 301 | 302 | 303 | 304 | 305 | 306 | 307 | 308;
 
 export interface IRedirectSettings {
-	clientRedirectSettings?: {
-		replaceState?: boolean | undefined;
-		noScroll?: boolean | undefined;
-		keepFocus?: boolean | undefined;
-		invalidateAll?: boolean | undefined;
-		invalidate?: (string | URL | ((url: URL) => boolean))[] | undefined;
-		state?: App.PageState | undefined;
-	};
+	clientRedirectSettings?: GotoOptions;
 	serverRedirectSettings?: {
 		status?: RedirectStatus;
 	};

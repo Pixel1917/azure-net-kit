@@ -1,11 +1,8 @@
 <script lang="ts">
 	import { PrivatePresenter } from '../../app/mock-api-context/layers/delivery/private/index.js';
 	import { createAsyncSignal } from '#lib/svelte/index.js';
-	import { TranslationManager } from '../../core/translations/index.js';
+	import { t } from '../../core/translations/index.js';
 	import type { PageProps } from '../../../.svelte-kit/types/src/routes/(app)/$types.js';
-
-	const translation = TranslationManager();
-	const { t } = translation;
 
 	const { data }: PageProps = $props();
 	const { collection } = PrivatePresenter();

@@ -1,27 +1,16 @@
-import { getTranslationLifecycle, type TranslationManagerFactory } from '../../i18n/Internal.js';
+import { getTranslationManagerLifecycle, type TranslationManagerSource } from '../../i18n/Internal.js';
 import { hydratable } from 'svelte';
 import { getContextInternals } from '../../shared/request-context/Internal.js';
 import { BROWSER } from '../../external/tools/index.js';
 import { RequestContext, type ContextData } from '../../shared/request-context/Internal.js';
 import { AppError, AzureNetKitInternalError, type IAppError } from '../app-error/AppError.js';
 import { bindAzureNetKitErrorResolver, type AsyncHelperRetry, type AzureNetKitErrorResolver } from '../app-error/ErrorRuntime.js';
-import { executeServerMiddlewares, type IServerMiddleware } from './middleware/ServerMiddleware.js';
+import { executeServerMiddlewares, type ServerMiddlewareClass } from './middleware/ServerMiddleware.js';
 import type { Handle, HandleFetch, HandleServerError, HandleClientError, Reroute, ServerInit, Transport } from '@sveltejs/kit/hooks';
 import type { RequestEvent } from '@sveltejs/kit';
 import { beforeNavigate } from '$app/navigation';
-import { executeClientMiddlewares, type IClientMiddleware } from './middleware/ClientMiddleware.js';
+import { executeClientMiddlewares, type ClientMiddlewareClass } from './middleware/ClientMiddleware.js';
 import { useLogger } from '../logger/index.js';
-
-// Kit 3 nests safe status/message inside caught errors; unknown errors keep safe defaults.
-const errorDetails = (input: { error: unknown; kind?: string }) => {
-	const legacy = input as { status?: unknown; message?: unknown };
-	const error =
-		input.kind !== 'unknown' && input.error && typeof input.error === 'object' ? (input.error as { status?: unknown; message?: unknown }) : {};
-	return {
-		status: typeof legacy.status === 'number' ? legacy.status : typeof error.status === 'number' ? error.status : 500,
-		message: typeof legacy.message === 'string' ? legacy.message : typeof error.message === 'string' ? error.message : 'Internal Error'
-	};
-};
 
 type MaybePromise<T> = T | Promise<T>;
 type HandleInput = Parameters<Handle>[0];
@@ -38,7 +27,6 @@ type BuilderFlags = Partial<
 		| 'useServer'
 		| 'useServerError'
 		| 'useServerFetch'
-		| 'useServerValidationError'
 		| 'useAzureNetKitError'
 		| 'useReroute'
 		| 'useTransport',
@@ -57,12 +45,12 @@ export interface AppUniversalLifecycleContext {
 }
 
 export interface AppClientLifecycleContext {
-	useMiddlewares: (middlewares: IClientMiddleware[]) => void;
+	useMiddlewares: (middlewares: readonly ClientMiddlewareClass[]) => void;
 }
 
 export type AppClientInitLifecycleContext = void;
 
-export type AppClientErrorContext = Parameters<HandleClientError>[0] & { status: number; message: string };
+export type AppClientErrorContext = Parameters<HandleClientError>[0];
 
 export type AppServerInitLifecycleContext = void;
 
@@ -70,13 +58,11 @@ export interface AppServerLifecycleContext {
 	requestContext: ContextData;
 	event: RequestEvent;
 	resolve: Resolve;
-	useMiddlewares: (middlewares: IServerMiddleware[]) => Promise<void>;
+	useMiddlewares: (middlewares: readonly ServerMiddlewareClass[]) => Promise<void>;
 }
 
 export type AppServerErrorContext = Parameters<HandleServerError>[0] & {
 	requestContext: ContextData;
-	status: number;
-	message: string;
 	useLogger: typeof useLogger;
 };
 
@@ -119,7 +105,7 @@ export type CreateAppBuilder<TFlags extends BuilderFlags = object> = OnceMethod<
 	OnceMethod<
 		TFlags,
 		'useTranslations',
-		{ useTranslations(manager: TranslationManagerFactory): CreateAppBuilder<WithFlag<TFlags, 'useTranslations'>> }
+		{ useTranslations(manager: TranslationManagerSource): CreateAppBuilder<WithFlag<TFlags, 'useTranslations'>> }
 	> &
 	OnceMethod<TFlags, 'use', { use(callback: AppUniversalLifecycleCallback): CreateAppBuilder<WithFlag<TFlags, 'use'>> }> &
 	OnceMethod<TFlags, 'useClient', { useClient(callback: AppClientLifecycleCallback): CreateAppBuilder<WithFlag<TFlags, 'useClient'>> }> &
@@ -189,7 +175,7 @@ type LifecycleKind = 'boot' | 'client' | 'clientInit' | 'serverInit' | 'server';
 type LifecycleFlags = Partial<Record<LifecycleKind, true>>;
 
 interface AppCallbacks {
-	useTranslations?: TranslationManagerFactory;
+	useTranslations?: TranslationManagerSource;
 	useBoot?: AppBootCallback;
 	use?: AppUniversalLifecycleCallback;
 	useClient?: AppClientLifecycleCallback;
@@ -256,7 +242,7 @@ const setCallback = <TKey extends keyof AppCallbacks>(callbacks: AppCallbacks, k
 
 const createBuilder = (callbacks: AppCallbacks): CreateAppBuilder => {
 	const builder = {
-		useTranslations(manager: TranslationManagerFactory) {
+		useTranslations(manager: TranslationManagerSource) {
 			setCallback(callbacks, 'useTranslations', manager);
 			return builder;
 		},
@@ -372,7 +358,7 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 				return callbacks.useClientInit?.();
 			};
 			if (!callbacks.useTranslations) return initialize();
-			translationInitPromise = getTranslationLifecycle(callbacks.useTranslations())
+			translationInitPromise = getTranslationManagerLifecycle(callbacks.useTranslations)
 				.initializeClient()
 				.then(initialize)
 				.catch((error: unknown) => {
@@ -382,7 +368,7 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 				});
 			return translationInitPromise;
 		}
-		let internalMiddlewares: IClientMiddleware[] = [];
+		let internalMiddlewares: readonly ClientMiddlewareClass[] = [];
 		if (!clientInitialized) {
 			beforeNavigate((navigation) => {
 				executeClientMiddlewares(internalMiddlewares, navigation);
@@ -390,7 +376,7 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 			clientInitialized = true;
 		}
 		return callbacks.useClient?.({
-			useMiddlewares: (middlewares: IClientMiddleware[]) => {
+			useMiddlewares: (middlewares: readonly ClientMiddlewareClass[]) => {
 				internalMiddlewares = middlewares;
 			}
 		});
@@ -403,7 +389,6 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 	};
 
 	const runServerError: HandleServerError = (input) => {
-		const { status, message } = errorDetails(input);
 		if (BROWSER) return undefined;
 		const requestContext = getServerRequestContext();
 		bindErrorResolver(requestContext);
@@ -412,8 +397,6 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 			const result = callbacks.useServerError?.({
 				requestContext,
 				...input,
-				status,
-				message,
 				useLogger
 			});
 
@@ -430,14 +413,11 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 	};
 
 	const runClientError: HandleClientError = (input) => {
-		const { status, message } = errorDetails(input);
 		if (!BROWSER) return undefined;
 		bindErrorResolver();
 
 		return callbacks.useClientError?.({
-			...input,
-			status,
-			message
+			...input
 		});
 	};
 
@@ -454,7 +434,7 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 	const reroute: Reroute = (input) => callbacks.useReroute?.(input);
 
 	const handle: Handle = async ({ event, resolve: originalResolve }) => {
-		const translations = callbacks.useTranslations ? getTranslationLifecycle(callbacks.useTranslations()) : undefined;
+		const translations = callbacks.useTranslations ? getTranslationManagerLifecycle(callbacks.useTranslations) : undefined;
 		const resolve: Resolve = translations
 			? (event, options) =>
 					originalResolve(event, {
@@ -505,7 +485,7 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 		if (flags.boot) return;
 		flags.boot = true;
 		const state = hydratable('@azure-net/kit:initial-state:v1', () => (BROWSER ? ({} as App.RequestContextState) : RequestContext.current().state));
-		if (callbacks.useTranslations) getTranslationLifecycle(callbacks.useTranslations()).syncFromState(state);
+		if (callbacks.useTranslations) getTranslationManagerLifecycle(callbacks.useTranslations).syncFromState(state);
 		const result = callbacks.useBoot?.({ state }) as unknown;
 		if (result && typeof (result as PromiseLike<unknown>).then === 'function') {
 			void Promise.resolve(result).catch(() => undefined);

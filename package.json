@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "6.0.0-next.7",
+	"version": "6.0.0-next.8",
 	"license": "MIT",
 	"author": "Pixel1917",
 	"description": "Universal toolkit and library collection, developed as part of the Azure-net ecosystem",
@@ -89,16 +89,16 @@
 	},
 	"peerDependencies": {
 		"@sveltejs/kit": ">=3.0.0",
-		"svelte": ">=5.55.4"
+		"svelte": ">=5.57.1"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^2.0.5",
 		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.59.1",
-		"@sveltejs/adapter-auto": "^7.0.1",
+		"@sveltejs/adapter-auto": "^8.0.0",
 		"@sveltejs/kit": "^3.0.0",
 		"@sveltejs/load-config": "^0.2.2",
-		"@sveltejs/package": "^2.5.7",
+		"@sveltejs/package": "^3.0.1",
 		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/svelte": "^5.3.1",
@@ -116,7 +116,7 @@
 		"svelte-check": "^4.7.6",
 		"typescript": "^6.0.2",
 		"typescript-eslint": "^8.58.2",
-		"vite": "^8.0.8",
+		"vite": "^8.0.12",
 		"vitest": "^4.1.4"
 	},
 	"keywords": [

@@ -1,5 +1,5 @@
-import { createTranslations } from '@azure-net/kit/i18n';
-export const TranslationManager = createTranslations({
+import { TranslationManager as Manager } from '@azure-net/kit/i18n';
+export const TranslationManager = new Manager({
 	messages: {
 		en: async () => ({ unused: 'UNUSED_DICTIONARY_SENTINEL', title: 'Fixture EN' }),
 		ru: async () => ({ unused: 'UNUSED_DICTIONARY_SENTINEL', title: 'Fixture RU' })
@@ -33,6 +33,10 @@ export const { register } = createApp((app) =>
 			const response = await fetch('/fixture-fetch');
 			if ((await response.text()) !== 'intercepted') throw new Error('handleFetch did not run during reroute');
 			return '/';
+		})
+		.useServerError(({ kind, error }) => {
+			if (kind === 'unknown') return { status: 503, message: 'fixture-unknown' };
+			return { status: error.status, message: 'fixture-' + kind };
 		})
 		.useServerInit(() => {
 			globalThis.azureNetFixtureInitialized = true;

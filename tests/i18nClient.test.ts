@@ -1,8 +1,8 @@
 import { createApp } from '../src/lib/shared/app/App.js';
-import { getTranslationLifecycle } from '../src/lib/i18n/Internal.js';
+import { getTranslationLifecycle, getTranslationManagerLifecycle } from '../src/lib/i18n/Internal.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushSync } from 'svelte';
-import { createTranslations } from '../src/lib/i18n/index.js';
+import { createTranslations, TranslationManager } from '../src/lib/i18n/index.js';
 import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { watchTranslations } from './fixtures/TranslationObserver.svelte.js';
 
@@ -25,6 +25,39 @@ beforeEach(() => {
 	document.documentElement.removeAttribute('data-azure-net-locale');
 });
 describe('kit i18n client', () => {
+	it('keeps a destructured class t reactive through loading and locale changes', async () => {
+		initializeRequestContext(() => {
+			throw Error('Server access');
+		});
+		const translations = new TranslationManager({
+			messages: { en: async () => ({ title: 'English' }), ru: async () => ({ title: 'Russian' }) },
+			initLang: 'en'
+		});
+		const { t, switchLocale, subscribeLocaleChangeEvent } = translations;
+		const lifecycle = getTranslationManagerLifecycle(translations);
+		lifecycle.syncFromState({});
+		const seen: string[] = [];
+		// Keep locale constant here so only t's message dependency can trigger the effect.
+		const dispose = watchTranslations({ locale: 'fixed', t }, (value) => seen.push(value));
+		const listener = vi.fn();
+		const unsubscribe = subscribeLocaleChangeEvent(listener);
+		try {
+			flushSync();
+			await lifecycle.initializeClient();
+			flushSync();
+			await switchLocale('ru');
+			flushSync();
+			expect(seen).toEqual(['fixed:title', 'fixed:English', 'fixed:Russian']);
+			expect(translations.locale).toBe('ru');
+			expect(listener).toHaveBeenCalledExactlyOnceWith('ru');
+			unsubscribe();
+			await switchLocale('en');
+			expect(listener).toHaveBeenCalledTimes(1);
+		} finally {
+			unsubscribe();
+			dispose();
+		}
+	});
 	it('loads before boot without context access and keeps t reactive', async () => {
 		initializeRequestContext(() => {
 			throw Error('Server access');

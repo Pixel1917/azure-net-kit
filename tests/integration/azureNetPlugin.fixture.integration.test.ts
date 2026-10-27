@@ -64,5 +64,22 @@ describe('AzureNetPlugin SvelteKit fixture', () => {
 		});
 		expect(rerouted.status).toBe(200);
 		expect(await rerouted.text()).toContain('AzureNetPlugin fixture');
+
+		for (const [failure, status] of [
+			['app', 418],
+			['unknown', 503]
+		] as const) {
+			const failed = await server.respond(new Request(`http://fixture.local/?failure=${failure}`), {
+				getClientAddress: () => '127.0.0.1'
+			});
+			const body = await failed.text();
+			expect(failed.status).toBe(status);
+			expect(body).toContain(`fixture-${failure}`);
+			expect(body).not.toContain('private-fixture-error');
+		}
+		const russian = await server.respond(new Request('http://fixture.local/', { headers: { 'accept-language': 'ru' } }), {
+			getClientAddress: () => '127.0.0.1'
+		});
+		expect(await russian.text()).toContain('Fixture RU');
 	}, 60_000);
 });

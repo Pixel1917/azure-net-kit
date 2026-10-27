@@ -22,8 +22,9 @@ export {
 	type AppUniversalLifecycleContext,
 	type CreateAppInstance
 } from './App.js';
-export type { IClientMiddleware } from './middleware/ClientMiddleware.js';
-export type { IServerMiddleware } from './middleware/ServerMiddleware.js';
+export type { IClientMiddleware, ClientMiddlewareContext, ClientMiddlewareClass } from './middleware/ClientMiddleware.js';
+export type { IServerMiddleware, ServerMiddlewareContext, ServerMiddlewareClass } from './middleware/ServerMiddleware.js';
+export type { IMiddleware, MiddlewareClass } from './middleware/Types.js';
 export type { EnsureRoute, EnsureRouteSource, EnsureRouteTarget } from './middleware/Shared.js';
 
 export type { AppBootContext, AppBootCallback } from './App.js';

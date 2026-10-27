@@ -164,19 +164,43 @@ describe('AsyncSignal', () => {
 		expect(signal.status).toBe('success');
 	});
 
-	it('executes an immediate server signal and settles its SSR pending state', async () => {
+	it('requires a stable non-empty key for server signals', async () => {
 		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
 		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
-		const request = createDeferred<string>();
-		const handler = vi.fn(() => request.promise);
-		const signal = createAsyncSignal(handler, { server: true });
+		const handler = vi.fn(async () => 'data');
+		// @ts-expect-error server signals require a key, including for JavaScript callers at runtime
+		expect(() => createAsyncSignal(handler, { server: true })).toThrow(/stable, non-empty key/);
+		expect(() => createAsyncSignal(handler, { server: true, key: '  ' })).toThrow(/stable, non-empty key/);
+		expect(handler).not.toHaveBeenCalled();
+	});
 
-		expect(signal.status).toBe('pending');
-		expect(handler).toHaveBeenCalledTimes(1);
-		request.resolve('server response');
-		await expect(signal.ready).resolves.toBe('server response');
-		expect(signal.response).toBe('server response');
-		expect(signal.status).toBe('success');
+	it('preserves deferred server signals without requiring a render context for later execution', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const handler = vi.fn(async () => 'loaded');
+		const signal = await createAsyncSignal(handler, { server: true, key: 'deferred', immediate: false, initialData: 'initial' });
+		expect(handler).not.toHaveBeenCalled();
+		expect(signal.status).toBe('idle');
+		await expect(signal.ready).resolves.toBe('initial');
+		await signal.execute();
+		expect(signal.response).toBe('loaded');
+	});
+
+	it('can execute again after a synchronous beforeSend failure without an onError callback', async () => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		let fail = true;
+		const signal = createAsyncSignal(async () => 'recovered', {
+			immediate: false,
+			beforeSend: () => {
+				if (fail) throw new Error('failed');
+			}
+		});
+		await signal.execute();
+		expect(signal.status).toBe('error');
+		fail = false;
+		await signal.execute();
+		expect(signal.response).toBe('recovered');
 	});
 
 	it('ready waits for the active cycle across refresh and never restarts a completed signal', async () => {
@@ -253,6 +277,58 @@ describe('AsyncSignal', () => {
 		expect(signal.response).toBe('ok');
 	});
 
+	it.each([false, true])('settles ready and permits retry when onSuccess throws (async: %s)', async (asynchronous) => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const failure = new Error('success callback failed');
+		const onError = vi.fn();
+		let fail = true;
+		const signal = createAsyncSignal(async () => 'data', {
+			immediate: false,
+			onSuccess: () => {
+				if (!fail) return;
+				if (asynchronous) return Promise.reject(failure);
+				throw failure;
+			},
+			onError
+		});
+		await signal.execute();
+		await expect(signal.ready).resolves.toBe('data');
+		expect(signal.status).toBe('error');
+		expect(onError).toHaveBeenCalledWith(failure);
+		fail = false;
+		await signal.execute();
+		expect(signal.status).toBe('success');
+	});
+
+	it.each([false, true])('rejects execute but settles ready when onError throws (async: %s)', async (asynchronous) => {
+		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
+		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const requestFailure = new Error('request failed');
+		const callbackFailure = new Error('error callback failed');
+		let fail = true;
+		const signal = createAsyncSignal(
+			async () => {
+				if (fail) throw requestFailure;
+				return 'recovered';
+			},
+			{
+				immediate: false,
+				onError: () => {
+					if (asynchronous) return Promise.reject(callbackFailure);
+					throw callbackFailure;
+				}
+			}
+		);
+		await expect(signal.execute()).rejects.toBe(callbackFailure);
+		await expect(signal.ready).resolves.toBeUndefined();
+		expect(signal.error).toBe(requestFailure);
+		expect(signal.pending).toBe(false);
+		fail = false;
+		await signal.execute();
+		expect(signal.response).toBe('recovered');
+	});
+
 	it('reset invalidates an in-flight handler even when it ignores AbortSignal', async () => {
 		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
 		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
@@ -294,6 +370,18 @@ describe('AsyncSignal', () => {
 });
 
 describe('AsyncSignalBatch', () => {
+	it('rejects server hydration rather than silently skipping it in a deferred batch', async () => {
+		const { createAsyncSignalBatch } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
+		const handler = vi.fn(async () => 'data');
+		expect(() =>
+			createAsyncSignalBatch((create) => [
+				// @ts-expect-error JavaScript callers also receive an explicit runtime error
+				create(handler, { server: true, key: 'stable' })
+			])
+		).toThrow(/server: true is not supported/);
+		expect(handler).not.toHaveBeenCalled();
+	});
+
 	afterEach(() => {
 		vi.restoreAllMocks();
 		vi.resetModules();

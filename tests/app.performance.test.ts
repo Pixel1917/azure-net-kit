@@ -73,8 +73,11 @@ describe('createApp performance', () => {
 		let context = createServerContext();
 		initializeRequestContext(() => context as never);
 
-		const middleware: IServerMiddleware = ({ next }) => next();
-		const middlewares = [middleware, middleware, middleware, middleware, middleware];
+		const middleware: IServerMiddleware['execute'] = ({ next }) => next();
+		class Pass implements IServerMiddleware {
+			execute = middleware;
+		}
+		const middlewares = [Pass, Pass, Pass, Pass, Pass];
 		const app = createApp((app) =>
 			app.useServer(async ({ useMiddlewares }) => {
 				await useMiddlewares(middlewares);

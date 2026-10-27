@@ -21,7 +21,11 @@ describe('async useClient navigation registration', () => {
 		const app = createApp((builder) =>
 			builder.useClient(async ({ useMiddlewares }) => {
 				await gate;
-				useMiddlewares([middleware]);
+				useMiddlewares([
+					class {
+						execute = middleware;
+					}
+				]);
 			})
 		);
 		const pending = app.register();
@@ -112,5 +116,23 @@ describe('createApp client error runtime', () => {
 		});
 
 		expect(result.error?.stale).toBeUndefined();
+	});
+});
+
+describe('Kit 3 client error hooks', () => {
+	it('preserves native error categories without synthesizing deprecated fields', async () => {
+		const callback = vi.fn();
+		const app = createApp((builder) => builder.useClientError(callback));
+		for (const input of [
+			{ kind: 'unknown', error: new Error('private detail'), event: {} },
+			{ kind: 'app', error: { status: 401, message: 'Sign in' }, event: {} },
+			{ kind: 'framework', error: { status: 404, message: 'Not found' }, event: {} }
+		] as const) {
+			await app.register.clientError(input as never);
+			const received = callback.mock.calls.at(-1)![0];
+			expect(received).toEqual(input);
+			expect(received).not.toHaveProperty('status');
+			expect(received).not.toHaveProperty('message');
+		}
 	});
 });

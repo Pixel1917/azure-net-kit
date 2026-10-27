@@ -1,6 +1,6 @@
-import { getTranslationLifecycle } from '../src/lib/i18n/Internal.js';
+import { getTranslationLifecycle, getTranslationManagerLifecycle } from '../src/lib/i18n/Internal.js';
 import { describe, expect, it, vi } from 'vitest';
-import { createTranslations } from '../src/lib/i18n/index.js';
+import { createTranslations, TranslationManager } from '../src/lib/i18n/index.js';
 import { RequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { runRequest } from '../src/lib/server/Context/Runtime.js';
 
@@ -13,7 +13,39 @@ const messages = {
 	en: async () => ({ title: 'English', nested: { hello: 'Hello {{name}}' }, count: '{{count | plural:item,items,items}}' }),
 	ru: async () => ({ title: 'Русский' })
 };
+const translations = new TranslationManager({ messages, initLang: 'en', initLangFromAcceptLanguage: true });
+const { t } = translations;
+const lifecycle = getTranslationManagerLifecycle(translations);
 describe('kit i18n SSR', () => {
+	it('constructs and destructures at module scope without resolving a request', () => {
+		expect(t).toBe(translations.t);
+		expect(() => t('title')).toThrow('No active RequestContext');
+		expect(() => translations.locale).toThrow('No active RequestContext');
+	});
+	it('isolates class delegates and a module-level destructured t across concurrent requests', async () => {
+		await Promise.all(
+			Array.from({ length: 60 }, (_, i) =>
+				runRequest(event(i % 2 ? 'ru' : 'en'), async () => {
+					await lifecycle.preloadTranslation();
+					await new Promise((resolve) => setTimeout(resolve, i % 3));
+					const locale = i % 2 ? 'ru' : 'en';
+					expect(translations.locale).toBe(locale);
+					expect(t('title')).toBe(i % 2 ? 'Русский' : 'English');
+					expect(translations.applyHtmlLocaleAttr('%lang%')).toBe(locale);
+					expect(lifecycle.transformHtml('<html lang="%lang%">')).toContain(`data-azure-net-locale="${locale}"`);
+					expect(RequestContext.current().state.i18n?.default.locale).toBe(locale);
+					expect(translations.locales).toEqual({ en: 'en', ru: 'ru' });
+					if (!i) expect(t({ key: 'nested.hello', vars: { name: 'Sam' } })).toBe('Hello Sam');
+				})
+			)
+		);
+	});
+	it('accepts the compatibility factory through the lifecycle source helper', () =>
+		runRequest(event(), async () => {
+			const factory = createTranslations({ messages, initLang: 'en' });
+			await getTranslationManagerLifecycle(factory).preloadTranslation();
+			expect(factory().t('title')).toBe('English');
+		}));
 	it('does not share mutable dictionary objects through request state', async () => {
 		const dictionary = { nested: { title: 'original' } };
 		const use = createTranslations({ messages: { en: async () => dictionary }, initLang: 'en' });
