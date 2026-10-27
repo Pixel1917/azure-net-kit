@@ -36,7 +36,7 @@ createApp((app) =>
 		.useClient(({ useMiddlewares }) => useMiddlewares([ClientGuard]))
 );
 function consumerTypes() {
-	expectTypeOf(context.resolveContainer().user.id).toEqualTypeOf<number>();
+	expectTypeOf(context.resolve().user.id).toEqualTypeOf<number>();
 	expectTypeOf(translations.locale).toEqualTypeOf<'en' | 'ru'>();
 	expectTypeOf(t('title')).toEqualTypeOf<string>();
 	expectTypeOf(createAsyncSignal(async () => 1)).toEqualTypeOf<AsyncSignalSvelte<number>>();

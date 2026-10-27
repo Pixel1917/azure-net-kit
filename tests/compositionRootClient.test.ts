@@ -12,9 +12,9 @@ describe('CompositionRoot browser caching', () => {
 		const shared = new CompositionRoot({ register: () => ({ datasource: construct }) });
 		const first = new CompositionRoot({ dependsOn: { shared }, register: ({ shared }) => ({ value: () => shared.datasource }) });
 		const second = new CompositionRoot({ dependsOn: { shared }, register: ({ shared }) => ({ value: () => shared.datasource }) });
-		const { resolveContainer } = first;
-		expect(resolveContainer()).toBe(first.resolveContainer());
-		expect(resolveContainer().value).toBe(second.resolveContainer().value);
+		const { resolve } = first;
+		expect(resolve()).toBe(first.resolve());
+		expect(resolve().value).toBe(second.resolve().value);
 		expect(construct).toHaveBeenCalledOnce();
 		await cleanupProvider(first.name);
 		await cleanupProvider(second.name);

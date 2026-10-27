@@ -5,6 +5,53 @@ import { CreateServiceContainer, cleanupProvider } from '../src/lib/shared/bound
 import { initializeRequestContext, type ContextData } from '../src/lib/shared/request-context/Internal.js';
 
 describe('CompositionRoot', () => {
+	it('uses unique symbols and does not confuse equally named services across roots', () => {
+		const context = { event: {}, state: {} } as ContextData;
+		initializeRequestContext(() => context);
+		const first = new CompositionRoot({ register: () => ({ value: () => 42 }) });
+		const second = new CompositionRoot({
+			dependsOn: { first },
+			register: ({ first }) => ({ value: () => first.value + 1 })
+		});
+		expect(typeof first.name).toBe('symbol');
+		expect(first.name).not.toBe(second.name);
+		expect(first.name.description).toBe(second.name.description);
+		expect(second.resolve().value).toBe(43);
+	});
+
+	it('detects real symbol-keyed cycles and retains readable diagnostics', () => {
+		const context = { event: {}, state: {} } as ContextData;
+		initializeRequestContext(() => context);
+		const root = new CompositionRoot<{ value: () => number }>({
+			register: () => ({ value: (): number => root.resolve().value })
+		});
+		expect(() => root.resolve().value).toThrow('Circular provider dependency detected');
+		expect(() => root.resolve().value).toThrow('Symbol(@azure-net/kit:CompositionRoot).value');
+	});
+
+	it('cleans symbol-keyed services even when dispose fails', async () => {
+		const context = { event: {}, state: {} } as ContextData;
+		initializeRequestContext(() => context);
+		const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			const root = new CompositionRoot({
+				register: () => ({
+					value: () => ({
+						dispose() {
+							throw new Error('dispose failed');
+						}
+					})
+				})
+			});
+			const value = root.resolve().value;
+			await expect(cleanupProvider(root.name)).resolves.toBeUndefined();
+			expect(log).toHaveBeenCalledOnce();
+			expect(root.resolve().value).not.toBe(value);
+		} finally {
+			log.mockRestore();
+		}
+	});
+
 	it('is lazy, accepts roots and existing containers, and preserves service caching', () => {
 		let context = { event: {}, state: {} } as ContextData;
 		initializeRequestContext(() => context);
@@ -18,15 +65,15 @@ describe('CompositionRoot', () => {
 			})
 		});
 		expect(factory).not.toHaveBeenCalled();
-		const container = root.resolveContainer();
+		const container = root.resolve();
 		expect(factory).not.toHaveBeenCalled();
 		expect(container.account.count).toBe(3);
 		expect(container.account.datasource.id).toBe(42);
-		expect(root.resolveContainer()).toBe(container);
-		expect(root.resolveContainer().account).toBe(container.account);
+		expect(root.resolve()).toBe(container);
+		expect(root.resolve().account).toBe(container.account);
 		expect(factory).toHaveBeenCalledTimes(1);
 		context = { event: {}, state: {} } as ContextData;
-		expect(root.resolveContainer().account).not.toBe(container.account);
+		expect(root.resolve().account).not.toBe(container.account);
 		expect(factory).toHaveBeenCalledTimes(2);
 	});
 
@@ -43,10 +90,10 @@ describe('CompositionRoot', () => {
 		const values = await Promise.all(
 			Array.from({ length: 40 }, () =>
 				storage.run({ event: {}, state: {} } as ContextData, async () => {
-					const value = first.resolveContainer().value;
+					const value = first.resolve().value;
 					await Promise.resolve();
-					expect(first.resolveContainer().value).toBe(value);
-					expect(second.resolveContainer().value).not.toBe(value);
+					expect(first.resolve().value).toBe(value);
+					expect(second.resolve().value).not.toBe(value);
 					return value;
 				})
 			)
@@ -60,12 +107,12 @@ describe('CompositionRoot', () => {
 		const dispose = vi.fn();
 		const boot = vi.fn();
 		const root = new CompositionRoot({ register: () => ({ value: () => ({ dispose }) }), boot });
-		const first = root.resolveContainer().value;
-		expect(root.resolveContainer().value).toBe(first);
+		const first = root.resolve().value;
+		expect(root.resolve().value).toBe(first);
 		expect(boot).toHaveBeenCalledTimes(1);
 		await cleanupProvider(root.name);
 		expect(dispose).toHaveBeenCalledOnce();
-		expect(root.resolveContainer().value).not.toBe(first);
+		expect(root.resolve().value).not.toBe(first);
 		expect(boot).toHaveBeenCalledTimes(2);
 	});
 });

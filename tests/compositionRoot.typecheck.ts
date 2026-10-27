@@ -15,10 +15,10 @@ const identity = new CompositionRoot({
 	}
 });
 function check() {
-	const { Account } = identity.resolveContainer();
+	const { Account } = identity.resolve();
 	expectTypeOf(Account.get()).toEqualTypeOf<Promise<number>>();
 	expectTypeOf(Account.token).toEqualTypeOf<string>();
 	// @ts-expect-error Unknown services must not be accepted.
-	void identity.resolveContainer().Missing;
+	void identity.resolve().Missing;
 }
 void check;

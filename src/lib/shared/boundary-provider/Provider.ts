@@ -3,6 +3,8 @@ import { RequestContext } from '../../shared/request-context/Internal.js';
 import { BROWSER } from '../../external/tools/index.js';
 import { AzureNetKitInternalError } from '../app-error/AppError.js';
 
+export type ProviderKey = string | symbol;
+
 type ServiceFactory<T> = () => T;
 type ServiceMap = Record<string, ServiceFactory<unknown>>;
 type ResolvedServices<T extends ServiceMap> = {
@@ -25,13 +27,14 @@ export interface ProviderSettings<T extends ServiceMap, D extends Record<string,
 	register: ProviderFactory<T, D>;
 }
 
-const clientCache = new Map<string, Map<string, unknown>>();
-const providerProxyCache = new Map<string, ResolvedServices<ServiceMap>>();
-const clientConstructionStack: string[] = [];
+const clientCache = new Map<ProviderKey, Map<string, unknown>>();
+const providerProxyCache = new Map<ProviderKey, ResolvedServices<ServiceMap>>();
+type ConstructionEntry = { provider: ProviderKey; member: string };
+const clientConstructionStack: ConstructionEntry[] = [];
 
-const clientBootFlags = new Map<string, boolean>();
+const clientBootFlags = new Map<ProviderKey, boolean>();
 
-const getProviderCache = (providerName: string): Map<string, unknown> => {
+const getProviderCache = (providerName: ProviderKey): Map<string, unknown> => {
 	if (BROWSER) {
 		if (!clientCache.has(providerName)) {
 			clientCache.set(providerName, new Map());
@@ -43,77 +46,78 @@ const getProviderCache = (providerName: string): Map<string, unknown> => {
 			getContextInternals(context).azureNetKitBoundaryProviders = new Map();
 		}
 
-		const providers = getContextInternals(context).azureNetKitBoundaryProviders as Map<string, Map<string, unknown>>;
+		const providers = getContextInternals(context).azureNetKitBoundaryProviders as Map<ProviderKey, Map<string, unknown>>;
 		if (!providers.has(providerName)) {
 			providers.set(providerName, new Map());
 		}
 
 		if (!getContextInternals(context).azureNetKitBoundaryProvidersToCleanup) {
-			getContextInternals(context).azureNetKitBoundaryProvidersToCleanup = new Set<string>();
+			getContextInternals(context).azureNetKitBoundaryProvidersToCleanup = new Set<ProviderKey>();
 		}
-		(getContextInternals(context).azureNetKitBoundaryProvidersToCleanup as Set<string>).add(providerName);
+		(getContextInternals(context).azureNetKitBoundaryProvidersToCleanup as Set<ProviderKey>).add(providerName);
 
 		return providers.get(providerName)!;
 	}
 };
 
-const getProxyCache = (): Map<string, ResolvedServices<ServiceMap>> => {
+const getProxyCache = (): Map<ProviderKey, ResolvedServices<ServiceMap>> => {
 	if (BROWSER) return providerProxyCache;
 	const context = RequestContext.current();
-	return (getContextInternals(context).azureNetKitBoundaryProviderProxies ??= new Map()) as Map<string, ResolvedServices<ServiceMap>>;
+	return (getContextInternals(context).azureNetKitBoundaryProviderProxies ??= new Map()) as Map<ProviderKey, ResolvedServices<ServiceMap>>;
 };
 
-const getBootFlag = (providerName: string): boolean => {
+const getBootFlag = (providerName: ProviderKey): boolean => {
 	if (BROWSER) {
 		return clientBootFlags.get(providerName) ?? false;
 	} else {
 		const context = RequestContext.current();
 		if (!getContextInternals(context).bootFlags) {
-			getContextInternals(context).bootFlags = new Map<string, boolean>();
+			getContextInternals(context).bootFlags = new Map<ProviderKey, boolean>();
 		}
-		const bootFlags = getContextInternals(context).bootFlags as Map<string, boolean>;
+		const bootFlags = getContextInternals(context).bootFlags as Map<ProviderKey, boolean>;
 		return bootFlags.get(providerName) ?? false;
 	}
 };
 
-const setBootFlag = (providerName: string, value: boolean): void => {
+const setBootFlag = (providerName: ProviderKey, value: boolean): void => {
 	if (BROWSER) {
 		clientBootFlags.set(providerName, value);
 	} else {
 		const context = RequestContext.current();
 		if (!getContextInternals(context).bootFlags) {
-			getContextInternals(context).bootFlags = new Map<string, boolean>();
+			getContextInternals(context).bootFlags = new Map<ProviderKey, boolean>();
 		}
-		const bootFlags = getContextInternals(context).bootFlags as Map<string, boolean>;
+		const bootFlags = getContextInternals(context).bootFlags as Map<ProviderKey, boolean>;
 		bootFlags.set(providerName, value);
 	}
 };
 
-const getConstructionStack = (): string[] => {
+const getConstructionStack = (): ConstructionEntry[] => {
 	if (BROWSER) return clientConstructionStack;
 	const context = RequestContext.current();
-	return (getContextInternals(context).boundaryProviderConstructionStack ??= []) as string[];
+	return (getContextInternals(context).boundaryProviderConstructionStack ??= []) as ConstructionEntry[];
 };
 
-const runWithCycleGuard = <T>(key: string, callback: () => T): T => {
+const runWithCycleGuard = <T>(provider: ProviderKey, member: string, callback: () => T): T => {
 	const stack = getConstructionStack();
-	if (stack.includes(key)) {
-		const cycleStart = stack.indexOf(key);
-		const cyclePath = [...stack.slice(cycleStart), key].join(' -> ');
+	const cycleStart = stack.findIndex((entry) => entry.provider === provider && entry.member === member);
+	const entry = { provider, member };
+	if (cycleStart !== -1) {
+		const cyclePath = [...stack.slice(cycleStart), entry].map(({ provider, member }) => `${String(provider)}.${member}`).join(' -> ');
 		throw new AzureNetKitInternalError(`[BoundaryProvider] Circular provider dependency detected: ${cyclePath}`);
 	}
 
-	stack.push(key);
+	stack.push(entry);
 	try {
 		return callback();
 	} finally {
-		const idx = stack.lastIndexOf(key);
+		const idx = stack.lastIndexOf(entry);
 		if (idx !== -1) stack.splice(idx, 1);
 	}
 };
 
 export const CreateServiceContainer = <T extends ServiceMap, D extends Record<string, ProviderWithType<ServiceMap>>>(
-	name: string,
+	name: ProviderKey,
 	settings: ProviderSettings<T, D>
 ): ProviderWithType<T> => {
 	const { dependsOn = {} as D, boot, register } = settings;
@@ -149,7 +153,7 @@ export const CreateServiceContainer = <T extends ServiceMap, D extends Record<st
 				);
 			}
 
-			factories = runWithCycleGuard(`${name}.register`, () => register(deps as Deps));
+			factories = runWithCycleGuard(name, 'register', () => register(deps as Deps));
 
 			return factories;
 		};
@@ -166,17 +170,17 @@ export const CreateServiceContainer = <T extends ServiceMap, D extends Record<st
 				if (!Object.hasOwn(factories, key)) {
 					if (key === 'then' || key === 'toJSON') return undefined;
 					if (Reflect.has(target, key)) return Reflect.get(target, key, receiver);
-					throw new AzureNetKitInternalError(`[BoundaryProvider] Service '${key}' not found in provider '${name}'`);
+					throw new AzureNetKitInternalError(`[BoundaryProvider] Service '${key}' not found in provider '${String(name)}'`);
 				}
 
 				const factory = factories[key as keyof T];
 				if (typeof factory !== 'function') {
 					throw new AzureNetKitInternalError('[BoundaryProvider] Factory must be a function');
 				}
-				const instance = runWithCycleGuard(`${name}.${key}`, () => factory());
+				const instance = runWithCycleGuard(name, key, () => factory());
 
 				if (instance && typeof (instance as Promise<unknown>)?.then === 'function') {
-					throw new AzureNetKitInternalError(`[BoundaryProvider] Service '${key}' in provider '${name}' returned Promise.`);
+					throw new AzureNetKitInternalError(`[BoundaryProvider] Service '${key}' in provider '${String(name)}' returned Promise.`);
 				}
 
 				cache.set(key, instance);
@@ -222,7 +226,7 @@ export const CreateServiceContainer = <T extends ServiceMap, D extends Record<st
 				const bootResult = boot(providerProxy) as unknown;
 				if (bootResult && typeof (bootResult as PromiseLike<unknown>).then === 'function') {
 					void Promise.resolve(bootResult).catch(() => undefined);
-					throw new AzureNetKitInternalError(`[BoundaryProvider] Boot for provider '${name}' must be synchronous.`);
+					throw new AzureNetKitInternalError(`[BoundaryProvider] Boot for provider '${String(name)}' must be synchronous.`);
 				}
 				setBootFlag(name, true);
 			}
@@ -236,7 +240,7 @@ export const CreateServiceContainer = <T extends ServiceMap, D extends Record<st
 	return providerFn as ProviderWithType<T>;
 };
 
-export async function cleanupProvider(name: string): Promise<void> {
+export async function cleanupProvider(name: ProviderKey): Promise<void> {
 	const cleanupCache = async (cache: Map<string, unknown>) => {
 		const promises: Promise<void>[] = [];
 
@@ -244,9 +248,9 @@ export async function cleanupProvider(name: string): Promise<void> {
 			if (service && typeof service === 'object' && 'dispose' in service) {
 				try {
 					const disposeResult = (service as { dispose: () => Promise<void> | void }).dispose();
-					promises.push(Promise.resolve(disposeResult).catch((err) => console.error(`Error disposing ${name}.${key}:`, err)));
+					promises.push(Promise.resolve(disposeResult).catch((err) => console.error(`Error disposing ${String(name)}.${key}:`, err)));
 				} catch (err) {
-					console.error(`Error disposing ${name}.${key}:`, err);
+					console.error(`Error disposing ${String(name)}.${key}:`, err);
 				}
 			}
 		}
@@ -263,10 +267,10 @@ export async function cleanupProvider(name: string): Promise<void> {
 		if (cache) await cleanupCache(cache);
 	} else {
 		const context = RequestContext.current();
-		const providers = getContextInternals(context).azureNetKitBoundaryProviders as Map<string, Map<string, unknown>> | undefined;
+		const providers = getContextInternals(context).azureNetKitBoundaryProviders as Map<ProviderKey, Map<string, unknown>> | undefined;
 		getProxyCache().delete(name);
 		setBootFlag(name, false);
-		(getContextInternals(context).azureNetKitBoundaryProvidersToCleanup as Set<string> | undefined)?.delete(name);
+		(getContextInternals(context).azureNetKitBoundaryProvidersToCleanup as Set<ProviderKey> | undefined)?.delete(name);
 		if (providers?.has(name)) {
 			const cache = providers.get(name)!;
 			providers.delete(name);

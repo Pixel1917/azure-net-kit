@@ -342,8 +342,8 @@ URLs; external navigation should use browser location APIs.
 ## CompositionRoot
 
 `CreateServiceContainer` remains unchanged. `CompositionRoot` is a lazy class
-facade over it, with a unique internal container name. It can be created at module
-scope; `resolveContainer()` resolves against the current SSR request or browser
+facade over it, with a unique symbol as its internal container identity. It can be created at module
+scope; `resolve()` resolves against the current SSR request or browser
 cache, never a request captured by the constructor.
 
 ```ts
@@ -361,7 +361,7 @@ export const Identity = new CompositionRoot({
 });
 
 // Inside a presenter factory or an active request:
-const { Account } = Identity.resolveContainer();
+const { Account } = Identity.resolve();
 ```
 
 Dependencies accept both other `CompositionRoot` instances and existing
@@ -370,3 +370,6 @@ Only registration metadata is wrapped; there is no extra proxy around services
 and no new caching layer. Repeated resolution preserves existing container/service
 identity. If explicit cleanup is needed, use `await cleanupProvider(Identity.name)`.
 Declare roots once, rather than creating new roots per component render.
+`name` is now a symbol, not a serializable string. Its description is for diagnostics
+only; equal descriptions never share a cache. Existing string keys passed directly
+to `CreateServiceContainer` and `cleanupProvider` remain supported.

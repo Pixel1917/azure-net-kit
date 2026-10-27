@@ -19,7 +19,7 @@ it('module-level roots and exported t do not retain completed request state', as
 				await getTranslationManagerLifecycle(translations).preloadTranslation();
 				expect(t('title')).toBe('Hello');
 				const context = RequestContext.current();
-				const container = root.resolveContainer();
+				const container = root.resolve();
 				refs.push(new WeakRef(context), new WeakRef(context.event), new WeakRef(container), new WeakRef(container.service));
 			});
 		}
@@ -36,6 +36,6 @@ it('module-level roots and exported t do not retain completed request state', as
 	console.info(`CompositionRoot + TranslationManager: ${refs.length - retained}/${refs.length} request objects collected`);
 	expect(retained).toBe(0);
 	// Keep module-level metadata and t alive throughout the probe.
-	expect(typeof root.resolveContainer).toBe('function');
+	expect(typeof root.resolve).toBe('function');
 	expect(typeof t).toBe('function');
 }, 15000);
