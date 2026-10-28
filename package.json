@@ -1,6 +1,6 @@
 {
 	"name": "@azure-net/kit",
-	"version": "6.0.0-next.9",
+	"version": "6.0.0-next.10",
 	"license": "MIT",
 	"author": "Pixel1917",
 	"description": "Universal toolkit and library collection, developed as part of the Azure-net ecosystem",
@@ -69,9 +69,9 @@
 			"import": "./dist/plugin/index.js"
 		},
 		"./server-context": {
-			"types": "./dist/server/Context/index.d.ts",
-			"svelte": "./dist/server/Context/index.js",
-			"import": "./dist/server/Context/index.js"
+			"types": "./dist/shared/request-context/index.d.ts",
+			"svelte": "./dist/shared/request-context/index.js",
+			"import": "./dist/shared/request-context/index.js"
 		},
 		"./tools": {
 			"types": "./dist/external/tools/index.d.ts",

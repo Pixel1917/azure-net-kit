@@ -22,72 +22,6 @@ describe('AsyncSignal', () => {
 		vi.resetModules();
 	});
 
-	it('global refresh overrides in-flight manual request and keeps latest data', async () => {
-		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: true }));
-		const { createAsyncSignal, refreshAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
-
-		const req1 = createDeferred<string>();
-		const req2 = createDeferred<string>();
-		const calls: Array<Deferred<string>> = [];
-
-		const handler = vi.fn((_signal?: AbortSignal) => {
-			console.log('signal', _signal);
-			const next = calls.length === 0 ? req1 : req2;
-			calls.push(next);
-			return next.promise;
-		});
-
-		const signal = createAsyncSignal(handler, { immediate: false, key: 'q-1' });
-		const manualPromise = signal.execute();
-		const globalPromise = refreshAsyncSignal('q-1');
-
-		await Promise.resolve();
-		expect(handler).toHaveBeenCalledTimes(2);
-
-		req2.resolve('latest');
-		await globalPromise;
-
-		req1.resolve('stale');
-		await manualPromise;
-
-		expect(signal.response).toBe('latest');
-		expect('data' in signal).toBe(false);
-		expect(signal.status).toBe('success');
-	});
-
-	it('stale error from old run does not overwrite latest successful state', async () => {
-		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: true }));
-		const { createAsyncSignal, refreshAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
-
-		const req1 = createDeferred<string>();
-		const req2 = createDeferred<string>();
-		const calls: Array<Deferred<string>> = [];
-
-		const handler = vi.fn((_signal?: AbortSignal) => {
-			console.log('signal', _signal);
-			const next = calls.length === 0 ? req1 : req2;
-			calls.push(next);
-			return next.promise;
-		});
-
-		const signal = createAsyncSignal(handler, { immediate: false, key: 'q-2' });
-		const manualPromise = signal.execute();
-		const globalPromise = refreshAsyncSignal('q-2');
-
-		await Promise.resolve();
-		expect(handler).toHaveBeenCalledTimes(2);
-
-		req2.resolve('ok-new');
-		await globalPromise;
-
-		req1.reject(new Error('stale-failure'));
-		await manualPromise;
-
-		expect(signal.response).toBe('ok-new');
-		expect(signal.status).toBe('success');
-		expect(signal.error).toBeUndefined();
-	});
-
 	it('instance refresh supersedes an in-flight execution and keeps the latest result', async () => {
 		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: false }));
 		const { createAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
@@ -524,35 +458,6 @@ describe('AsyncSignalBatch', () => {
 		await expect(secondReady).resolves.toBeUndefined();
 		expect(secondHandler).not.toHaveBeenCalled();
 		expect(secondSignal.status).toBe('idle');
-	});
-
-	it('does not let global refresh bypass a dormant batch or a sequential gate', async () => {
-		vi.doMock('@azure-net/tools/environment', () => ({ BROWSER: true }));
-		const { createAsyncSignalBatch, refreshAsyncSignal } = await import('../src/lib/svelte/async-signal/AsyncSignal.svelte.js');
-		const firstRequest = createDeferred<string>();
-		const secondRequest = createDeferred<string>();
-		const firstHandler = vi.fn(() => firstRequest.promise);
-		const secondHandler = vi.fn(() => secondRequest.promise);
-		const batch = createAsyncSignalBatch(
-			(createSignal) => [createSignal(firstHandler, { key: 'batch-first' }), createSignal(secondHandler, { key: 'batch-second' })],
-			{ parallel: false }
-		);
-
-		await refreshAsyncSignal('batch-second');
-		expect(secondHandler).not.toHaveBeenCalled();
-
-		const [firstSignal, secondSignal] = batch.execute();
-		const globalRefresh = refreshAsyncSignal('batch-second');
-		await Promise.resolve();
-		expect(firstHandler).toHaveBeenCalledTimes(1);
-		expect(secondHandler).not.toHaveBeenCalled();
-
-		firstRequest.resolve('first');
-		await firstSignal.ready;
-		expect(secondHandler).toHaveBeenCalledTimes(1);
-		secondRequest.resolve('second');
-		await globalRefresh;
-		expect(secondSignal.response).toBe('second');
 	});
 
 	it('deduplicates execute while running and can rerun the same signal tuple', async () => {

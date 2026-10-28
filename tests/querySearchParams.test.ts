@@ -98,6 +98,31 @@ describe('createQuery search params synchronization', () => {
 		view.unmount();
 	});
 
+	it('restores a cleared default array after reloading the synchronized URL', async () => {
+		let query!: QueryController<{ tags: string[] }>;
+		const props = {
+			initial: { tags: ['all'] },
+			options: { syncWithSearchParams: true },
+			expose: (value: QueryController<Record<string, unknown>>) => {
+				query = value as typeof query;
+			}
+		};
+		const view = render(QueryHarness, props);
+		await tick();
+		query.data.tags = [];
+		await tick();
+		navigation.page.url = new URL(navigation.page.shallow!.url);
+		navigation.page.shallow = null;
+		view.unmount();
+		navigation.goto.mockClear();
+
+		const restored = render(QueryHarness, props);
+		expect(query.data.tags).toEqual([]);
+		await tick();
+		expect(navigation.goto).not.toHaveBeenCalled();
+		restored.unmount();
+	});
+
 	it('does not lose a synchronous query change made before the first effect run', async () => {
 		let query!: QueryController<{ page: number }>;
 		const view = render(QueryHarness, {

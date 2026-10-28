@@ -4,6 +4,30 @@ import { runRequest } from '../src/lib/server/Context/Runtime.js';
 import { CreateServiceContainer } from '../src/lib/shared/boundary-provider/Provider.js';
 
 describe('kit request context', () => {
+	it('preserves response status, cookies and fetch metadata while streaming', async () => {
+		const response = new Response('stream', { status: 201, statusText: 'Created', headers: { 'set-cookie': 'test=value; Path=/' } });
+		Object.defineProperties(response, { url: { value: 'https://example.test/result' }, redirected: { value: true } });
+		const result = await runRequest({} as never, async () => response);
+		expect(result.status).toBe(201);
+		expect(result.statusText).toBe('Created');
+		expect(result.headers.get('set-cookie')).toBe('test=value; Path=/');
+		expect(result.url).toBe(response.url);
+		expect(result.redirected).toBe(true);
+		expect(await result.text()).toBe('stream');
+	});
+	it('restores the caller scope after synchronous and asynchronous errors', async () => {
+		expect(() =>
+			runRequest({} as never, () => {
+				throw new Error('sync');
+			})
+		).toThrow('sync');
+		await expect(
+			runRequest({} as never, async () => {
+				throw new Error('async');
+			})
+		).rejects.toThrow('async');
+		expect(() => RequestContext.current()).toThrow('No active RequestContext');
+	});
 	it('exposes only event and state and rejects access outside requests', () => {
 		expect(() => RequestContext.current()).toThrow('No active RequestContext');
 		const event = {} as never;

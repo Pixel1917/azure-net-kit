@@ -318,10 +318,9 @@ const createAsyncSignalInstance = <TData, TError = Error>(
 	if (BROWSER) {
 		const signalKey = key ?? asyncSignalManager.generateKey();
 		const callback = (source: AsyncSignalSource) => startWhenUnlocked(source);
-		if (hydrationKey === undefined) asyncSignalManager.register(signalKey, callback);
 		$effect(() => {
-			// Async component initialization may be abandoned before this effect runs.
-			if (hydrationKey !== undefined) asyncSignalManager.register(signalKey, callback);
+			// Initialization may be abandoned before this effect can own the registration.
+			asyncSignalManager.register(signalKey, callback);
 			return () => {
 				asyncSignalManager.unregister(signalKey, callback);
 			};

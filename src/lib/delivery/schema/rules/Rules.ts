@@ -209,7 +209,8 @@ export const createRules = <M extends BaseValidationMessages>(validationMessages
 					return message.base();
 				}
 				if (typeof maxDigitsAfterDot === 'number') {
-					const digitsAfterDot = normalizedValue.split('.')[1]?.length ?? 0;
+					const [coefficient, exponent = '0'] = normalizedValue.split(/e/i);
+					const digitsAfterDot = Math.max(0, (coefficient.split('.')[1]?.length ?? 0) - Number(exponent));
 					if (digitsAfterDot > maxDigitsAfterDot) {
 						return message.maxDigitsAfterDot(maxDigitsAfterDot);
 					}

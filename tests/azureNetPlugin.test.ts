@@ -115,7 +115,9 @@ describe('AzureNetPlugin', () => {
 		expect(serverHooks).not.toMatch(/edgesHandle|serialize|transformPageChunk|silentChrome/);
 		expect(serverHooks).toContain("await import('virtual:azure-net-kit/program')");
 		expect(serverHooks).not.toContain("import { register } from 'virtual:azure-net-kit/program';");
-		expect(serverHooks).toContain('export const init = async () => (await getRegister()).serverInit();');
+		expect(serverHooks).toContain("import { render } from 'svelte/server';");
+		expect(serverHooks).toContain('await render(() => {});');
+		expect(serverHooks).toContain('return (await getRegister()).serverInit();');
 		expect(serverHooks).toContain('export const reroute = async (input) => (await getRegister()).reroute(input);');
 		expect(serverHooks).toContain('export const getTransport = async () => (await getRegister()).transport;');
 		expect(serverHooks).not.toContain('await register.serverInit?.();');

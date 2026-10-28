@@ -25,8 +25,13 @@ const findStaticImportInsertPosition = (sourceCode: string): number => {
 
 const createVirtualServerHooks = () => `// ${GENERATED_MARKER}
 import { runRequest } from '@azure-net/kit/internal/server';
+import { render } from 'svelte/server';
 const getRegister = async () => (await import('${VIRTUAL_PROGRAM_ID}')).register;
-export const init = async () => (await getRegister()).serverInit();
+export const init = async () => {
+	// Initialize Svelte's cached async-render promise outside any request ALS scope.
+	await render(() => {});
+	return (await getRegister()).serverInit();
+};
 export const handle = (input) => runRequest(input.event, async () => (await getRegister()).handle(input));
 export const handleFetch = (input) => runRequest(input.event, async () => (await getRegister()).serverFetch(input));
 export const handleError = (input) => runRequest(input.event, async () => (await getRegister()).serverError(input));

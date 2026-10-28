@@ -23,6 +23,11 @@ describe('AzureNetPlugin SvelteKit fixture', () => {
 		});
 
 		const cacheKey = `?fixture=${Date.now()}`;
+		execFileSync(process.execPath, ['--expose-gc', path.join(fixtureRoot, 'retention.mjs')], {
+			cwd: fixtureRoot,
+			stdio: 'pipe',
+			timeout: 30_000
+		});
 		const [{ Server }, { manifest }] = await Promise.all([
 			import(`${pathToFileURL(path.join(outputRoot, 'index.js')).href}${cacheKey}`),
 			import(`${pathToFileURL(path.join(outputRoot, 'manifest.js')).href}${cacheKey}`)

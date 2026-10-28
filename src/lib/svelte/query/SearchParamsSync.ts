@@ -1,5 +1,9 @@
 const INVALID_VALUE = Symbol('invalid-query-search-param');
 
+// Array-only wire format: a lone '~' represents []; prefix literal '~' values with another '~'.
+// Missing keys still preserve defaults, and scalar strings are unchanged.
+const ARRAY_MARKER = '~';
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> => {
 	if (value === null || typeof value !== 'object') return false;
 	const prototype = Object.getPrototypeOf(value);
@@ -62,9 +66,11 @@ const parseValue = (params: URLSearchParams, key: string, initial: unknown): unk
 	if (Array.isArray(initial)) {
 		const values = params.getAll(key);
 		if (!values.length) return INVALID_VALUE;
-		if (!initial.length) return values;
+		if (values.length === 1 && values[0] === ARRAY_MARKER) return [];
+		const decoded = values.map((value) => (value.startsWith(ARRAY_MARKER + ARRAY_MARKER) ? value.slice(1) : value));
+		if (!initial.length) return decoded;
 
-		const parsed = values.map((value) => parseScalar(value, initial[0]));
+		const parsed = decoded.map((value) => parseScalar(value, initial[0]));
 		return parsed.some((value) => value === INVALID_VALUE) ? INVALID_VALUE : parsed;
 	}
 
@@ -107,9 +113,10 @@ export const toSearchParams = <T extends Record<string, unknown>>(data: Readonly
 
 	for (const [key, value] of Object.entries(data)) {
 		if (Array.isArray(value)) {
+			if (!value.length) params.set(key, ARRAY_MARKER);
 			for (const item of value) {
 				const serialized = serializeScalar(item);
-				if (serialized !== undefined) params.append(key, serialized);
+				if (serialized !== undefined) params.append(key, serialized.startsWith(ARRAY_MARKER) ? ARRAY_MARKER + serialized : serialized);
 			}
 			continue;
 		}

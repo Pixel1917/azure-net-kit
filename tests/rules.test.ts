@@ -7,6 +7,21 @@ import { validationMessagesI18n } from '../src/lib/delivery/schema/rules/message
 describe('Rules', () => {
 	const rules = createRules(validationMessagesEn);
 
+	it.each(['1e-3', '-1E-3', '1.23e-1', ' 1e-3 ', 1e-7, '1.2300e1', '1.230'])('counts expanded decimal places for %s', (val) => {
+		expect(rules.finite({ maxDigitsAfterDot: 2 })({ val })).toBe('Number of digits after the decimal point must not exceed 2');
+	});
+
+	it.each(['1e-2', '1.23e0', '1.234e+2', '1.23E3', '1e+21', -1e21, '1.20'])('accepts values within decimal precision: %s', (val) => {
+		expect(rules.finite({ maxDigitsAfterDot: 2 })({ val })).toBeUndefined();
+	});
+
+	it('applies zero precision and range constraints to scientific notation', () => {
+		expect(rules.finite({ maxDigitsAfterDot: 0 })({ val: '1e-1' })).toBe('Number of digits after the decimal point must not exceed 0');
+		expect(rules.finite({ maxDigitsAfterDot: 0 })({ val: '1.2e1' })).toBeUndefined();
+		expect(rules.finite({ maxDigitsAfterDot: 2, range: { min: 1 } })({ val: '1e-2' })).toBe('The number must be at least 1');
+		expect(rules.finite({ maxDigitsAfterDot: 2 })({ val: '1e309' })).toBe('This field must be a number');
+	});
+
 	it('string rule validates type and length', () => {
 		const validator = rules.string({ length: { min: 2, max: 4 } });
 		expect(validator({ val: 10 })).toBe('This field must be a string');

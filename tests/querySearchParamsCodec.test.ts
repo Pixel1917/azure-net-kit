@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { fromSearchParams, toSearchParams } from '../src/lib/svelte/query/SearchParamsSync.js';
 
 describe('query search params codec', () => {
+	it('distinguishes missing arrays from explicitly cleared arrays', () => {
+		const initial = { tags: ['all'], ids: [1], flags: [true], empty: [] as string[] };
+		const cleared = { tags: [], ids: [], flags: [], empty: [] };
+		const params = new URLSearchParams(toSearchParams(cleared).toString());
+		expect(fromSearchParams(params, initial)).toEqual(cleared);
+		expect(fromSearchParams(new URLSearchParams(), initial)).toEqual({});
+	});
+
+	it.each([[''], ['~'], ['~~'], ['~~~value'], ['~', '~~', '', 'plain', '~value']])(
+		'round-trips array marker and escape collisions: %j',
+		(...tags) => {
+			const params = new URLSearchParams(toSearchParams({ tags, scalar: '~' }).toString());
+			expect(fromSearchParams(params, { tags: ['all'], scalar: '' })).toEqual({ tags, scalar: '~' });
+			expect(fromSearchParams(params, { tags: [] as string[] })).toEqual({ tags });
+		}
+	);
+
 	it('parses supported scalar, collection and object values from declared types', () => {
 		const initial = {
 			search: '',
