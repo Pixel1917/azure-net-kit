@@ -18,6 +18,7 @@ export interface IAppError<T = unknown> {
 	validation?: RequestErrors<T>;
 	external: boolean;
 	appErrorConvert?: boolean;
+	statusCode: number;
 }
 
 export class AppError<T = unknown> extends Error {
@@ -25,6 +26,7 @@ export class AppError<T = unknown> extends Error {
 	public message: string;
 	public external: boolean = false;
 	public validation?: RequestErrors<T>;
+	public statusCode: number = 500;
 
 	constructor(public error: Error) {
 		super(error.message);
@@ -51,6 +53,7 @@ export class AppError<T = unknown> extends Error {
 			external: this.external,
 			validation: this.validation,
 			appErrorConvert: true,
+			statusCode: this.statusCode,
 			...customData
 		};
 	}
@@ -60,10 +63,12 @@ export class AppError<T = unknown> extends Error {
 			case this.error instanceof HttpServiceError:
 				this.type = ErrorTypes.Http;
 				this.external = this.error.type === HttpErrorTypes.External;
+				this.statusCode = this.error.status;
 				break;
 			case this.error instanceof SchemaFail:
 				this.type = ErrorTypes.Schema;
 				this.validation = this.error.getSelfTypedData<T>();
+				this.statusCode = 422;
 				break;
 			case this.error instanceof AzureNetKitInternalError:
 				this.type = ErrorTypes.KitInternalError;

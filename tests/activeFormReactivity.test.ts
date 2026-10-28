@@ -88,7 +88,7 @@ describe('createActiveForm linked signal', () => {
 		submission.resolve({
 			success: false,
 			response: undefined as never,
-			error: { type: ErrorTypes.Schema, message: 'Stale', external: false, validation: { name: 'stale error' } }
+			error: { statusCode: 422, type: ErrorTypes.Schema, message: 'Stale', external: false, validation: { name: 'stale error' } }
 		});
 		await submitPromise;
 

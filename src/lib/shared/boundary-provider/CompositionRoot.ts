@@ -3,8 +3,7 @@ import { CreateServiceContainer, type ProviderSettings, type ProviderWithType } 
 type Services = Record<string, () => unknown>;
 type Dependency = ProviderWithType<Services> | { readonly resolve: ProviderWithType<Services> };
 type Dependencies = Record<string, Dependency>;
-const toProvider = (dependency: Dependency): ProviderWithType<Services> =>
-	typeof dependency === 'function' ? dependency : dependency.resolve;
+const toProvider = (dependency: Dependency): ProviderWithType<Services> => (typeof dependency === 'function' ? dependency : dependency.resolve);
 type Providers<D extends Dependencies> = {
 	[K in keyof D]: D[K] extends { readonly resolve: infer P extends ProviderWithType<Services> }
 		? P

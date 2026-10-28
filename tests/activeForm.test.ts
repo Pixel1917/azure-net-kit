@@ -97,7 +97,7 @@ describe('createActiveForm', () => {
 		second.resolve({
 			success: false,
 			response: undefined as never,
-			error: { type: ErrorTypes.Schema, message: 'Validation failed', external: false, validation: { name: 'latest error' } }
+			error: { statusCode: 422, type: ErrorTypes.Schema, message: 'Validation failed', external: false, validation: { name: 'latest error' } }
 		});
 		await secondSubmission;
 
@@ -119,7 +119,7 @@ describe('createActiveForm', () => {
 		request.resolve({
 			success: false,
 			response: undefined as never,
-			error: { type: ErrorTypes.Schema, message: 'Validation failed', external: false, validation: { name: 'stale error' } }
+			error: { statusCode: 422, type: ErrorTypes.Schema, message: 'Validation failed', external: false, validation: { name: 'stale error' } }
 		});
 		await submission;
 
@@ -432,7 +432,7 @@ describe('createActiveForm', () => {
 			async (): Promise<Result> => ({
 				success: false,
 				response: undefined as never,
-				error: { type: ErrorTypes.Schema, message: 'Invalid', external: false, validation: { name: 'Required' } }
+				error: { statusCode: 422, type: ErrorTypes.Schema, message: 'Invalid', external: false, validation: { name: 'Required' } }
 			}),
 			{ onError }
 		);
