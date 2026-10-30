@@ -12,6 +12,7 @@ export default mergeConfig(
 				'tests/compositionRootClient.test.ts',
 				'tests/registerPresenter.test.ts',
 				'tests/appErrorClient.test.ts',
+				'tests/httpServiceClient.test.ts',
 				'tests/i18nClient.test.ts',
 				'tests/queryReactivity.test.ts',
 				'tests/querySearchParams.test.ts',

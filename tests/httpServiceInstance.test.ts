@@ -302,7 +302,7 @@ describe('HttpServiceInstance', () => {
 
 		await expect(instance.get('/oops')).rejects.toBeInstanceOf(HttpServiceError);
 		expect(onError).toHaveBeenCalledTimes(1);
-		const firstCallError = (onError.mock.calls[0] as unknown as [HttpServiceError<unknown>, IHttpInstanceNormalizedRequest])[0];
+		const firstCallError = (onError.mock.calls[0] as unknown as [{ error: HttpServiceError<unknown> }])[0].error;
 		expect(firstCallError).toBeInstanceOf(HttpServiceError);
 		expect(firstCallError.status).toBe(500);
 	});
@@ -593,5 +593,55 @@ describe('SSR retry isolation', () => {
 		);
 		expect(new Set(results).size).toBe(30);
 		storage.disable();
+	});
+});
+
+describe('HTTP client access in hooks', () => {
+	beforeEach(() => setRequestContextFetch(fetch));
+	it('passes the same instance to default and overridden hooks', async () => {
+		const fail = vi.fn(async () => {
+			throw new HttpServiceError({ status: 401 });
+		});
+		const shouldRetry = vi.fn(async ({ http }) => {
+			expect(http).toBe(instance);
+			return false;
+		});
+		const onError = vi.fn((context) => {
+			expect(context.error.status).toBe(401);
+			expect(context.request.url).toMatch(/^\/(default|override)$/);
+			expect(context).not.toHaveProperty('http');
+		});
+		const instance = new HttpServiceInstance({ doFetch: fail, retry: { limit: 1, shouldRetry }, onError });
+		await expect(instance.get('/default')).rejects.toMatchObject({ status: 401 });
+		const overrideRetry = vi.fn(shouldRetry.getMockImplementation()!);
+		const overrideError = vi.fn(onError.getMockImplementation()!);
+		await expect(instance.get('/override', { retry: { limit: 1, shouldRetry: overrideRetry }, onError: overrideError })).rejects.toMatchObject({
+			status: 401
+		});
+		expect(overrideRetry).toHaveBeenCalledTimes(1);
+		expect(overrideError).toHaveBeenCalledTimes(1);
+	});
+	it('refreshes through the supplied client and returns the retried result', async () => {
+		let refreshed = false;
+		const fetchMock = vi.fn(async (url: string) => {
+			if (url === '/refresh') {
+				refreshed = true;
+				return jsonResponse(200, {});
+			}
+			return jsonResponse(refreshed ? 200 : 401, { ok: refreshed });
+		});
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+		const instance = new HttpServiceInstance({
+			retry: {
+				limit: 1,
+				shouldRetry: async ({ http }) => {
+					expect(http).toBe(instance);
+					await http.post('/refresh', { retry: { limit: 0 } });
+					return true;
+				}
+			}
+		});
+		await expect(instance.get('/data')).resolves.toMatchObject({ data: { ok: true } });
+		expect(fetchMock).toHaveBeenCalledTimes(3);
 	});
 });

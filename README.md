@@ -390,7 +390,7 @@ const http = new HttpServiceInstance({
 	retry: {
 		limit: 1,
 		statuses: [401],
-		async shouldRetry({ error }) {
+		async shouldRetry({ error, http }) {
 			if (!isExpiredAccessToken(error.data)) return false;
 			const refreshed = await http.post('/api/auth/refresh', {
 				json: { refreshToken: readRefreshToken() },
@@ -421,8 +421,8 @@ implement token rotation or cross-tab coordination.
 - Exceptions from hooks (including `shouldRetry`) propagate without further
   recovery. They are not treated as another failed transport attempt.
 - Cancelled requests and streaming request bodies are never replayed. Cancellation
-  is checked again after awaiting recovery; the callback must manage its own async
-  work and cancellation if needed.
+  also stops waiting for recovery; the callback must manage cancellation of its
+  own underlying work.
 - `limit` must be a finite non-negative safe integer. There is no implicit retry
   delay/backoff. Timeout is applied separately to each HTTP attempt.
 
@@ -430,3 +430,39 @@ Retries are opt-in for all HTTP methods. Do not blindly retry writes after netwo
 errors: the server may already have applied them. Use a narrow status/code policy
 or backend-supported idempotency keys. Numerical `retry: 3` is no longer supported;
 write `retry: { limit: 3 }` instead.
+
+HTTP hooks use these signatures:
+
+```ts
+retry: {
+ limit: 1,
+ shouldRetry: async ({ error, http }) => {
+  // The same client instance. Nested refresh must specify retry: { limit: 0 }.
+  return false;
+ }
+},
+onError: ({ error, request }) => {
+ // Terminal failure notification / validation mapping. No http is exposed.
+}
+```
+
+This is a breaking change from positional `onError(error, request, http)`.
+Request-level hook overrides use the same signatures. Nested requests use instance
+settings plus their own options, not the outer request's body or signal.
+
+AbortSignal stops waiting for hooks as well as transport operations. Arbitrary
+user promises cannot be forcibly terminated: hooks must cooperate to stop their
+own side effects. Hooks have no implicit timeout; supply and abort a signal to
+bound their waiting time. The per-attempt timeout covers transport and body
+parsing, including custom `doFetch`. With `responseFormat: 'body'`, it ends when
+the stream is returned; reading/cancelling that stream is then the caller's job.
+Timers/listeners are removed on success, failure, timeout and cancellation.
+
+JSON serialization errors now reject before sending rather than silently sending
+an empty body. The default JSON serializer does not support cyclic values or
+BigInt; provide `stringifyJson` if a custom wire format is required.
+
+Removing `http` from `onError` does not prevent recursion through a client captured
+in a closure. Do not initiate the same failing operation from its error handler.
+Refresh via `shouldRetry` still requires an explicit `retry: { limit: 0 }` on the
+nested refresh call. Limits apply per HTTP call, not to arbitrary nested user code.

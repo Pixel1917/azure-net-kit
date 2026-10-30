@@ -100,7 +100,7 @@ export interface IHttpInstanceNormalizedRequest {
 }
 
 export type IHttpInstanceOnRequest = (request: IHttpInstanceNormalizedRequest) => void | Promise<void>;
-export type IHttpInstanceOnError = (error: HttpServiceError<unknown>, request: IHttpInstanceNormalizedRequest) => void | Promise<void>;
+export type IHttpInstanceOnError = (context: { error: HttpServiceError<unknown>; request: IHttpInstanceNormalizedRequest }) => void | Promise<void>;
 
 export type IHttpInstanceDoFetch = <T = unknown>(request: IHttpInstanceNormalizedRequest) => Promise<IHttpServiceResponse<T>>;
 
@@ -108,7 +108,7 @@ export interface IHttpInstanceRetryOptions {
 	/** Number of additional attempts. Zero disables retries, including inherited policies. */
 	limit: number;
 	statuses?: readonly number[];
-	shouldRetry?: (context: { error: HttpServiceError<unknown> }) => boolean | Promise<boolean>;
+	shouldRetry?: (context: { error: HttpServiceError<unknown>; http: IHttpServiceInstance }) => boolean | Promise<boolean>;
 }
 
 export interface IHttpInstanceOptions<T = unknown> extends Omit<RequestInit, 'headers' | 'method'> {
@@ -139,13 +139,7 @@ export interface IHttpServiceInstance {
 	options: IHttpInstanceRequestMethod;
 }
 
-const stringifyJsonFunc = (data: unknown) => {
-	try {
-		return JSON.stringify(data);
-	} catch {
-		return undefined;
-	}
-};
+const stringifyJsonFunc = (data: unknown) => JSON.stringify(data);
 
 const isAbsoluteUrl = (value: string): boolean => /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(value);
 
@@ -187,7 +181,7 @@ const mergeSearchParams = (base?: SearchParamsOption, extra?: SearchParamsOption
 };
 
 const mergeOptions = <T = unknown>(base: IHttpInstanceOptions = {}, extra: IHttpInstanceOptions<T> = {}): IHttpInstanceOptions<T> => {
-	const mergedHeaders = new Headers(normalizeHeaders(base.headers));
+	const mergedHeaders = normalizeHeaders(base.headers);
 	for (const [key, value] of normalizeHeaders(extra.headers).entries()) {
 		mergedHeaders.set(key, value);
 	}
@@ -331,29 +325,49 @@ const parseResponse = async <T>(response: Response, request: IHttpInstanceNormal
 };
 
 const defaultDoFetch: IHttpInstanceDoFetch = async <T = unknown>(request: IHttpInstanceNormalizedRequest): Promise<IHttpServiceResponse<T>> => {
-	const timeoutState = withTimeout(request.requestInit.signal, request.timeout);
-	try {
-		const response = await request.fetch(request.url, {
-			...request.requestInit,
-			method: request.method,
-			headers: request.headers,
-			body: request.body,
-			signal: timeoutState.signal ?? undefined
-		});
-		const { data, headers, status, raw } = await parseResponse<T>(response, request);
-		return new HttpServiceResponse<T>({ headers, status, success: true, data, message: 'Request completed', raw });
-	} finally {
-		timeoutState.clear();
-	}
+	const response = await request.fetch(request.url, {
+		...request.requestInit,
+		...(typeof ReadableStream !== 'undefined' && request.body instanceof ReadableStream ? { duplex: 'half' } : {}),
+		method: request.method,
+		headers: request.headers,
+		body: request.body
+	});
+	const { data, headers, status, raw } = await parseResponse<T>(response, request);
+	return new HttpServiceResponse<T>({ headers, status, success: true, data, message: 'Request completed', raw });
 };
 
-const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOptions): IHttpInstanceRequestMethod => {
+// Stop waiting even when a custom transport or hook ignores AbortSignal.
+// The underlying operation must cooperate to actually stop its own work.
+const waitForSignal = <T>(value: T | PromiseLike<T>, signal?: AbortSignal | null): Promise<T> => {
+	if (!signal) return Promise.resolve(value);
+	return new Promise<T>((resolve, reject) => {
+		const abort = () => {
+			cleanup();
+			reject(signal.reason);
+		};
+		const cleanup = () => signal.removeEventListener('abort', abort);
+		if (signal.aborted) abort();
+		else signal.addEventListener('abort', abort, { once: true });
+		Promise.resolve(value).then(
+			(result) => {
+				cleanup();
+				resolve(result);
+			},
+			(error) => {
+				cleanup();
+				reject(error);
+			}
+		);
+	});
+};
+
+const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOptions, http: IHttpServiceInstance): IHttpInstanceRequestMethod => {
 	return async <T = unknown>(url: string | URL, options: IHttpInstanceOptions<T> = {}): Promise<IHttpServiceResponse<T>> => {
 		const merged = mergeOptions<T>(defaults, options);
 		const stringifyJson = merged.stringifyJson ?? stringifyJsonFunc;
 		const fetcher = !BROWSER ? (RequestContext.current()?.event?.fetch ?? fetch) : fetch;
 
-		const headers = normalizeHeaders(merged.headers);
+		const headers = merged.headers as Headers;
 		let body = merged.body;
 		if (merged.json !== undefined && body === undefined) {
 			body = stringifyJson(merged.json);
@@ -394,6 +408,11 @@ const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOpt
 		};
 
 		// Snapshot the policy per call: hooks and concurrent requests cannot extend its budget.
+		const sourceSignal = merged.signal;
+		const timeout = normalizedRequest.timeout;
+		if (timeout !== false && (!Number.isFinite(timeout) || timeout < 0 || timeout > 2147483647)) {
+			throw new RangeError('timeout must be false or a finite number between 0 and 2147483647');
+		}
 		const policy = merged.retry;
 		const limit = policy?.limit ?? 0;
 		if (!Number.isSafeInteger(limit) || limit < 0) {
@@ -404,13 +423,20 @@ const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOpt
 		const doFetch = merged.doFetch ?? defaultDoFetch;
 		let fetched: IHttpServiceResponse<T>;
 		for (let attempt = 0; ; attempt++) {
-			normalizedRequest.requestInit.signal?.throwIfAborted();
+			sourceSignal?.throwIfAborted();
 			// Re-run authentication/header hooks after recovery, without accumulating headers.
-			normalizedRequest.headers = new Headers(headers);
-			await merged.onRequest?.(normalizedRequest);
+			normalizedRequest.headers = merged.onRequest ? new Headers(headers) : headers;
+			if (merged.onRequest) await waitForSignal(merged.onRequest(normalizedRequest), sourceSignal);
 			normalizedRequest.requestInit.signal?.throwIfAborted();
 			try {
-				fetched = await doFetch<T>(normalizedRequest);
+				const timeoutState = withTimeout(sourceSignal, timeout);
+				normalizedRequest.requestInit.signal = timeoutState.signal;
+				try {
+					fetched = await waitForSignal(doFetch<T>(normalizedRequest), timeoutState.signal);
+				} finally {
+					timeoutState.clear();
+					normalizedRequest.requestInit.signal = sourceSignal;
+				}
 				break;
 			} catch (error) {
 				const normalizedError =
@@ -420,19 +446,20 @@ const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOpt
 								message: normalizeUnknownError(error).message,
 								original: normalizeUnknownError(error)
 							});
-				const aborted = normalizedRequest.requestInit.signal?.aborted || normalizedError.original?.name === 'AbortError';
+				const aborted = sourceSignal?.aborted || normalizedError.original?.name === 'AbortError';
 				const streaming = typeof ReadableStream !== 'undefined' && normalizedRequest.body instanceof ReadableStream;
 				const eligible = !aborted && !streaming && attempt < limit && (!statuses || statuses.includes(normalizedError.status));
-				if (eligible && (!shouldRetry || (await shouldRetry({ error: normalizedError })))) {
+				if (eligible && (!shouldRetry || (await waitForSignal(shouldRetry({ error: normalizedError, http }), sourceSignal)))) {
 					normalizedRequest.requestInit.signal?.throwIfAborted();
 					continue;
 				}
-				await merged.onError?.(normalizedError, normalizedRequest);
+				if (merged.onError) await waitForSignal(merged.onError({ error: normalizedError, request: normalizedRequest }), sourceSignal);
 				throw normalizedError;
 			}
 		}
 		// Consumer callback failures must never replay a successful HTTP operation.
-		await merged.onResponse?.(fetched);
+		sourceSignal?.throwIfAborted();
+		if (merged.onResponse) await waitForSignal(merged.onResponse(fetched), sourceSignal);
 		return fetched;
 	};
 };
@@ -449,12 +476,12 @@ export class HttpServiceInstance implements IHttpServiceInstance {
 
 	constructor(config: IHttpInstanceOptions = {}) {
 		this.defaults = { ...config };
-		this.get = makeMethod(HttpInstanceFetchMethods.GET, this.defaults);
-		this.post = makeMethod(HttpInstanceFetchMethods.POST, this.defaults);
-		this.put = makeMethod(HttpInstanceFetchMethods.PUT, this.defaults);
-		this.delete = makeMethod(HttpInstanceFetchMethods.DELETE, this.defaults);
-		this.patch = makeMethod(HttpInstanceFetchMethods.PATCH, this.defaults);
-		this.head = makeMethod(HttpInstanceFetchMethods.HEAD, this.defaults);
-		this.options = makeMethod(HttpInstanceFetchMethods.OPTIONS, this.defaults);
+		this.get = makeMethod(HttpInstanceFetchMethods.GET, this.defaults, this);
+		this.post = makeMethod(HttpInstanceFetchMethods.POST, this.defaults, this);
+		this.put = makeMethod(HttpInstanceFetchMethods.PUT, this.defaults, this);
+		this.delete = makeMethod(HttpInstanceFetchMethods.DELETE, this.defaults, this);
+		this.patch = makeMethod(HttpInstanceFetchMethods.PATCH, this.defaults, this);
+		this.head = makeMethod(HttpInstanceFetchMethods.HEAD, this.defaults, this);
+		this.options = makeMethod(HttpInstanceFetchMethods.OPTIONS, this.defaults, this);
 	}
 }
