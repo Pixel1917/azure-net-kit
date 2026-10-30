@@ -11,6 +11,7 @@ export {
 	type IHttpServiceResponse,
 	type IHttpServiceInstance,
 	type IHttpInstanceOptions,
+	type IHttpInstanceRetryOptions,
 	type IHttpInstanceNormalizedRequest,
 	type IHttpInstanceOnRequest,
 	type IHttpInstanceOnError,

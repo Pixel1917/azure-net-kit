@@ -158,7 +158,7 @@ describe('HttpServiceInstance', () => {
 			.mockResolvedValueOnce(jsonResponse(200, { ok: true }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = new HttpServiceInstance({ retry: 1 });
+		const instance = new HttpServiceInstance({ retry: { limit: 1 } });
 		const result = await instance.get<{ ok: boolean }>('/unstable');
 
 		expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -170,7 +170,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => jsonResponse(404, { reason: 'missing' }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = new HttpServiceInstance({ retry: 3 });
+		const instance = new HttpServiceInstance({ retry: { limit: 3, statuses: [503] } });
 		await expect(instance.get('/missing')).rejects.toMatchObject({ status: 404, type: 'external' });
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
@@ -182,7 +182,7 @@ describe('HttpServiceInstance', () => {
 			.mockResolvedValueOnce(jsonResponse(200, { ok: true }));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = new HttpServiceInstance({ retry: 1 });
+		const instance = new HttpServiceInstance({ retry: { limit: 1 } });
 		const result = await instance.get<{ ok: boolean }>('/network');
 
 		expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -195,7 +195,7 @@ describe('HttpServiceInstance', () => {
 		const fetchMock = vi.fn(async () => Promise.reject(abortError));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
 
-		const instance = new HttpServiceInstance({ retry: 3 });
+		const instance = new HttpServiceInstance({ retry: { limit: 3 } });
 		await expect(instance.get('/timeout')).rejects.toBeInstanceOf(HttpServiceError);
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
@@ -346,5 +346,252 @@ describe('HttpServiceInstance', () => {
 		expect(result.status).toBe(299);
 		expect(result.data).toEqual({ from: 'custom' });
 		expect(result.headers['x-custom']).toBe('yes');
+	});
+});
+
+describe('HTTP retry policy', () => {
+	it.each([undefined, { limit: 0 }, { limit: 2, statuses: [] }])('does not retry with %j', async (retry) => {
+		const fetchMock = vi.fn(async () => jsonResponse(401, {}));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+		const predicate = vi.fn(async () => true);
+		const options = retry ? { ...retry, shouldRetry: predicate } : undefined;
+		await expect(new HttpServiceInstance({ retry: options }).get('/data')).rejects.toMatchObject({ status: 401 });
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(predicate).not.toHaveBeenCalled();
+	});
+	it('limits retries for any failed status and notifies only about the final failure', async () => {
+		const fetchMock = vi.fn(async () => jsonResponse(404, {}));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+		const predicate = vi.fn(async () => true);
+		const onError = vi.fn();
+		await expect(new HttpServiceInstance({ retry: { limit: 2, shouldRetry: predicate }, onError }).get('/data')).rejects.toMatchObject({
+			status: 404
+		});
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+		expect(predicate).toHaveBeenCalledTimes(2);
+		expect(onError).toHaveBeenCalledTimes(1);
+	});
+	it('checks statuses before invoking the predicate', async () => {
+		const fetchMock = vi.fn(async () => jsonResponse(403, {}));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+		const predicate = vi.fn(async () => true);
+		await expect(new HttpServiceInstance({ retry: { limit: 2, statuses: [401], shouldRetry: predicate } }).get('/data')).rejects.toMatchObject({
+			status: 403
+		});
+		expect(predicate).not.toHaveBeenCalled();
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+	it('awaits refresh using the same client, re-reads headers, and resolves the original promise', async () => {
+		let token = 'old';
+		const seen: string[] = [];
+		const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
+			const auth = (init.headers as Headers).get('authorization');
+			seen.push(`${url}:${auth}`);
+			if (url === '/refresh') return jsonResponse(200, { token: 'new' });
+			return auth === 'new' ? jsonResponse(200, { ok: true }) : jsonResponse(401, { code: 'EXPIRED' });
+		});
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+		const onError = vi.fn();
+		const onResponse = vi.fn();
+		const http = new HttpServiceInstance({
+			onRequest: (request) => {
+				request.headers.set('authorization', token);
+				request.headers.append('x-once', '1');
+			},
+			onError,
+			retry: {
+				limit: 1,
+				statuses: [401],
+				shouldRetry: async ({ error }) => {
+					expect(error.data).toEqual({ code: 'EXPIRED' });
+					const result = await http.post<{ token: string }>('/refresh', { retry: { limit: 0 } });
+					token = result.data.token;
+					return true;
+				}
+			}
+		});
+		const result = await http.post('/data', { json: { id: 1 }, onResponse });
+		expect(result.data).toEqual({ ok: true });
+		expect(seen).toEqual(['/data:old', '/refresh:old', '/data:new']);
+		expect(onError).not.toHaveBeenCalled();
+		expect(onResponse).toHaveBeenCalledTimes(1);
+		expect(getFetchCall(fetchMock, 2)[1]?.body).toBe('{"id":1}');
+		expect((getFetchCall(fetchMock, 2)[1]?.headers as Headers).get('x-once')).toBe('1');
+	});
+	it('stops when shouldRetry returns false', async () => {
+		const fetchMock = vi.fn(async () => jsonResponse(401, {}));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+		const predicate = vi.fn(async () => false);
+		await expect(new HttpServiceInstance({ retry: { limit: 3, shouldRetry: predicate } }).get('/data')).rejects.toMatchObject({ status: 401 });
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(predicate).toHaveBeenCalledTimes(1);
+	});
+	it('replaces the whole inherited retry policy', async () => {
+		const fetchMock = vi.fn(async () => jsonResponse(404, {}));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+		const predicate = vi.fn(async () => false);
+		const http = new HttpServiceInstance({ retry: { limit: 5, statuses: [401], shouldRetry: predicate } });
+		await expect(http.get('/data', { retry: { limit: 1 } })).rejects.toMatchObject({ status: 404 });
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(predicate).not.toHaveBeenCalled();
+		await expect(http.get('/data', { retry: { limit: 0 } })).rejects.toMatchObject({ status: 404 });
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+	});
+	it.each([NaN, Infinity, -1, 1.5])('rejects invalid retry limit %s before sending', async (limit) => {
+		const doFetch = vi.fn();
+		await expect(new HttpServiceInstance({ retry: { limit }, doFetch }).get('/data')).rejects.toBeInstanceOf(RangeError);
+		expect(doFetch).not.toHaveBeenCalled();
+	});
+	it('does not recycle policy callback exceptions', async () => {
+		const failure = new Error('refresh failed');
+		const doFetch = vi.fn(async () => {
+			throw new HttpServiceError({ status: 401 });
+		});
+		const predicate = vi.fn(async () => {
+			throw failure;
+		});
+		await expect(new HttpServiceInstance({ doFetch, retry: { limit: 3, shouldRetry: predicate } }).get('/data')).rejects.toBe(failure);
+		expect(doFetch).toHaveBeenCalledTimes(1);
+		expect(predicate).toHaveBeenCalledTimes(1);
+	});
+	it('does not retry refresh with an explicit zero limit when refresh itself fails', async () => {
+		const fetchMock = vi.fn(async () => jsonResponse(401, {}));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+		const predicate = vi.fn(async () => {
+			await http.post('/refresh', { retry: { limit: 0 } });
+			return true;
+		});
+		const http = new HttpServiceInstance({ retry: { limit: 1, shouldRetry: predicate } });
+		await expect(http.get('/data')).rejects.toMatchObject({ status: 401 });
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(predicate).toHaveBeenCalledTimes(1);
+	});
+	it('does not retry onResponse failures', async () => {
+		const fetchMock = vi.fn(async () => jsonResponse(200, {}));
+		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+		const failure = new Error('callback');
+		const onError = vi.fn();
+		await expect(
+			new HttpServiceInstance({
+				retry: { limit: 3 },
+				onError,
+				onResponse: () => {
+					throw failure;
+				}
+			}).post('/data')
+		).rejects.toBe(failure);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(onError).not.toHaveBeenCalled();
+	});
+	it('does not retry onRequest failures', async () => {
+		const doFetch = vi.fn();
+		const failure = new Error('callback');
+		await expect(
+			new HttpServiceInstance({
+				retry: { limit: 3 },
+				doFetch,
+				onRequest: () => {
+					throw failure;
+				}
+			}).get('/data')
+		).rejects.toBe(failure);
+		expect(doFetch).not.toHaveBeenCalled();
+	});
+	it('honors abort while waiting for shouldRetry', async () => {
+		const controller = new AbortController();
+		const doFetch = vi.fn(async () => {
+			throw new HttpServiceError({ status: 401 });
+		});
+		await expect(
+			new HttpServiceInstance({
+				doFetch,
+				retry: {
+					limit: 3,
+					shouldRetry: async () => {
+						controller.abort();
+						return true;
+					}
+				}
+			}).get('/data', { signal: controller.signal })
+		).rejects.toMatchObject({ name: 'AbortError' });
+		expect(doFetch).toHaveBeenCalledTimes(1);
+	});
+	it('never replays a streaming body', async () => {
+		const doFetch = vi.fn(async () => {
+			throw new HttpServiceError({ status: 401 });
+		});
+		const predicate = vi.fn(async () => true);
+		const body = new ReadableStream({
+			start(controller) {
+				controller.close();
+			}
+		});
+		await expect(new HttpServiceInstance({ doFetch, retry: { limit: 3, shouldRetry: predicate } }).post('/data', { body })).rejects.toMatchObject({
+			status: 401
+		});
+		expect(doFetch).toHaveBeenCalledTimes(1);
+		expect(predicate).not.toHaveBeenCalled();
+	});
+	it('does not let a callback extend the active retry budget', async () => {
+		const retry = {
+			limit: 1,
+			shouldRetry: async () => {
+				retry.limit = 100;
+				return true;
+			}
+		};
+		const doFetch = vi.fn(async () => {
+			throw new HttpServiceError({ status: 401 });
+		});
+		await expect(new HttpServiceInstance({ doFetch, retry }).get('/data')).rejects.toMatchObject({ status: 401 });
+		expect(doFetch).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe('SSR retry isolation', () => {
+	it('keeps credentials and retry counts local for a shared HTTP instance', async () => {
+		const { AsyncLocalStorage } = await import('node:async_hooks');
+		type Session = { token: string; calls: number; event: { fetch: typeof fetch } };
+		const storage = new AsyncLocalStorage<Session>();
+		initializeRequestContext(() => storage.getStore() as never);
+		const http = new HttpServiceInstance({
+			onRequest: (request) => {
+				request.headers.set('authorization', storage.getStore()!.token);
+			},
+			retry: {
+				limit: 1,
+				statuses: [401],
+				shouldRetry: async () => {
+					const session = storage.getStore()!;
+					await new Promise((resolve) => setTimeout(resolve, 1));
+					session.token += '-refreshed';
+					return true;
+				}
+			}
+		});
+		const results = await Promise.all(
+			Array.from({ length: 30 }, (_, index) => {
+				const initial = `user-${index}`;
+				const session: Session = {
+					token: initial,
+					calls: 0,
+					event: {
+						fetch: (async (_url, init) => {
+							session.calls++;
+							expect((init!.headers as Headers).get('authorization')).toBe(session.token);
+							return jsonResponse(session.calls === 1 ? 401 : 200, { user: session.token });
+						}) as typeof fetch
+					}
+				};
+				return storage.run(session, async () => {
+					const response = await http.get<{ user: string }>('/private');
+					expect(session.calls).toBe(2);
+					expect(response.data.user).toBe(`${initial}-refreshed`);
+					return response.data.user;
+				});
+			})
+		);
+		expect(new Set(results).size).toBe(30);
+		storage.disable();
 	});
 });

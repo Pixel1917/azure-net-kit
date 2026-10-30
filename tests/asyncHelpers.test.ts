@@ -1,252 +1,75 @@
-import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAsyncAction as asyncAction, createAsyncResource as asyncResource } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
-import { createApp, type AppAzureNetKitErrorCallback } from '../src/lib/shared/app/index.js';
+import { describe, expect, it, vi } from 'vitest';
+import { createAsyncAction, createAsyncResource } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
+import { AppError } from '../src/lib/shared/app-error/AppError.js';
 
-const createServerContext = () => ({
-	data: {},
-	event: {
-		fetch,
-		url: new URL('https://example.com'),
-		request: new Request('https://example.com')
-	}
-});
-
-const runInApp = async <T>(action: () => Promise<T>, errorHandler?: AppAzureNetKitErrorCallback): Promise<T> => {
-	const context = createServerContext();
-	initializeRequestContext(() => context as never);
-	let result!: T;
-	const app = createApp((builder) => {
-		const configured = errorHandler ? builder.useAzureNetKitError(errorHandler) : builder;
-		return configured.useServer(async () => {
-			result = await action();
-		});
-	});
-
-	await app.register.handle({
-		event: context.event,
-		resolve: () => new Response('ok')
-	} as never);
-
-	return result;
-};
-
-describe('AsyncHelpers', () => {
-	beforeEach(() => {
-		vi.restoreAllMocks();
-	});
-
-	it('exposes only stateless action and resource helpers', () => {
-		expect(typeof asyncAction).toBe('function');
-		expect(typeof asyncResource).toBe('function');
-	});
-
-	it('aborts action in beforeSend when abort() is called', async () => {
-		const createAsyncAction = asyncAction;
-		const result = await createAsyncAction(async () => ({ ok: true }), {
-			beforeSend: ({ abort }) => abort(),
-			fallbackResponse: { ok: false }
-		});
-
-		expect(result.success).toBe(false);
-		expect(result.error?.type).toBe('AsyncHelperError');
-		expect(result.response).toBeUndefined();
-	});
-
-	it('continues action when beforeSend returns without calling next or abort', async () => {
-		const createAsyncAction = asyncAction;
-		const result = await createAsyncAction(async () => ({ ok: true }), {
-			beforeSend: async () => {
-				await Promise.resolve();
-			}
-		});
-
-		expect(result).toEqual({ success: true, response: { ok: true } });
-	});
-
-	it('uses the default AppError conversion when the app hook is absent', async () => {
-		const createAsyncAction = asyncAction;
-		const result = await createAsyncAction(async () => {
-			throw new Error('fatal');
-		});
-
-		expect(result.success).toBe(false);
-		expect(result.error).toMatchObject({
-			type: 'Unknown',
-			message: 'fatal',
-			external: false,
-			appErrorConvert: true
-		});
-	});
-
-	it('routes errors through createApp and preserves custom result typing', async () => {
-		const createAsyncAction = asyncAction<never, never, { marker: string }>;
-		const result = await runInApp(
-			() =>
-				createAsyncAction(async () => {
-					throw new Error('custom');
-				}),
-			({ error, retry, isServer, isClient, requestContext, event }) => {
-				expect(retry.can).toBe(true);
-				expect(typeof retry.call).toBe('function');
-				expect(isServer).toBe(true);
-				expect(isClient).toBe(false);
-				expect(requestContext?.event).toBe(event);
-				return error.toPlainObject({ marker: 'app' });
-			}
-		);
-
-		expect(result.error?.marker).toBe('app');
-	});
-
-	it('supports retry from the application error hook', async () => {
-		let calls = 0;
-		const createAsyncAction = asyncAction;
-		const result = await runInApp(
-			() =>
-				createAsyncAction(async () => {
-					calls += 1;
-					if (calls === 1) throw new Error('first fail');
-					return { ok: true, calls };
-				}),
-			async ({ error, retry }) => {
-				await retry.call?.();
-				return error.toPlainObject();
-			}
-		);
-
-		expect(result).toEqual({ success: true, response: { ok: true, calls: 2 } });
-	});
-
-	it('does not repeat a successful action when onSuccess fails and retry is requested', async () => {
-		let actionCalls = 0;
-		let retryAvailable: boolean | undefined;
-		const createAsyncAction = asyncAction;
-		const result = await runInApp(
-			() =>
-				createAsyncAction(
-					async () => {
-						actionCalls += 1;
-						return { ok: true };
-					},
-					{
-						onSuccess: () => {
-							throw new Error('consumer success callback failed');
-						}
-					}
-				),
-			async ({ error, retry }) => {
-				retryAvailable = retry.can;
-				await retry.call?.();
-				return error.toPlainObject();
-			}
-		);
-
-		expect(actionCalls).toBe(1);
-		expect(retryAvailable).toBe(false);
-		expect(result).toMatchObject({
-			success: false,
-			error: { message: 'consumer success callback failed' }
-		});
-	});
-
-	it('keeps the failed response when retry also fails', async () => {
-		let calls = 0;
-		const createAsyncAction = asyncAction;
-		const result = await runInApp(
-			() =>
-				createAsyncAction(
-					async () => {
-						calls += 1;
-						throw new Error(`failure ${calls}`);
-					},
-					{ fallbackResponse: 'fallback' }
-				),
-			async ({ error, retry }) => {
-				await retry.call?.();
-				return error.toPlainObject();
-			}
-		);
-
-		expect(calls).toBe(2);
-		expect(result.success).toBe(false);
-		expect(result.response).toBe('fallback');
-	});
-
-	it('routes onError callback failures through the same application hook', async () => {
-		const seen: string[] = [];
-		const createAsyncAction = asyncAction;
-
-		await expect(
-			runInApp(
-				() =>
-					createAsyncAction(
-						async () => {
-							throw new Error('request failed');
-						},
-						{
-							onError: () => {
-								throw new Error('consumer failed');
-							}
-						}
-					),
-				({ error }) => {
-					seen.push(error.type);
-					return error.toPlainObject();
+describe('stateless AsyncHelpers', () => {
+	it('runs beforeSend, action and success in order', async () => {
+		const order: string[] = [];
+		const result = await createAsyncAction(
+			async () => {
+				order.push('action');
+				return 42;
+			},
+			{
+				beforeSend: async ({ next }) => {
+					await Promise.resolve();
+					order.push('before');
+					next();
+				},
+				onSuccess: async ({ response }) => {
+					order.push('success');
+					expect(response).toBe(42);
 				}
-			)
-		).rejects.toMatchObject({ type: 'AsyncHelperError', appErrorConvert: true });
-
-		expect(seen).toEqual(['Unknown', 'AsyncHelperError']);
+			}
+		);
+		expect(result).toEqual({ response: 42, success: true });
+		expect(order).toEqual(['before', 'action', 'success']);
 	});
-
-	it('rejects createAsyncResource with the converted error when reject is enabled', async () => {
-		const createAsyncResource = asyncResource<never, never, { code: string }>;
-
-		await expect(
-			runInApp(
-				() =>
-					createAsyncResource(
-						async () => {
-							throw new Error('resource failed');
-						},
-						{ reject: true }
-					),
-				({ error }) => error.toPlainObject({ code: 'RESOURCE' })
-			)
-		).rejects.toMatchObject({ code: 'RESOURCE', message: 'resource failed' });
+	it('aborts beforeSend without invoking the action', async () => {
+		const action = vi.fn(async () => 1);
+		const result = await createAsyncAction(action, { beforeSend: ({ abort }) => abort() });
+		expect(action).not.toHaveBeenCalled();
+		expect(result.error?.type).toBe('AsyncHelperError');
 	});
-
-	it('rejects an invalid hook result instead of leaking an unconverted error shape', async () => {
-		const createAsyncAction = asyncAction;
-
-		await expect(
-			runInApp(
-				() =>
-					createAsyncAction(async () => {
-						throw new Error('failure');
-					}),
-				(() => ({ message: 'invalid' })) as never
-			)
-		).rejects.toThrow("[createApp] 'useAzureNetKitError' must return the result of AppError.toPlainObject().");
+	it('supports an awaited beforeSend without explicit next', async () => {
+		await expect(createAsyncAction(async () => 1, { beforeSend: async () => {} })).resolves.toMatchObject({ success: true });
 	});
-
-	it('propagates a hook exception exactly once', async () => {
-		const hookError = new Error('hook failed');
-		const hook = vi.fn(() => {
-			throw hookError;
+	it('does not retry and delivers the converted failure and fallback once', async () => {
+		const action = vi.fn(async () => {
+			throw new Error('failed');
 		});
-		const createAsyncAction = asyncAction;
-
-		await expect(
-			runInApp(
-				() =>
-					createAsyncAction(async () => {
-						throw new Error('failure');
-					}),
-				hook as never
-			)
-		).rejects.toBe(hookError);
-		expect(hook).toHaveBeenCalledTimes(1);
+		const onError = vi.fn();
+		const result = await createAsyncAction(action, { fallbackResponse: 'fallback', onError });
+		expect(result).toMatchObject({ success: false, response: 'fallback', error: { message: 'failed' } });
+		expect(action).toHaveBeenCalledTimes(1);
+		expect(onError).toHaveBeenCalledExactlyOnceWith(result);
+	});
+	it('preserves an already normalized AppError', async () => {
+		const error = new AppError(new Error('failed'));
+		error.redeclareValidation({ name: 'invalid' });
+		const result = await createAsyncAction(async () => {
+			throw error;
+		});
+		expect(result.error?.validation).toEqual({ name: 'invalid' });
+	});
+	it.each(['onSuccess', 'onError'] as const)('propagates %s exceptions without retry or rehandling', async (hook) => {
+		const failure = new Error('callback failed');
+		const callback = vi.fn(() => {
+			throw failure;
+		});
+		const action = vi.fn(async () => {
+			if (hook === 'onError') throw new Error('request');
+			return 1;
+		});
+		await expect(createAsyncAction(action, { [hook]: callback })).rejects.toBe(failure);
+		expect(callback).toHaveBeenCalledTimes(1);
+		expect(action).toHaveBeenCalledTimes(1);
+	});
+	it('returns resource fallback or rejects with a converted error', async () => {
+		const action = async () => {
+			throw new Error('failed');
+		};
+		await expect(createAsyncResource(action, { fallbackResponse: 'empty' })).resolves.toBe('empty');
+		await expect(createAsyncResource(action, { reject: true })).rejects.toMatchObject({ message: 'failed', appErrorConvert: true });
 	});
 });

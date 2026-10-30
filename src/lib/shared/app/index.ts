@@ -1,7 +1,5 @@
 export {
 	createApp,
-	type AppAzureNetKitErrorCallback,
-	type AppAzureNetKitErrorContext,
 	type AppClientErrorCallback,
 	type AppClientErrorContext,
 	type AppClientInitLifecycleCallback,
@@ -18,8 +16,6 @@ export {
 	type AppServerLifecycleCallback,
 	type AppServerLifecycleContext,
 	type AppRerouteCallback,
-	type AppUniversalLifecycleCallback,
-	type AppUniversalLifecycleContext,
 	type CreateAppInstance
 } from './App.js';
 export type { IClientMiddleware, ClientMiddlewareContext, ClientMiddlewareClass } from './middleware/ClientMiddleware.js';

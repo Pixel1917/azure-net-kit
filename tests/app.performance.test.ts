@@ -58,7 +58,7 @@ describe('createApp performance', () => {
 			await baseline.register.handle({ event: context.event, resolve } as never);
 		});
 
-		const lifecycle = createApp((app) => app.use(() => undefined).useServer(() => undefined));
+		const lifecycle = createApp((app) => app.useServer(() => undefined));
 
 		const lifecycleResult = await measureAsync('handle with universal + server callbacks', 5_000, async () => {
 			context = createServerContext();
@@ -105,28 +105,5 @@ describe('createApp performance', () => {
 		});
 
 		expect(result.avg).toBeLessThan(0.15);
-	});
-
-	it('runs the request-scoped custom error hook with low overhead', async () => {
-		const context = createServerContext();
-		initializeRequestContext(() => context as never);
-		const createAsyncAction = asyncAction<never, never, { code: string }>;
-		const error = new Error('expected');
-		let result!: { avg: number };
-		const app = createApp((builder) => builder.useAzureNetKitError(({ error }) => error.toPlainObject({ code: 'EXPECTED' })));
-
-		await app.register.handle({
-			event: context.event,
-			resolve: async () => {
-				result = await measureAsync('custom helper error conversion', 5_000, async () => {
-					await createAsyncAction(async () => {
-						throw error;
-					});
-				});
-				return new Response('ok');
-			}
-		} as never);
-
-		expect(result.avg).toBeLessThan(0.2);
 	});
 });

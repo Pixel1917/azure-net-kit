@@ -1,7 +1,4 @@
-import { AsyncHelperError, type AppError, type IAppError } from '../../shared/app-error/AppError.js';
-import { resolveAzureNetKitError } from '../../shared/app-error/ErrorRuntime.js';
-
-export type { AsyncHelperRetry } from '../../shared/app-error/ErrorRuntime.js';
+import { AsyncHelperError, AppError, type IAppError } from '../../shared/app-error/AppError.js';
 
 export interface AsyncActionResponse<T, D = never, ErrorResult = Record<never, never>> {
 	success: boolean;
@@ -24,26 +21,10 @@ export interface AsyncResourceSettings<Res = never, Req = never, ErrorResult = A
 
 const normalizeError = (err: unknown): Error => (err instanceof Error ? err : new Error(String(err)));
 
-const prepareErrors = async <Res = never, Req = never, ErrorResult extends object = Record<never, never>>(
-	error: Error,
-	retry?: () => Promise<AsyncActionResponse<Res, Req, ErrorResult>>
-) => {
-	let retryResult: AsyncActionResponse<Res, Req, ErrorResult> | undefined = undefined;
-	const retryFunc = async () => {
-		if (retry) {
-			return await retry()
-				.then((res) => {
-					retryResult = res;
-					return undefined;
-				})
-				.catch((err) => normalizeError(err));
-		}
-	};
-	const parsedError = await resolveAzureNetKitError<Req, ErrorResult>(normalizeError(error), {
-		can: !!retry,
-		call: retry ? () => retryFunc() : undefined
-	});
-	return { error: parsedError, retryResult };
+const prepareError = <Req, ErrorResult extends object>(error: unknown): IAppError<Req> & ErrorResult => {
+	const normalized = normalizeError(error);
+	const appError = normalized instanceof AppError ? (normalized as AppError<Req>) : new AppError<Req>(normalized);
+	return appError.toPlainObject<ErrorResult>();
 };
 
 const beforeSendResolver = async <Res = never, Req = never, ErrorResult extends object = Record<never, never>>(
@@ -86,7 +67,7 @@ const beforeSendResolver = async <Res = never, Req = never, ErrorResult extends 
 
 	if (!aborted) return undefined;
 
-	const { error } = await prepareErrors<Res, Req, ErrorResult>(abortReason ?? new AsyncHelperError('Aborted in beforeSend'));
+	const error = prepareError<Req, ErrorResult>(abortReason ?? new AsyncHelperError('Aborted in beforeSend'));
 	return {
 		success: false,
 		error,
@@ -101,44 +82,17 @@ export const createAsyncAction = async <Res = never, Req = never, ErrorResult ex
 	const beforeSendResult = await beforeSendResolver<Res, Req, ErrorResult>(args);
 	if (beforeSendResult) return beforeSendResult;
 
-	const executeAction = async () => {
-		const response = await Promise.resolve(action());
-		return { response, success: true } as AsyncActionResponse<Res, never, ErrorResult>;
-	};
-
-	const handleFailure = async (
-		err: unknown,
-		retry?: () => Promise<AsyncActionResponse<Res, Req, ErrorResult>>
-	): Promise<AsyncActionResponse<Res, Req, ErrorResult>> => {
-		const { error, retryResult } = await prepareErrors<Res, Req, ErrorResult>(normalizeError(err), retry);
-		if (retryResult) {
-			return completeSuccess(retryResult);
-		}
-		const result = { error, response: args?.fallbackResponse as Res, success: false };
-		try {
-			await args?.onError?.(result as AsyncActionResponse<never, Req, ErrorResult>);
-		} catch (onErrorException) {
-			throw await resolveAzureNetKitError<Req, ErrorResult>(
-				new AsyncHelperError('onError caught exception', { cause: normalizeError(onErrorException) })
-			);
-		}
-		return result;
-	};
-
-	const completeSuccess = async (result: AsyncActionResponse<Res, Req, ErrorResult>): Promise<AsyncActionResponse<Res, Req, ErrorResult>> => {
-		try {
-			await args?.onSuccess?.(result as AsyncActionResponse<Res, never, ErrorResult>);
-			return result;
-		} catch (err) {
-			return handleFailure(err);
-		}
-	};
-
+	let response: Res;
 	try {
-		return completeSuccess(await executeAction());
+		response = await action();
 	} catch (err) {
-		return handleFailure(err, executeAction);
+		const result = { error: prepareError<Req, ErrorResult>(err), response: args?.fallbackResponse as Res, success: false };
+		await args?.onError?.(result as AsyncActionResponse<never, Req, ErrorResult>);
+		return result;
 	}
+	const result = { response, success: true };
+	await args?.onSuccess?.(result);
+	return result;
 };
 
 export const createAsyncResource = async <Res = never, Req = never, ErrorResult extends object = Record<never, never>>(

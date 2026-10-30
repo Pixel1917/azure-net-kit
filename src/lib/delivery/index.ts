@@ -2,7 +2,6 @@ export {
 	createAsyncAction,
 	createAsyncResource,
 	type AsyncActionSettings,
-	type AsyncHelperRetry,
 	type AsyncResourceSettings,
 	type AsyncActionResponse
 } from './injectable-dependencies/index.js';

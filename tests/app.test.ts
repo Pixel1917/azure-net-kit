@@ -27,13 +27,10 @@ describe('createApp', () => {
 		initializeRequestContext(() => context as never);
 		const app = createApp((builder) => {
 			expect(builder).not.toHaveProperty('dependencies');
-			return builder
-				.use((input) => {
-					expect(input).not.toHaveProperty('Container');
-				})
-				.useServer((input) => {
-					expect(input).not.toHaveProperty('Container');
-				});
+			expect(builder).not.toHaveProperty('use');
+			return builder.useServer((input) => {
+				expect(input).not.toHaveProperty('Container');
+			});
 		});
 		expect(Object.keys(app)).toEqual(['register']);
 		await app.register.handle({ event: context.event, resolve: () => new Response('ok') } as never);
@@ -51,19 +48,15 @@ describe('createApp', () => {
 		expect(ensureRoute('/profile/{id}', new URL('https://example.com/profile/42'))).toBe(true);
 	});
 
-	it('runs universal and server callbacks once per server request context', async () => {
+	it('runs server callbacks once per server request context', async () => {
 		let context = createServerContext();
 		initializeRequestContext(() => context as never);
 
 		const calls: string[] = [];
 		const app = createApp((app) =>
-			app
-				.use(({ event, isServer, requestContext }) => {
-					calls.push(`use:${isServer}:${event === context.event}:${requestContext === (context as unknown)}`);
-				})
-				.useServer(({ event, requestContext }) => {
-					calls.push(`server:${event === context.event}:${requestContext === (context as unknown)}`);
-				})
+			app.useServer(({ event, requestContext }) => {
+				calls.push(`server:${event === context.event}:${requestContext === (context as unknown)}`);
+			})
 		);
 
 		await app.register.handle({
@@ -74,14 +67,14 @@ describe('createApp', () => {
 			event: context.event,
 			resolve: () => new Response('ok')
 		} as never);
-		expect(calls).toEqual(['use:true:true:true', 'server:true:true']);
+		expect(calls).toEqual(['server:true:true']);
 
 		context = createServerContext();
 		await app.register.handle({
 			event: context.event,
 			resolve: () => new Response('ok')
 		} as never);
-		expect(calls).toEqual(['use:true:true:true', 'server:true:true', 'use:true:true:true', 'server:true:true']);
+		expect(calls).toEqual(['server:true:true', 'server:true:true']);
 	});
 
 	it('exposes a SvelteKit handle that runs server callbacks and resolves the event', async () => {
@@ -150,28 +143,27 @@ describe('createApp', () => {
 		expect(calls).toBe(0);
 	});
 
-	it('runs async universal callback before server callback', async () => {
+	it('awaits async server callback before resolving', async () => {
 		const context = createServerContext();
 		initializeRequestContext(() => context as never);
 
 		const calls: string[] = [];
 		const app = createApp((app) =>
-			app
-				.use(async () => {
-					await Promise.resolve();
-					calls.push('universal');
-				})
-				.useServer(() => {
-					calls.push('server');
-				})
+			app.useServer(async () => {
+				await Promise.resolve();
+				calls.push('server');
+			})
 		);
 
 		await app.register.handle({
 			event: context.event,
-			resolve: () => new Response('ok')
+			resolve: () => {
+				calls.push('resolve');
+				return new Response('ok');
+			}
 		} as never);
 
-		expect(calls).toEqual(['universal', 'server']);
+		expect(calls).toEqual(['server', 'resolve']);
 	});
 
 	it('runs server init only once per app instance', async () => {
@@ -304,20 +296,17 @@ describe('createApp', () => {
 		expect(app.register.transport).toBe(transport);
 	});
 
-	it.each(['useServerFetch', 'useAzureNetKitError', 'useReroute', 'useTransport'] as const)(
-		'throws when %s is registered twice at runtime',
-		(method) => {
-			expect(() =>
-				createApp((app) => {
-					const callback = () => undefined;
-					const value = method === 'useTransport' ? {} : callback;
-					(app[method] as (input: never) => unknown)(value as never);
-					(app as unknown as Record<typeof method, (input: never) => unknown>)[method](value as never);
-					return app;
-				})
-			).toThrow(`[createApp] '${method}' can be registered only once.`);
-		}
-	);
+	it.each(['useServerFetch', 'useReroute', 'useTransport'] as const)('throws when %s is registered twice at runtime', (method) => {
+		expect(() =>
+			createApp((app) => {
+				const callback = () => undefined;
+				const value = method === 'useTransport' ? {} : callback;
+				(app[method] as (input: never) => unknown)(value as never);
+				(app as unknown as Record<typeof method, (input: never) => unknown>)[method](value as never);
+				return app;
+			})
+		).toThrow(`[createApp] '${method}' can be registered only once.`);
+	});
 
 	it('logs internal errors and can use request fetch collector', async () => {
 		const requestFetch = vi.fn(() => Promise.resolve(new Response('ok')));
@@ -395,11 +384,11 @@ describe('createApp', () => {
 	it('throws when the same lifecycle callback is registered twice at runtime', () => {
 		expect(() =>
 			createApp((app) => {
-				app.use(() => undefined);
-				(app as never as { use: typeof app.use }).use(() => undefined);
+				app.useServer(() => undefined);
+				(app as never as { useServer: typeof app.useServer }).useServer(() => undefined);
 				return app;
 			})
-		).toThrow("[createApp] 'use' can be registered only once.");
+		).toThrow("[createApp] 'useServer' can be registered only once.");
 	});
 
 	it('executes server middlewares in order and exposes navigation data', async () => {

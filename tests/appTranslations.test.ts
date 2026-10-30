@@ -27,16 +27,14 @@ describe('useTranslations integration', () => {
 			expect(await response.text()).toContain('lang="ru" data-azure-net-locale="ru"');
 		});
 	});
-	it('prepares translations before universal/server/boot and preserves resolve options', async () => {
+	it('prepares translations before server/boot and preserves resolve options', async () => {
 		const manager = createTranslations({ messages, initLang: 'en', initLangFromAcceptLanguage: true });
 		const order: string[] = [];
 		const { register } = createApp((app) =>
 			app
 				.useTranslations(manager)
-				.use(() => {
-					order.push(manager().t('title'));
-				})
 				.useServer(({ event, resolve }) => {
+					order.push(manager().t('title'));
 					order.push('server');
 					return resolve(event, { preload: () => false, transformPageChunk: () => undefined });
 				})

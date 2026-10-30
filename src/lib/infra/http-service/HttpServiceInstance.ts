@@ -82,7 +82,7 @@ export interface IHttpInstanceNormalizedRequest {
 	responseFormat: 'json' | 'blob' | 'text' | 'arrayBuffer' | 'body';
 	includeRaw: boolean;
 	timeout: number | false;
-	retry: number;
+	retry?: IHttpInstanceRetryOptions;
 	stringifyJson: (data: unknown) => string | undefined;
 	fetch: typeof fetch;
 	requestInit: Omit<RequestInit, 'method' | 'headers' | 'body'>;
@@ -93,6 +93,13 @@ export type IHttpInstanceOnError = (error: HttpServiceError<unknown>, request: I
 
 export type IHttpInstanceDoFetch = <T = unknown>(request: IHttpInstanceNormalizedRequest) => Promise<IHttpServiceResponse<T>>;
 
+export interface IHttpInstanceRetryOptions {
+	/** Number of additional attempts. Zero disables retries, including inherited policies. */
+	limit: number;
+	statuses?: readonly number[];
+	shouldRetry?: (context: { error: HttpServiceError<unknown> }) => boolean | Promise<boolean>;
+}
+
 export interface IHttpInstanceOptions<T = unknown> extends Omit<RequestInit, 'headers' | 'method'> {
 	headers?: NonNullable<RequestInit['headers']> | Record<string, string | undefined>;
 	json?: unknown;
@@ -100,7 +107,7 @@ export interface IHttpInstanceOptions<T = unknown> extends Omit<RequestInit, 'he
 	searchParams?: SearchParamsOption;
 	prefixUrl?: URL | string;
 	timeout?: number | false;
-	retry?: number;
+	retry?: IHttpInstanceRetryOptions;
 	includeRaw?: boolean;
 	responseFormat?: 'json' | 'blob' | 'text' | 'arrayBuffer' | 'body';
 	onRequest?: IHttpInstanceOnRequest;
@@ -279,14 +286,6 @@ const withTimeout = (signal: AbortSignal | null | undefined, timeout: number | f
 	};
 };
 
-const shouldRetryError = (error: unknown): boolean => {
-	if (error instanceof Error && error.name === 'AbortError') return false;
-	if (error instanceof TypeError) return true;
-	if (!(error instanceof HttpServiceError) || error.type !== HttpErrorTypes.External) return false;
-
-	return error.status === 408 || error.status === 425 || error.status === 429 || error.status >= 500;
-};
-
 const normalizeUnknownError = (error: unknown): Error => {
 	if (error instanceof Error) return error;
 	return new Error(String(error));
@@ -321,41 +320,20 @@ const parseResponse = async <T>(response: Response, request: IHttpInstanceNormal
 };
 
 const defaultDoFetch: IHttpInstanceDoFetch = async <T = unknown>(request: IHttpInstanceNormalizedRequest): Promise<IHttpServiceResponse<T>> => {
-	const maxAttempts = Math.max(1, Math.floor(request.retry) + 1);
-	let lastError: unknown;
-
-	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-		const timeoutState = withTimeout(request.requestInit.signal ?? null, request.timeout);
-		try {
-			const response = await request.fetch(request.url, {
-				...request.requestInit,
-				method: request.method,
-				headers: request.headers,
-				body: request.body,
-				signal: timeoutState.signal ?? undefined
-			});
-
-			const { data, headers, status, raw } = await parseResponse<T>(response, request);
-
-			return new HttpServiceResponse<T>({
-				headers,
-				status,
-				success: true,
-				data,
-				message: 'Request completed',
-				raw
-			});
-		} catch (error) {
-			lastError = error;
-			if (attempt >= maxAttempts || !shouldRetryError(error)) {
-				throw error;
-			}
-		} finally {
-			timeoutState.clear();
-		}
+	const timeoutState = withTimeout(request.requestInit.signal, request.timeout);
+	try {
+		const response = await request.fetch(request.url, {
+			...request.requestInit,
+			method: request.method,
+			headers: request.headers,
+			body: request.body,
+			signal: timeoutState.signal ?? undefined
+		});
+		const { data, headers, status, raw } = await parseResponse<T>(response, request);
+		return new HttpServiceResponse<T>({ headers, status, success: true, data, message: 'Request completed', raw });
+	} finally {
+		timeoutState.clear();
 	}
-
-	throw lastError;
 };
 
 const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOptions): IHttpInstanceRequestMethod => {
@@ -386,7 +364,7 @@ const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOpt
 			responseFormat,
 			includeRaw: merged.includeRaw ?? false,
 			timeout: merged.timeout ?? 20000,
-			retry: merged.retry ?? 0,
+			retry: merged.retry,
 			stringifyJson,
 			fetch: fetcher,
 			requestInit: {
@@ -404,34 +382,47 @@ const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOpt
 			}
 		};
 
-		const onRequest = options.onRequest ?? defaults.onRequest;
-		if (onRequest) {
-			await onRequest(normalizedRequest);
+		// Snapshot the policy per call: hooks and concurrent requests cannot extend its budget.
+		const policy = merged.retry;
+		const limit = policy?.limit ?? 0;
+		if (!Number.isSafeInteger(limit) || limit < 0) {
+			throw new RangeError('retry.limit must be a non-negative safe integer');
 		}
-
-		const doFetch = merged.doFetch ?? defaults.doFetch ?? defaultDoFetch;
-		try {
-			const fetched = await doFetch<T>(normalizedRequest);
-			const onResponse = options.onResponse ?? defaults.onResponse;
-			if (onResponse) {
-				await onResponse(fetched);
+		const statuses = policy?.statuses ? [...policy.statuses] : undefined;
+		const shouldRetry = policy?.shouldRetry;
+		const doFetch = merged.doFetch ?? defaultDoFetch;
+		let fetched: IHttpServiceResponse<T>;
+		for (let attempt = 0; ; attempt++) {
+			normalizedRequest.requestInit.signal?.throwIfAborted();
+			// Re-run authentication/header hooks after recovery, without accumulating headers.
+			normalizedRequest.headers = new Headers(headers);
+			await merged.onRequest?.(normalizedRequest);
+			normalizedRequest.requestInit.signal?.throwIfAborted();
+			try {
+				fetched = await doFetch<T>(normalizedRequest);
+				break;
+			} catch (error) {
+				const normalizedError =
+					error instanceof HttpServiceError
+						? error
+						: new HttpServiceError({
+								message: normalizeUnknownError(error).message,
+								original: normalizeUnknownError(error)
+							});
+				const aborted = normalizedRequest.requestInit.signal?.aborted || normalizedError.original?.name === 'AbortError';
+				const streaming = typeof ReadableStream !== 'undefined' && normalizedRequest.body instanceof ReadableStream;
+				const eligible = !aborted && !streaming && attempt < limit && (!statuses || statuses.includes(normalizedError.status));
+				if (eligible && (!shouldRetry || (await shouldRetry({ error: normalizedError })))) {
+					normalizedRequest.requestInit.signal?.throwIfAborted();
+					continue;
+				}
+				await merged.onError?.(normalizedError, normalizedRequest);
+				throw normalizedError;
 			}
-			return fetched;
-		} catch (error) {
-			const normalizedError =
-				error instanceof HttpServiceError
-					? error
-					: new HttpServiceError({
-							data: undefined,
-							message: normalizeUnknownError(error).message ?? 'Unknown error',
-							original: normalizeUnknownError(error)
-						});
-
-			const onError = options.onError ?? defaults.onError;
-			if (!onError) throw normalizedError;
-			await onError(normalizedError, normalizedRequest);
-			throw normalizedError;
 		}
+		// Consumer callback failures must never replay a successful HTTP operation.
+		await merged.onResponse?.(fetched);
+		return fetched;
 	};
 };
 

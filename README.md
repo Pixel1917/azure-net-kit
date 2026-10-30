@@ -55,10 +55,11 @@ skips checks. Review `.gitignore` before staging.
 ## Class Presenters And Async Helpers
 
 Import `createAsyncResource` and `createAsyncAction` directly from
-`@azure-net/kit/delivery`. `createAsyncHelpers()` has been removed. The error hook
-configured by `createApp().useAzureNetKitError` is still resolved per execution;
-there is no per-presenter parser or shared server error state. A custom error
-payload can be typed as the third generic: `createAsyncAction<Response, Request, CustomError>()`.
+`@azure-net/kit/delivery`. Helpers execute the action once and support `beforeSend`,
+`onSuccess`, `onError` and `fallbackResponse`. Resources additionally support `reject`.
+Schema failures are converted locally to `error.validation`. There is no global
+error resolver, `useAzureNetKitError`, or helper-level retry. Exceptions thrown by
+`onSuccess` or `onError` propagate unchanged, without replaying the action.
 
 ```ts
 import { RegisterProvider, createAsyncResource } from '@azure-net/kit/delivery';
@@ -373,3 +374,59 @@ Declare roots once, rather than creating new roots per component render.
 `name` is now a symbol, not a serializable string. Its description is for diagnostics
 only; equal descriptions never share a cache. Existing string keys passed directly
 to `CreateServiceContainer` and `cleanupProvider` remain supported.
+
+## HTTP Retries
+
+Retries belong to `HttpServiceInstance`, including calls made directly from use
+cases. With no `retry` option, a failed request is not repeated. `limit` counts
+additional attempts: `limit: 1` means at most two HTTP attempts.
+
+```ts
+const http = new HttpServiceInstance({
+	onRequest(request) {
+		const token = readAccessToken();
+		if (token) request.headers.set('Authorization', `Bearer ${token}`);
+	},
+	retry: {
+		limit: 1,
+		statuses: [401],
+		async shouldRetry({ error }) {
+			if (!isExpiredAccessToken(error.data)) return false;
+			const refreshed = await http.post('/api/auth/refresh', {
+				json: { refreshToken: readRefreshToken() },
+				retry: { limit: 0 }
+			});
+			saveTokens(refreshed.data);
+			return true;
+		}
+	}
+});
+```
+
+Token helpers above are application-defined. Read/write tokens within the current
+request on SSR, never in shared module-level user state. Coordinate concurrent
+refreshes per session/request as appropriate; the generic HTTP client does not
+implement token rotation or cross-tab coordination.
+
+- `{ limit: N }` retries any failed HTTP attempt, including network failures.
+- `statuses` restricts retries to those error statuses; `[]` allows none.
+- `shouldRetry` runs only after the status filter and only while budget remains.
+  Both synchronous and asynchronous booleans are accepted.
+- Per-request `retry` replaces the entire default policy. Use `{ limit: 0 }` to
+  disable it, **especially for refresh requests made inside `shouldRetry`**.
+  A nested HTTP call has its own budget; forgetting this override can recurse.
+- `onRequest` runs before every attempt so refreshed credentials are read again.
+  `onResponse` runs once on success; `onError` runs once on terminal HTTP failure,
+  not for intermediate failures that recover successfully.
+- Exceptions from hooks (including `shouldRetry`) propagate without further
+  recovery. They are not treated as another failed transport attempt.
+- Cancelled requests and streaming request bodies are never replayed. Cancellation
+  is checked again after awaiting recovery; the callback must manage its own async
+  work and cancellation if needed.
+- `limit` must be a finite non-negative safe integer. There is no implicit retry
+  delay/backoff. Timeout is applied separately to each HTTP attempt.
+
+Retries are opt-in for all HTTP methods. Do not blindly retry writes after network
+errors: the server may already have applied them. Use a narrow status/code policy
+or backend-supported idempotency keys. Numerical `retry: 3` is no longer supported;
+write `retry: { limit: 3 }` instead.

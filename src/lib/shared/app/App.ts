@@ -3,8 +3,7 @@ import { hydratable } from 'svelte';
 import { getContextInternals } from '../../shared/request-context/Internal.js';
 import { BROWSER } from '../../external/tools/index.js';
 import { RequestContext, type ContextData } from '../../shared/request-context/Internal.js';
-import { AppError, AzureNetKitInternalError, type IAppError } from '../app-error/AppError.js';
-import { bindAzureNetKitErrorResolver, type AsyncHelperRetry, type AzureNetKitErrorResolver } from '../app-error/ErrorRuntime.js';
+import { AzureNetKitInternalError } from '../app-error/AppError.js';
 import { executeServerMiddlewares, type ServerMiddlewareClass } from './middleware/ServerMiddleware.js';
 import type { Handle, HandleFetch, HandleServerError, HandleClientError, Reroute, ServerInit, Transport } from '@sveltejs/kit/hooks';
 import type { RequestEvent } from '@sveltejs/kit';
@@ -19,7 +18,6 @@ type BuilderFlags = Partial<
 	Record<
 		| 'useTranslations'
 		| 'useBoot'
-		| 'use'
 		| 'useClient'
 		| 'useClientInit'
 		| 'useClientError'
@@ -27,7 +25,6 @@ type BuilderFlags = Partial<
 		| 'useServer'
 		| 'useServerError'
 		| 'useServerFetch'
-		| 'useAzureNetKitError'
 		| 'useReroute'
 		| 'useTransport',
 		true
@@ -36,13 +33,6 @@ type BuilderFlags = Partial<
 type WithFlag<TFlags extends BuilderFlags, TKey extends keyof BuilderFlags> = TFlags & Record<TKey, true>;
 
 type OnceMethod<TFlags extends BuilderFlags, TKey extends keyof BuilderFlags, TMethod> = TFlags[TKey] extends true ? object : TMethod;
-
-export interface AppUniversalLifecycleContext {
-	isClient: boolean;
-	isServer: boolean;
-	requestContext?: ContextData;
-	event?: RequestEvent;
-}
 
 export interface AppClientLifecycleContext {
 	useMiddlewares: (middlewares: readonly ClientMiddlewareClass[]) => void;
@@ -70,16 +60,6 @@ export type AppServerFetchContext = Parameters<HandleFetch>[0] & {
 	requestContext: ContextData;
 };
 
-export interface AppAzureNetKitErrorContext {
-	error: AppError;
-	retry: AsyncHelperRetry;
-	isClient: boolean;
-	isServer: boolean;
-	requestContext?: ContextData;
-	event?: RequestEvent;
-}
-
-export type AppUniversalLifecycleCallback = (context: AppUniversalLifecycleContext) => MaybePromise<void>;
 export type AppClientLifecycleCallback = (context: AppClientLifecycleContext) => MaybePromise<void>;
 export type AppClientInitLifecycleCallback = (context: AppClientInitLifecycleContext) => MaybePromise<void>;
 export type AppClientErrorCallback = (context: AppClientErrorContext) => ReturnType<HandleClientError>;
@@ -87,7 +67,6 @@ export type AppServerInitLifecycleCallback = ServerInit;
 export type AppServerLifecycleCallback = (context: AppServerLifecycleContext) => MaybePromise<Response | void>;
 export type AppServerErrorCallback = (context: AppServerErrorContext) => ReturnType<HandleServerError>;
 export type AppServerFetchCallback = (context: AppServerFetchContext) => ReturnType<HandleFetch>;
-export type AppAzureNetKitErrorCallback = (context: AppAzureNetKitErrorContext) => MaybePromise<IAppError & object>;
 export type AppRerouteCallback = Reroute;
 
 export interface AppBootContext {
@@ -107,7 +86,6 @@ export type CreateAppBuilder<TFlags extends BuilderFlags = object> = OnceMethod<
 		'useTranslations',
 		{ useTranslations(manager: TranslationManagerSource): CreateAppBuilder<WithFlag<TFlags, 'useTranslations'>> }
 	> &
-	OnceMethod<TFlags, 'use', { use(callback: AppUniversalLifecycleCallback): CreateAppBuilder<WithFlag<TFlags, 'use'>> }> &
 	OnceMethod<TFlags, 'useClient', { useClient(callback: AppClientLifecycleCallback): CreateAppBuilder<WithFlag<TFlags, 'useClient'>> }> &
 	OnceMethod<
 		TFlags,
@@ -145,13 +123,6 @@ export type CreateAppBuilder<TFlags extends BuilderFlags = object> = OnceMethod<
 			useServerFetch(callback: AppServerFetchCallback): CreateAppBuilder<WithFlag<TFlags, 'useServerFetch'>>;
 		}
 	> &
-	OnceMethod<
-		TFlags,
-		'useAzureNetKitError',
-		{
-			useAzureNetKitError(callback: AppAzureNetKitErrorCallback): CreateAppBuilder<WithFlag<TFlags, 'useAzureNetKitError'>>;
-		}
-	> &
 	OnceMethod<TFlags, 'useReroute', { useReroute(callback: AppRerouteCallback): CreateAppBuilder<WithFlag<TFlags, 'useReroute'>> }> &
 	OnceMethod<TFlags, 'useTransport', { useTransport(transport: Transport): CreateAppBuilder<WithFlag<TFlags, 'useTransport'>> }>;
 
@@ -177,7 +148,6 @@ type LifecycleFlags = Partial<Record<LifecycleKind, true>>;
 interface AppCallbacks {
 	useTranslations?: TranslationManagerSource;
 	useBoot?: AppBootCallback;
-	use?: AppUniversalLifecycleCallback;
 	useClient?: AppClientLifecycleCallback;
 	useClientInit?: AppClientInitLifecycleCallback;
 	useClientError?: AppClientErrorCallback;
@@ -185,7 +155,6 @@ interface AppCallbacks {
 	useServer?: AppServerLifecycleCallback;
 	useServerError?: AppServerErrorCallback;
 	useServerFetch?: AppServerFetchCallback;
-	useAzureNetKitError?: AppAzureNetKitErrorCallback;
 	useReroute?: AppRerouteCallback;
 	useTransport?: Transport;
 }
@@ -250,10 +219,6 @@ const createBuilder = (callbacks: AppCallbacks): CreateAppBuilder => {
 			setCallback(callbacks, 'useBoot', callback);
 			return builder;
 		},
-		use(callback: AppUniversalLifecycleCallback) {
-			setCallback(callbacks, 'use', callback);
-			return builder;
-		},
 
 		useClient(callback: AppClientLifecycleCallback) {
 			setCallback(callbacks, 'useClient', callback);
@@ -290,11 +255,6 @@ const createBuilder = (callbacks: AppCallbacks): CreateAppBuilder => {
 			return builder;
 		},
 
-		useAzureNetKitError(callback: AppAzureNetKitErrorCallback) {
-			setCallback(callbacks, 'useAzureNetKitError', callback);
-			return builder;
-		},
-
 		useReroute(callback: AppRerouteCallback) {
 			setCallback(callbacks, 'useReroute', callback);
 			return builder;
@@ -318,45 +278,15 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 
 	callback(createBuilder(callbacks));
 
-	const errorResolver: AzureNetKitErrorResolver | undefined = callbacks.useAzureNetKitError
-		? (error, retry) => {
-				const requestContext = BROWSER ? undefined : getRequestContext();
-				return callbacks.useAzureNetKitError!({
-					error,
-					retry,
-					isClient: BROWSER,
-					isServer: !BROWSER,
-					requestContext,
-					event: requestContext?.event
-				});
-			}
-		: undefined;
-
-	const bindErrorResolver = (requestContext?: ContextData) => {
-		bindAzureNetKitErrorResolver(errorResolver, requestContext);
-	};
-
 	const runClient = (kind: Extract<LifecycleKind, 'client' | 'clientInit'>) => {
 		if (!BROWSER) return undefined;
-		bindErrorResolver();
 
 		const flags = getLifecycleFlags(appKey);
 		if (flags[kind]) return kind === 'clientInit' ? translationInitPromise : undefined;
 		flags[kind] = true;
 
 		if (kind === 'clientInit') {
-			const initialize = () => {
-				const universalContext: AppUniversalLifecycleContext = {
-					isClient: true,
-					isServer: false
-				};
-				const universalResult = callbacks.use?.(universalContext);
-				if (universalResult && typeof (universalResult as Promise<void>).then === 'function') {
-					return (universalResult as Promise<void>).then(() => callbacks.useClientInit?.());
-				}
-
-				return callbacks.useClientInit?.();
-			};
+			const initialize = () => callbacks.useClientInit?.();
 			if (!callbacks.useTranslations) return initialize();
 			translationInitPromise = getTranslationManagerLifecycle(callbacks.useTranslations)
 				.initializeClient()
@@ -390,31 +320,11 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 
 	const runServerError: HandleServerError = (input) => {
 		if (BROWSER) return undefined;
-		const requestContext = getServerRequestContext();
-		bindErrorResolver(requestContext);
-
-		try {
-			const result = callbacks.useServerError?.({
-				requestContext,
-				...input,
-				useLogger
-			});
-
-			if (result && typeof (result as Promise<unknown>).then === 'function') {
-				return Promise.resolve(result).finally(() => bindAzureNetKitErrorResolver(undefined, requestContext));
-			}
-
-			bindAzureNetKitErrorResolver(undefined, requestContext);
-			return result;
-		} catch (error) {
-			bindAzureNetKitErrorResolver(undefined, requestContext);
-			throw error;
-		}
+		return callbacks.useServerError?.({ requestContext: getServerRequestContext(), ...input, useLogger });
 	};
 
 	const runClientError: HandleClientError = (input) => {
 		if (!BROWSER) return undefined;
-		bindErrorResolver();
 
 		return callbacks.useClientError?.({
 			...input
@@ -443,40 +353,24 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 					})
 			: originalResolve;
 		const requestContext = getServerRequestContext();
-		bindErrorResolver(requestContext);
 
-		try {
-			const flags = getLifecycleFlags(appKey, requestContext);
+		const flags = getLifecycleFlags(appKey, requestContext);
 
-			if (!flags.server) {
-				flags.server = true;
-				if (translations) await translations.preloadTranslation();
+		if (!flags.server) {
+			flags.server = true;
+			if (translations) await translations.preloadTranslation();
 
-				const universalResult = callbacks.use?.({
-					isClient: false,
-					isServer: true,
-					requestContext,
-					event
-				});
+			const serverResult = await callbacks.useServer?.({
+				requestContext,
+				event,
+				resolve,
+				useMiddlewares: executeServerMiddlewares
+			});
 
-				if (universalResult && typeof (universalResult as Promise<void>).then === 'function') {
-					await universalResult;
-				}
-
-				const serverResult = await callbacks.useServer?.({
-					requestContext,
-					event,
-					resolve,
-					useMiddlewares: executeServerMiddlewares
-				});
-
-				if (serverResult) return serverResult;
-			}
-
-			return await resolve(event);
-		} finally {
-			bindAzureNetKitErrorResolver(undefined, requestContext);
+			if (serverResult) return serverResult;
 		}
+
+		return await resolve(event);
 	};
 
 	const runBoot = () => {
