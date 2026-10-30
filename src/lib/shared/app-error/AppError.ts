@@ -64,6 +64,7 @@ export class AppError<T = unknown> extends Error {
 				this.type = ErrorTypes.Http;
 				this.external = this.error.type === HttpErrorTypes.External;
 				this.statusCode = this.error.status;
+				this.validation = this.error?.validation?.getSelfTypedData<T>();
 				break;
 			case this.error instanceof SchemaFail:
 				this.type = ErrorTypes.Schema;

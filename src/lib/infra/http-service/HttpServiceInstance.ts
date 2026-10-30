@@ -1,5 +1,6 @@
 import { BROWSER } from '../../external/tools/index.js';
 import { RequestContext } from '../../shared/request-context/Internal.js';
+import { type RequestErrors, SchemaFail } from '../../delivery/schema/Schema.js';
 
 export type SearchParamsInit = string | string[][] | Record<string, string> | URLSearchParams | undefined;
 export type SearchParamsOption = SearchParamsInit | Record<string, string | number | boolean | undefined> | Array<Array<string | number | boolean>>;
@@ -30,6 +31,7 @@ export interface IHttpServiceError<T = unknown> {
 	message: string;
 	status: number;
 	data?: T;
+	validation?: unknown;
 }
 
 export class HttpServiceResponse<T> implements IHttpServiceResponse<T> {
@@ -62,6 +64,7 @@ export class HttpServiceError<T> extends Error implements IHttpServiceError<T> {
 	type: HttpErrorTypes;
 	original?: Error;
 	response?: Response;
+	validation?: SchemaFail<Record<string, unknown>>;
 
 	constructor({ status = 500, data, message = 'unknown error', original, type = HttpErrorTypes.Internal, response }: Partial<IHttpServiceError<T>>) {
 		super(message);
@@ -71,6 +74,14 @@ export class HttpServiceError<T> extends Error implements IHttpServiceError<T> {
 		this.original = original;
 		this.response = response;
 		this.type = type;
+	}
+
+	addAsValidation(validation: RequestErrors<Record<string, unknown>>) {
+		this.validation = new SchemaFail(validation);
+	}
+
+	getSelfTypedData<T = unknown>() {
+		return <T>this.data;
 	}
 }
 
