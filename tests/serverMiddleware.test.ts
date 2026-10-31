@@ -1,7 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { describe, expect, it, vi } from 'vitest';
 import { initializeRequestContext, type ContextData } from '../src/lib/shared/request-context/Internal.js';
-import { executeServerMiddlewares, type IServerMiddleware, type ServerMiddlewareContext } from '../src/lib/shared/app/middleware/ServerMiddleware.js';
+import {
+	ServerMiddlewareManager,
+	executeServerMiddlewares,
+	type IServerMiddleware,
+	type ServerMiddlewareContext
+} from '../src/lib/shared/app/middleware/ServerMiddleware.js';
 const makeContext = (path = '/', referer = '') =>
 	({
 		state: {},
@@ -71,5 +76,40 @@ describe('server middleware classes', () => {
 			}
 		}
 		await executeServerMiddlewares([Read]);
+	});
+});
+
+describe('ServerMiddlewareManager', () => {
+	it('reuses definitions across concurrent requests without retaining instances or request data', async () => {
+		const storage = new AsyncLocalStorage<ContextData>();
+		initializeRequestContext(() => storage.getStore());
+		const seen: string[] = [];
+		class Read {
+			calls = 0;
+			async execute({ event, next }: ServerMiddlewareContext) {
+				expect(++this.calls).toBe(1);
+				await Promise.resolve();
+				seen.push(event.url.pathname);
+				next();
+			}
+		}
+		const definitions = [Read];
+		const manager = new ServerMiddlewareManager(definitions);
+		definitions.length = 0;
+		await Promise.all(Array.from({ length: 30 }, (_, i) => storage.run(makeContext(`/${i}`), () => manager.execute())));
+		expect(new Set(seen).size).toBe(30);
+		await storage.run(makeContext('/again'), () => manager.execute());
+		expect(seen.at(-1)).toBe('/again');
+	});
+	it('propagates redirects unchanged', async () => {
+		initializeRequestContext(() => makeContext());
+		const manager = new ServerMiddlewareManager([
+			class {
+				execute({ next }: ServerMiddlewareContext) {
+					next('/auth', 303);
+				}
+			}
+		]);
+		await expect(manager.execute()).rejects.toMatchObject({ status: 303, location: '/auth' });
 	});
 });

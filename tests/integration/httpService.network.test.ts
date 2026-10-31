@@ -46,6 +46,7 @@ describe('HttpServiceInstance with native fetch and a real HTTP server', () => {
 	it('refreshes and repeats a POST with the same body and new authorization', async () => {
 		let token = 'old';
 		let attempts = 0;
+		const sessionHttp = new HttpServiceInstance({ prefixUrl: origin });
 		const http = new HttpServiceInstance({
 			prefixUrl: origin,
 			onRequest: (r) => {
@@ -55,8 +56,8 @@ describe('HttpServiceInstance with native fetch and a real HTTP server', () => {
 			retry: {
 				limit: 1,
 				statuses: [401],
-				shouldRetry: async ({ http }) => {
-					const result = await http.post<{ token: string }>('/refresh', { retry: { limit: 0 } });
+				shouldRetry: async () => {
+					const result = await sessionHttp.post<{ token: string }>('/refresh');
 					token = result.data.token;
 					return true;
 				}
@@ -64,7 +65,7 @@ describe('HttpServiceInstance with native fetch and a real HTTP server', () => {
 		});
 		const response = await http.post('/auth', { json: { name: 'Ada' } });
 		expect(response.data).toEqual({ ok: true });
-		expect(attempts).toBe(3);
+		expect(attempts).toBe(2);
 	});
 	it('times out during body parsing, not just waiting for response headers', async () => {
 		await expect(new HttpServiceInstance({ prefixUrl: origin, timeout: 100 }).get('/slow')).rejects.toMatchObject({

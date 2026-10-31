@@ -4,11 +4,8 @@ import { getContextInternals } from '../../shared/request-context/Internal.js';
 import { BROWSER } from '../../external/tools/index.js';
 import { RequestContext, type ContextData } from '../../shared/request-context/Internal.js';
 import { AzureNetKitInternalError } from '../app-error/AppError.js';
-import { executeServerMiddlewares, type ServerMiddlewareClass } from './middleware/ServerMiddleware.js';
 import type { Handle, HandleFetch, HandleServerError, HandleClientError, Reroute, ServerInit, Transport } from '@sveltejs/kit/hooks';
 import type { RequestEvent } from '@sveltejs/kit';
-import { beforeNavigate } from '$app/navigation';
-import { executeClientMiddlewares, type ClientMiddlewareClass } from './middleware/ClientMiddleware.js';
 import { useLogger } from '../logger/index.js';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -34,9 +31,7 @@ type WithFlag<TFlags extends BuilderFlags, TKey extends keyof BuilderFlags> = TF
 
 type OnceMethod<TFlags extends BuilderFlags, TKey extends keyof BuilderFlags, TMethod> = TFlags[TKey] extends true ? object : TMethod;
 
-export interface AppClientLifecycleContext {
-	useMiddlewares: (middlewares: readonly ClientMiddlewareClass[]) => void;
-}
+export type AppClientLifecycleContext = void;
 
 export type AppClientInitLifecycleContext = void;
 
@@ -48,7 +43,6 @@ export interface AppServerLifecycleContext {
 	requestContext: ContextData;
 	event: RequestEvent;
 	resolve: Resolve;
-	useMiddlewares: (middlewares: readonly ServerMiddlewareClass[]) => Promise<void>;
 }
 
 export type AppServerErrorContext = Parameters<HandleServerError>[0] & {
@@ -272,7 +266,6 @@ const createBuilder = (callbacks: AppCallbacks): CreateAppBuilder => {
 export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateAppInstance => {
 	const appKey = {};
 	const callbacks: AppCallbacks = {};
-	let clientInitialized = false;
 	let translationInitPromise: Promise<void> | undefined;
 	let serverInitPromise: Promise<void> | undefined;
 
@@ -298,18 +291,7 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 				});
 			return translationInitPromise;
 		}
-		let internalMiddlewares: readonly ClientMiddlewareClass[] = [];
-		if (!clientInitialized) {
-			beforeNavigate((navigation) => {
-				executeClientMiddlewares(internalMiddlewares, navigation);
-			});
-			clientInitialized = true;
-		}
-		return callbacks.useClient?.({
-			useMiddlewares: (middlewares: readonly ClientMiddlewareClass[]) => {
-				internalMiddlewares = middlewares;
-			}
-		});
+		return callbacks.useClient?.();
 	};
 
 	const runServerInit: ServerInit = () => {
@@ -363,8 +345,7 @@ export const createApp = (callback: (app: CreateAppBuilder) => unknown): CreateA
 			const serverResult = await callbacks.useServer?.({
 				requestContext,
 				event,
-				resolve,
-				useMiddlewares: executeServerMiddlewares
+				resolve
 			});
 
 			if (serverResult) return serverResult;

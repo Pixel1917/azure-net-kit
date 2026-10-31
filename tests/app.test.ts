@@ -1,3 +1,4 @@
+import { ServerMiddlewareManager } from '../src/lib/shared/app/index.js';
 import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/lib/shared/app/index.js';
@@ -407,15 +408,15 @@ describe('createApp', () => {
 		};
 
 		const app = createApp((app) =>
-			app.useServer(async ({ useMiddlewares }) => {
-				await useMiddlewares([
+			app.useServer(async () => {
+				await new ServerMiddlewareManager([
 					class {
 						execute = first;
 					},
 					class {
 						execute = second;
 					}
-				]);
+				]).execute();
 			})
 		);
 
@@ -432,12 +433,12 @@ describe('createApp', () => {
 		initializeRequestContext(() => context as never);
 
 		const app = createApp((app) =>
-			app.useServer(async ({ useMiddlewares }) => {
-				await useMiddlewares([
+			app.useServer(async () => {
+				await new ServerMiddlewareManager([
 					class {
 						execute() {}
 					}
-				]);
+				]).execute();
 			})
 		);
 
@@ -455,12 +456,12 @@ describe('createApp', () => {
 
 		const resolve = vi.fn(() => new Response('ok'));
 		const app = createApp((app) =>
-			app.useServer(async ({ useMiddlewares }) => {
-				await useMiddlewares([
+			app.useServer(async () => {
+				await new ServerMiddlewareManager([
 					class {
 						execute() {}
 					}
-				]);
+				]).execute();
 			})
 		);
 

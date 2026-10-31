@@ -1,6 +1,7 @@
 import { ensureRoute, type EnsureRoute } from './Shared.js';
 import { page } from '$app/state';
 import { goto } from '$app/navigation';
+import { BROWSER } from '../../../external/tools/index.js';
 import type { BeforeNavigate, GotoOptions } from '$app/navigation';
 import type { ReadonlyURL } from '$app/state';
 import type { IMiddleware, MiddlewareClass } from './Types.js';
@@ -17,6 +18,20 @@ export interface IClientMiddleware extends IMiddleware<ClientMiddlewareContext, 
 	execute(context: ClientMiddlewareContext): undefined;
 }
 export type ClientMiddlewareClass = MiddlewareClass<IClientMiddleware>;
+
+/** Execute manually, or pass the navigation supplied by beforeNavigate. */
+export class ClientMiddlewareManager {
+	private readonly middlewares: readonly ClientMiddlewareClass[];
+
+	constructor(middlewares: readonly ClientMiddlewareClass[]) {
+		this.middlewares = [...middlewares];
+	}
+
+	execute(navigation?: BeforeNavigate): void {
+		if (!BROWSER) return;
+		executeClientMiddlewares(this.middlewares, navigation);
+	}
+}
 
 export const executeClientMiddlewares = (middlewares: readonly ClientMiddlewareClass[], navigation?: BeforeNavigate): void => {
 	const from = navigation?.from?.url ?? undefined;

@@ -1,3 +1,4 @@
+import { ServerMiddlewareManager } from '../src/lib/shared/app/index.js';
 import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { performance } from 'node:perf_hooks';
 import { describe, expect, it } from 'vitest';
@@ -79,8 +80,8 @@ describe('createApp performance', () => {
 		}
 		const middlewares = [Pass, Pass, Pass, Pass, Pass];
 		const app = createApp((app) =>
-			app.useServer(async ({ useMiddlewares }) => {
-				await useMiddlewares(middlewares);
+			app.useServer(async () => {
+				await new ServerMiddlewareManager(middlewares).execute();
 			})
 		);
 

@@ -189,13 +189,13 @@ export {};
 ```
 
 ```ts
-import { createApp } from '@azure-net/kit';
+import { createApp, ServerMiddlewareManager } from '@azure-net/kit';
 import { RequestContext } from '@azure-net/kit/server-context';
 
 export const { register } = createApp((app) =>
 	app
-		.useServer(async ({ event, resolve, useMiddlewares }) => {
-			await useMiddlewares([ServerAuth]);
+		.useServer(async ({ event, resolve }) => {
+			await new ServerMiddlewareManager([ServerAuth]).execute();
 			return resolve(event);
 		})
 		.useBoot(({ state }) => {
@@ -300,7 +300,15 @@ only when its turn is reached, on every request/navigation. Resolve dependencies
 inside that instance, not into module-level request-specific variables.
 
 ```ts
-import type { IServerMiddleware, ServerMiddlewareContext, IClientMiddleware, ClientMiddlewareContext } from '@azure-net/kit';
+import {
+	ServerMiddlewareManager,
+	ClientMiddlewareManager,
+	type IServerMiddleware,
+	type ServerMiddlewareContext,
+	type IClientMiddleware,
+	type ClientMiddlewareContext
+} from '@azure-net/kit';
+import { beforeNavigate } from '$app/navigation';
 
 class ServerAuth implements IServerMiddleware {
 	async execute({ event, next }: ServerMiddlewareContext) {
@@ -317,15 +325,25 @@ class ClientGuard implements IClientMiddleware {
 	}
 }
 
+const serverMiddlewares = new ServerMiddlewareManager([ServerAuth]);
+const clientMiddlewares = new ClientMiddlewareManager([ClientGuard]);
+
 app
-	.useServer(async ({ useMiddlewares, event, resolve }) => {
-		await useMiddlewares([ServerAuth]);
+	.useServer(async ({ event, resolve }) => {
+		await serverMiddlewares.execute();
 		return resolve(event);
 	})
-	.useClient(({ useMiddlewares }) => {
-		useMiddlewares([ClientGuard]);
+	.useClient(() => {
+		beforeNavigate((navigation) => clientMiddlewares.execute(navigation));
 	});
+
+// Run the same checks without navigating or registering another subscription.
+clientMiddlewares.execute();
 ```
+
+Managers snapshot the constructor list and retain no request data or middleware instances, so they can be declared at module scope. `ServerMiddlewareManager.execute()` resolves the current request each time. `ClientMiddlewareManager.execute()` uses the current page URL; `from` and `navigation` are undefined in a manual run. Client execution is a no-op during SSR.
+
+`createApp` no longer injects `useMiddlewares` or subscribes to navigation itself. Register `beforeNavigate` synchronously inside `useClient`, before any `await`. A manual run does not create a navigation to cancel: omitting `next()` only stops that run. Avoid calling a manager from middleware that it executes, including indirectly through HTTP recovery. Re-running a full chain also re-runs analytics; use a smaller manager if only auth state must be synchronized.
 
 `IMiddleware<Context, Result>` is the common interface. Client `execute` is strictly
 synchronous (`undefined` return, normally `return next()`); server `execute` can
@@ -382,7 +400,11 @@ cases. With no `retry` option, a failed request is not repeated. `limit` counts
 additional attempts: `limit: 1` means at most two HTTP attempts.
 
 ```ts
+// A separate session client: no authentication recovery hooks.
+const sessionHttp = new HttpServiceInstance({ prefixUrl: apiUrl });
+
 const http = new HttpServiceInstance({
+	prefixUrl: apiUrl,
 	onRequest(request) {
 		const token = readAccessToken();
 		if (token) request.headers.set('Authorization', `Bearer ${token}`);
@@ -390,11 +412,10 @@ const http = new HttpServiceInstance({
 	retry: {
 		limit: 1,
 		statuses: [401],
-		async shouldRetry({ error, http }) {
+		async shouldRetry({ error }) {
 			if (!isExpiredAccessToken(error.data)) return false;
-			const refreshed = await http.post('/api/auth/refresh', {
-				json: { refreshToken: readRefreshToken() },
-				retry: { limit: 0 }
+			const refreshed = await sessionHttp.post('/api/auth/refresh', {
+				json: { refreshToken: readRefreshToken() }
 			});
 			saveTokens(refreshed.data);
 			return true;
@@ -413,8 +434,8 @@ implement token rotation or cross-tab coordination.
 - `shouldRetry` runs only after the status filter and only while budget remains.
   Both synchronous and asynchronous booleans are accepted.
 - Per-request `retry` replaces the entire default policy. Use `{ limit: 0 }` to
-  disable it, **especially for refresh requests made inside `shouldRetry`**.
-  A nested HTTP call has its own budget; forgetting this override can recurse.
+  disable it. A separate session client with no retry policy does not inherit
+  the application client's retries or hooks.
 - `onRequest` runs before every attempt so refreshed credentials are read again.
   `onResponse` runs once on success; `onError` runs once on terminal HTTP failure,
   not for intermediate failures that recover successfully.
@@ -436,8 +457,8 @@ HTTP hooks use these signatures:
 ```ts
 retry: {
  limit: 1,
- shouldRetry: async ({ error, http }) => {
-  // The same client instance. Nested refresh must specify retry: { limit: 0 }.
+ shouldRetry: async ({ error }) => {
+  // Delegate refresh to your session service with a separate HTTP client.
   return false;
  }
 },
@@ -464,5 +485,6 @@ BigInt; provide `stringifyJson` if a custom wire format is required.
 
 Removing `http` from `onError` does not prevent recursion through a client captured
 in a closure. Do not initiate the same failing operation from its error handler.
-Refresh via `shouldRetry` still requires an explicit `retry: { limit: 0 }` on the
-nested refresh call. Limits apply per HTTP call, not to arbitrary nested user code.
+Neither `shouldRetry` nor `onError` exposes the HTTP client. Use a separate
+session client without recovery hooks for refresh/logout. Limits apply per HTTP
+call, not to arbitrary nested user code.

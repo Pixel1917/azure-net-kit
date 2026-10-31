@@ -4,7 +4,7 @@ import { HttpServiceInstance } from '../src/lib/infra/http-service/HttpServiceIn
 import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 afterEach(() => vi.unstubAllGlobals());
 describe('browser HTTP requests', () => {
-	it('uses browser fetch, never requests server context, and retries with the same client', async () => {
+	it('uses browser fetch, never requests server context, and exposes only error to retry callbacks', async () => {
 		const context = vi.fn(() => {
 			throw new Error('Server context accessed in browser');
 		});
@@ -15,8 +15,8 @@ describe('browser HTTP requests', () => {
 		const http = new HttpServiceInstance({
 			retry: {
 				limit: 1,
-				shouldRetry: ({ http: client }) => {
-					expect(client).toBe(http);
+				shouldRetry: (context) => {
+					expect(Object.keys(context)).toEqual(['error']);
 					return true;
 				}
 			}

@@ -108,7 +108,7 @@ export interface IHttpInstanceRetryOptions {
 	/** Number of additional attempts. Zero disables retries, including inherited policies. */
 	limit: number;
 	statuses?: readonly number[];
-	shouldRetry?: (context: { error: HttpServiceError<unknown>; http: IHttpServiceInstance }) => boolean | Promise<boolean>;
+	shouldRetry?: (context: { error: HttpServiceError<unknown> }) => boolean | Promise<boolean>;
 }
 
 export interface IHttpInstanceOptions<T = unknown> extends Omit<RequestInit, 'headers' | 'method'> {
@@ -361,7 +361,7 @@ const waitForSignal = <T>(value: T | PromiseLike<T>, signal?: AbortSignal | null
 	});
 };
 
-const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOptions, http: IHttpServiceInstance): IHttpInstanceRequestMethod => {
+const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOptions): IHttpInstanceRequestMethod => {
 	return async <T = unknown>(url: string | URL, options: IHttpInstanceOptions<T> = {}): Promise<IHttpServiceResponse<T>> => {
 		const merged = mergeOptions<T>(defaults, options);
 		const stringifyJson = merged.stringifyJson ?? stringifyJsonFunc;
@@ -449,7 +449,7 @@ const makeMethod = (method: HttpInstanceFetchMethods, defaults: IHttpInstanceOpt
 				const aborted = sourceSignal?.aborted || normalizedError.original?.name === 'AbortError';
 				const streaming = typeof ReadableStream !== 'undefined' && normalizedRequest.body instanceof ReadableStream;
 				const eligible = !aborted && !streaming && attempt < limit && (!statuses || statuses.includes(normalizedError.status));
-				if (eligible && (!shouldRetry || (await waitForSignal(shouldRetry({ error: normalizedError, http }), sourceSignal)))) {
+				if (eligible && (!shouldRetry || (await waitForSignal(shouldRetry({ error: normalizedError }), sourceSignal)))) {
 					normalizedRequest.requestInit.signal?.throwIfAborted();
 					continue;
 				}
@@ -476,12 +476,12 @@ export class HttpServiceInstance implements IHttpServiceInstance {
 
 	constructor(config: IHttpInstanceOptions = {}) {
 		this.defaults = { ...config };
-		this.get = makeMethod(HttpInstanceFetchMethods.GET, this.defaults, this);
-		this.post = makeMethod(HttpInstanceFetchMethods.POST, this.defaults, this);
-		this.put = makeMethod(HttpInstanceFetchMethods.PUT, this.defaults, this);
-		this.delete = makeMethod(HttpInstanceFetchMethods.DELETE, this.defaults, this);
-		this.patch = makeMethod(HttpInstanceFetchMethods.PATCH, this.defaults, this);
-		this.head = makeMethod(HttpInstanceFetchMethods.HEAD, this.defaults, this);
-		this.options = makeMethod(HttpInstanceFetchMethods.OPTIONS, this.defaults, this);
+		this.get = makeMethod(HttpInstanceFetchMethods.GET, this.defaults);
+		this.post = makeMethod(HttpInstanceFetchMethods.POST, this.defaults);
+		this.put = makeMethod(HttpInstanceFetchMethods.PUT, this.defaults);
+		this.delete = makeMethod(HttpInstanceFetchMethods.DELETE, this.defaults);
+		this.patch = makeMethod(HttpInstanceFetchMethods.PATCH, this.defaults);
+		this.head = makeMethod(HttpInstanceFetchMethods.HEAD, this.defaults);
+		this.options = makeMethod(HttpInstanceFetchMethods.OPTIONS, this.defaults);
 	}
 }

@@ -1,5 +1,8 @@
+import { beforeNavigate } from '$app/navigation';
 import { expectTypeOf } from 'vitest';
 import {
+	ServerMiddlewareManager,
+	ClientMiddlewareManager,
 	CompositionRoot,
 	createApp,
 	createAsyncSignal,
@@ -30,10 +33,10 @@ class ClientGuard implements IClientMiddleware {
 createApp((app) =>
 	app
 		.useTranslations(translations)
-		.useServer(async ({ useMiddlewares }) => {
-			await useMiddlewares([ServerGuard]);
+		.useServer(async () => {
+			await new ServerMiddlewareManager([ServerGuard]).execute();
 		})
-		.useClient(({ useMiddlewares }) => useMiddlewares([ClientGuard]))
+		.useClient(() => beforeNavigate((navigation) => new ClientMiddlewareManager([ClientGuard]).execute(navigation)))
 );
 function consumerTypes() {
 	expectTypeOf(context.resolve().user.id).toEqualTypeOf<number>();

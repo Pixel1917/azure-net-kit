@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
-import {
-	HttpServiceInstance,
-	HttpServiceError,
-	type IHttpInstanceOptions,
-	type IHttpServiceInstance
-} from '../src/lib/infra/http-service/HttpServiceInstance.js';
+import { HttpServiceInstance, HttpServiceError, type IHttpInstanceOptions } from '../src/lib/infra/http-service/HttpServiceInstance.js';
 
 const json = (status = 200, data: unknown = { ok: true }) =>
 	new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
@@ -194,10 +189,11 @@ describe('HTTP bounded retry and hook failures', () => {
 		expect(doFetch).toHaveBeenCalledTimes(1001);
 		expect(onError).toHaveBeenCalledTimes(1);
 	});
-	it('does not call shouldRetry recursively for an explicitly disabled nested refresh', async () => {
+	it('does not re-enter shouldRetry when the separate session client fails', async () => {
 		fetchMock.mockImplementation(async () => json(401));
-		const predicate = vi.fn(async ({ http }: { http: IHttpServiceInstance }) => {
-			await http.post('/refresh', { retry: { limit: 0 } });
+		const sessionHttp = new HttpServiceInstance();
+		const predicate = vi.fn(async () => {
+			await sessionHttp.post('/refresh');
 			return true;
 		});
 		await expect(new HttpServiceInstance({ retry: { limit: 5, shouldRetry: predicate } }).get('/data')).rejects.toMatchObject({ status: 401 });

@@ -19,7 +19,9 @@ export {
 	type CreateAppInstance
 } from './App.js';
 export type { IClientMiddleware, ClientMiddlewareContext, ClientMiddlewareClass } from './middleware/ClientMiddleware.js';
+export { ClientMiddlewareManager } from './middleware/ClientMiddleware.js';
 export type { IServerMiddleware, ServerMiddlewareContext, ServerMiddlewareClass } from './middleware/ServerMiddleware.js';
+export { ServerMiddlewareManager } from './middleware/ServerMiddleware.js';
 export type { IMiddleware, MiddlewareClass } from './middleware/Types.js';
 export type { EnsureRoute, EnsureRouteSource, EnsureRouteTarget } from './middleware/Shared.js';
 

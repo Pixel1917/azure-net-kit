@@ -18,6 +18,19 @@ export interface IServerMiddleware extends IMiddleware<ServerMiddlewareContext, 
 }
 export type ServerMiddlewareClass = MiddlewareClass<IServerMiddleware>;
 
+/** Stores definitions only; request context and instances are resolved per execution. */
+export class ServerMiddlewareManager {
+	private readonly middlewares: readonly ServerMiddlewareClass[];
+
+	constructor(middlewares: readonly ServerMiddlewareClass[]) {
+		this.middlewares = [...middlewares];
+	}
+
+	execute(): Promise<void> {
+		return executeServerMiddlewares(this.middlewares);
+	}
+}
+
 export const executeServerMiddlewares = async (middlewares: readonly ServerMiddlewareClass[]) => {
 	if (!BROWSER && middlewares.length) {
 		const event: RequestEvent | undefined = RequestContext.current().event;

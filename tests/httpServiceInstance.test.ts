@@ -381,7 +381,7 @@ describe('HTTP retry policy', () => {
 		expect(predicate).not.toHaveBeenCalled();
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
-	it('awaits refresh using the same client, re-reads headers, and resolves the original promise', async () => {
+	it('awaits refresh using a separate client, re-reads headers, and resolves the original promise', async () => {
 		let token = 'old';
 		const seen: string[] = [];
 		const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
@@ -391,6 +391,7 @@ describe('HTTP retry policy', () => {
 			return auth === 'new' ? jsonResponse(200, { ok: true }) : jsonResponse(401, { code: 'EXPIRED' });
 		});
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+		const sessionHttp = new HttpServiceInstance();
 		const onError = vi.fn();
 		const onResponse = vi.fn();
 		const http = new HttpServiceInstance({
@@ -404,7 +405,7 @@ describe('HTTP retry policy', () => {
 				statuses: [401],
 				shouldRetry: async ({ error }) => {
 					expect(error.data).toEqual({ code: 'EXPIRED' });
-					const result = await http.post<{ token: string }>('/refresh', { retry: { limit: 0 } });
+					const result = await sessionHttp.post<{ token: string }>('/refresh');
 					token = result.data.token;
 					return true;
 				}
@@ -412,7 +413,7 @@ describe('HTTP retry policy', () => {
 		});
 		const result = await http.post('/data', { json: { id: 1 }, onResponse });
 		expect(result.data).toEqual({ ok: true });
-		expect(seen).toEqual(['/data:old', '/refresh:old', '/data:new']);
+		expect(seen).toEqual(['/data:old', '/refresh:null', '/data:new']);
 		expect(onError).not.toHaveBeenCalled();
 		expect(onResponse).toHaveBeenCalledTimes(1);
 		expect(getFetchCall(fetchMock, 2)[1]?.body).toBe('{"id":1}');
@@ -454,11 +455,12 @@ describe('HTTP retry policy', () => {
 		expect(doFetch).toHaveBeenCalledTimes(1);
 		expect(predicate).toHaveBeenCalledTimes(1);
 	});
-	it('does not retry refresh with an explicit zero limit when refresh itself fails', async () => {
+	it('does not retry a failed refresh made by the separate client', async () => {
 		const fetchMock = vi.fn(async () => jsonResponse(401, {}));
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+		const sessionHttp = new HttpServiceInstance();
 		const predicate = vi.fn(async () => {
-			await http.post('/refresh', { retry: { limit: 0 } });
+			await sessionHttp.post('/refresh');
 			return true;
 		});
 		const http = new HttpServiceInstance({ retry: { limit: 1, shouldRetry: predicate } });
@@ -598,12 +600,12 @@ describe('SSR retry isolation', () => {
 
 describe('HTTP client access in hooks', () => {
 	beforeEach(() => setRequestContextFetch(fetch));
-	it('passes the same instance to default and overridden hooks', async () => {
+	it('does not expose a client to default or overridden hooks', async () => {
 		const fail = vi.fn(async () => {
 			throw new HttpServiceError({ status: 401 });
 		});
-		const shouldRetry = vi.fn(async ({ http }) => {
-			expect(http).toBe(instance);
+		const shouldRetry = vi.fn(async (context) => {
+			expect(Object.keys(context)).toEqual(['error']);
 			return false;
 		});
 		const onError = vi.fn((context) => {
@@ -621,7 +623,7 @@ describe('HTTP client access in hooks', () => {
 		expect(overrideRetry).toHaveBeenCalledTimes(1);
 		expect(overrideError).toHaveBeenCalledTimes(1);
 	});
-	it('refreshes through the supplied client and returns the retried result', async () => {
+	it('refreshes through a separate client and returns the retried result', async () => {
 		let refreshed = false;
 		const fetchMock = vi.fn(async (url: string) => {
 			if (url === '/refresh') {
@@ -631,12 +633,12 @@ describe('HTTP client access in hooks', () => {
 			return jsonResponse(refreshed ? 200 : 401, { ok: refreshed });
 		});
 		setRequestContextFetch(fetchMock as unknown as typeof fetch);
+		const sessionHttp = new HttpServiceInstance();
 		const instance = new HttpServiceInstance({
 			retry: {
 				limit: 1,
-				shouldRetry: async ({ http }) => {
-					expect(http).toBe(instance);
-					await http.post('/refresh', { retry: { limit: 0 } });
+				shouldRetry: async () => {
+					await sessionHttp.post('/refresh');
 					return true;
 				}
 			}

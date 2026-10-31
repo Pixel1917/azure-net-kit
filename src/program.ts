@@ -1,3 +1,5 @@
+import { ServerMiddlewareManager, ClientMiddlewareManager } from './lib/shared/app/index.js';
+import { beforeNavigate } from '$app/navigation';
 import { PublicStore } from './app/mock-api-context/layers/delivery/public/PublicStore.svelte.js';
 import { RequestContext } from './lib/shared/request-context/Internal.js';
 import { createApp, type IClientMiddleware, type IServerMiddleware, type ClientMiddlewareContext, type ServerMiddlewareContext } from '#lib/index.js';
@@ -15,22 +17,25 @@ class ClientNavigation implements IClientMiddleware {
 		return next();
 	}
 }
+const serverMiddlewares = new ServerMiddlewareManager([ServerAuth]);
+const clientMiddlewares = new ClientMiddlewareManager([ClientNavigation]);
+
 export const { register } = createApp((app) =>
 	app
 		.useTranslations(TranslationManager)
 		.useBoot(({ state }) => {
 			PublicStore().store.value = state.demoMessage ?? 'csr';
 		})
-		.useServer(async ({ resolve, event, useMiddlewares }) => {
+		.useServer(async ({ resolve, event }) => {
 			RequestContext.current().state.demoMessage = 'from-server';
-			await useMiddlewares([ServerAuth]);
+			await serverMiddlewares.execute();
 			return resolve(event);
 		})
 		.useServerError(({ error, kind }) => {
 			console.error(kind, error);
 		})
-		.useClient(({ useMiddlewares }) => {
-			useMiddlewares([ClientNavigation]);
+		.useClient(() => {
+			beforeNavigate((navigation) => clientMiddlewares.execute(navigation));
 		})
 		.useClientInit(() => {
 			console.log('init');

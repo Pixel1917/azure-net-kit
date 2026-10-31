@@ -4,27 +4,28 @@ vi.mock('@azure-net/tools/environment', async (importOriginal) => ({
 	...(await importOriginal<typeof import('@azure-net/tools/environment')>()),
 	BROWSER: true
 }));
-import { createApp } from '../src/lib/shared/app/index.js';
+import { createApp, ClientMiddlewareManager } from '../src/lib/shared/app/index.js';
 import { beforeNavigate } from '$app/navigation';
 
 vi.mock('$app/navigation', () => ({ beforeNavigate: vi.fn(), goto: vi.fn() }));
 
 describe('async useClient navigation registration', () => {
-	it('registers synchronously and reads middleware installed after await', async () => {
+	it('lets useClient explicitly register navigation before its first await', async () => {
 		vi.mocked(beforeNavigate).mockClear();
 		let resume!: () => void;
 		const gate = new Promise<void>((resolve) => {
 			resume = resolve;
 		});
 		const middleware = vi.fn(({ next }) => next());
+		const manager = new ClientMiddlewareManager([
+			class {
+				execute = middleware;
+			}
+		]);
 		const app = createApp((builder) =>
-			builder.useClient(async ({ useMiddlewares }) => {
+			builder.useClient(async () => {
+				beforeNavigate((navigation) => manager.execute(navigation));
 				await gate;
-				useMiddlewares([
-					class {
-						execute = middleware;
-					}
-				]);
 			})
 		);
 		const pending = app.register();
@@ -32,11 +33,11 @@ describe('async useClient navigation registration', () => {
 		const navigate = vi.mocked(beforeNavigate).mock.calls.at(-1)![0];
 		const navigation = { to: { url: new URL('https://example.com/a') }, from: null, cancel: vi.fn() };
 		navigate(navigation as never);
-		expect(middleware).not.toHaveBeenCalled();
+		expect(middleware).toHaveBeenCalledTimes(1);
 		resume();
 		await pending;
 		navigate(navigation as never);
-		expect(middleware).toHaveBeenCalledTimes(1);
+		expect(middleware).toHaveBeenCalledTimes(2);
 		app.register();
 		expect(beforeNavigate).toHaveBeenCalledTimes(1);
 	});
@@ -50,7 +51,7 @@ describe('async useClient navigation registration', () => {
 			})
 		);
 		const result = app.register();
-		expect(beforeNavigate).toHaveBeenCalledTimes(1);
+		expect(beforeNavigate).not.toHaveBeenCalled();
 		await expect(result).rejects.toBe(failure);
 	});
 });
@@ -58,14 +59,14 @@ describe('async useClient navigation registration', () => {
 describe('createApp client error runtime', () => {
 	it('runs client init once without a container or arguments', async () => {
 		const init = vi.fn();
-		const client = vi.fn((context) => expect(context).not.toHaveProperty('Container'));
+		const client = vi.fn();
 		const app = createApp((builder) => builder.useClientInit(init).useClient(client));
 		expect(Object.keys(app)).toEqual(['register']);
 		await app.register.clientInit();
 		await app.register.clientInit();
 		expect(init).toHaveBeenCalledExactlyOnceWith();
 		await app.register();
-		expect(client).toHaveBeenCalledTimes(1);
+		expect(client).toHaveBeenCalledExactlyOnceWith();
 	});
 });
 
