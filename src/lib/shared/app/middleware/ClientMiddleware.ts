@@ -10,6 +10,7 @@ export interface ClientMiddlewareContext {
 	to: ReadonlyURL;
 	from?: ReadonlyURL;
 	navigation?: BeforeNavigate;
+	byRedirect?: boolean;
 	next: (location?: string | URL, options?: GotoOptions) => undefined;
 	ensureRoute: EnsureRoute;
 }
@@ -55,6 +56,7 @@ export const executeClientMiddlewares = (middlewares: readonly ClientMiddlewareC
 			result = new middleware().execute({
 				to,
 				from,
+				byRedirect: !!navigation,
 				next,
 				ensureRoute,
 				navigation

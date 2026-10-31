@@ -8,6 +8,7 @@ import type { IMiddleware, MiddlewareClass } from './Types.js';
 export interface ServerMiddlewareContext {
 	to: RequestEvent['url'];
 	from?: RequestEvent['url'];
+	byRedirect: boolean;
 	next: (location?: string | URL, status?: RedirectStatus) => void;
 	event: RequestEvent;
 	ensureRoute: EnsureRoute;
@@ -26,12 +27,12 @@ export class ServerMiddlewareManager {
 		this.middlewares = [...middlewares];
 	}
 
-	execute(): Promise<void> {
-		return executeServerMiddlewares(this.middlewares);
+	execute(byRedirect = true): Promise<void> {
+		return executeServerMiddlewares(this.middlewares, byRedirect);
 	}
 }
 
-export const executeServerMiddlewares = async (middlewares: readonly ServerMiddlewareClass[]) => {
+export const executeServerMiddlewares = async (middlewares: readonly ServerMiddlewareClass[], byRedirect: boolean = true) => {
 	if (!BROWSER && middlewares.length) {
 		const event: RequestEvent | undefined = RequestContext.current().event;
 		if (event) {
@@ -51,6 +52,7 @@ export const executeServerMiddlewares = async (middlewares: readonly ServerMiddl
 					event,
 					to,
 					from,
+					byRedirect,
 					next,
 					ensureRoute
 				});
