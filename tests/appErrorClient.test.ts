@@ -22,12 +22,12 @@ describe('async useClient navigation registration', () => {
 				execute = middleware;
 			}
 		]);
-		const app = createApp((builder) =>
+		const app = createApp((builder) => {
 			builder.useClient(async () => {
 				beforeNavigate((navigation) => manager.execute(navigation));
 				await gate;
-			})
-		);
+			});
+		});
 		const pending = app.register();
 		expect(beforeNavigate).toHaveBeenCalledTimes(1);
 		const navigate = vi.mocked(beforeNavigate).mock.calls.at(-1)![0];
@@ -45,11 +45,11 @@ describe('async useClient navigation registration', () => {
 	it('preserves rejected async lifecycle results without delayed registration', async () => {
 		vi.mocked(beforeNavigate).mockClear();
 		const failure = new Error('initialization failed');
-		const app = createApp((builder) =>
+		const app = createApp((builder) => {
 			builder.useClient(async () => {
 				throw failure;
-			})
-		);
+			});
+		});
 		const result = app.register();
 		expect(beforeNavigate).not.toHaveBeenCalled();
 		await expect(result).rejects.toBe(failure);
@@ -60,7 +60,10 @@ describe('createApp client error runtime', () => {
 	it('runs client init once without a container or arguments', async () => {
 		const init = vi.fn();
 		const client = vi.fn();
-		const app = createApp((builder) => builder.useClientInit(init).useClient(client));
+		const app = createApp((builder) => {
+			builder.useClientInit(init);
+			builder.useClient(client);
+		});
 		expect(Object.keys(app)).toEqual(['register']);
 		await app.register.clientInit();
 		await app.register.clientInit();
@@ -73,7 +76,9 @@ describe('createApp client error runtime', () => {
 describe('Kit 3 client error hooks', () => {
 	it('preserves native error categories without synthesizing deprecated fields', async () => {
 		const callback = vi.fn();
-		const app = createApp((builder) => builder.useClientError(callback));
+		const app = createApp((builder) => {
+			builder.useClientError(callback);
+		});
 		for (const input of [
 			{ kind: 'unknown', error: new Error('private detail'), event: {} },
 			{ kind: 'app', error: { status: 401, message: 'Sign in' }, event: {} },

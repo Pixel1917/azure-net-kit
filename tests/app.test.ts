@@ -1,9 +1,10 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { ServerMiddlewareManager } from '../src/lib/shared/app/index.js';
 import { initializeRequestContext } from '../src/lib/shared/request-context/Internal.js';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/lib/shared/app/index.js';
 import { AzureNetKitInternalError } from '../src/lib/shared/app-error/index.js';
-import { LoggerErrors, useLogger } from '../src/lib/shared/logger/index.js';
+import { LoggerErrors, RemoteLogger } from '../src/lib/shared/logger/index.js';
 import { BackgroundTask } from '../src/lib/shared/background-task/index.js';
 import { ensureRoute } from '../src/lib/shared/app/middleware/Shared.js';
 import type { IServerMiddleware } from '../src/lib/shared/app/index.js';
@@ -29,7 +30,7 @@ describe('createApp', () => {
 		const app = createApp((builder) => {
 			expect(builder).not.toHaveProperty('dependencies');
 			expect(builder).not.toHaveProperty('use');
-			return builder.useServer((input) => {
+			builder.useServer((input) => {
 				expect(input).not.toHaveProperty('Container');
 			});
 		});
@@ -54,11 +55,11 @@ describe('createApp', () => {
 		initializeRequestContext(() => context as never);
 
 		const calls: string[] = [];
-		const app = createApp((app) =>
+		const app = createApp((app) => {
 			app.useServer(({ event, requestContext }) => {
 				calls.push(`server:${event === context.event}:${requestContext === (context as unknown)}`);
-			})
-		);
+			});
+		});
 
 		await app.register.handle({
 			event: context.event,
@@ -83,11 +84,11 @@ describe('createApp', () => {
 		initializeRequestContext(() => context as never);
 
 		let receivedEvent: unknown;
-		const app = createApp((app) =>
+		const app = createApp((app) => {
 			app.useServer(({ event }) => {
 				receivedEvent = event;
-			})
-		);
+			});
+		});
 
 		const response = new Response('ok');
 		const result = await app.register.handle({
@@ -108,14 +109,14 @@ describe('createApp', () => {
 
 		let resolveCalls = 0;
 		const manualResponse = new Response('manual');
-		const app = createApp((app) =>
+		const app = createApp((app) => {
 			app.useServer(({ event, requestContext, resolve }) => {
 				expect(requestContext).toBe(context);
 				return resolve(event, {
 					transformPageChunk: ({ html }) => html
 				});
-			})
-		);
+			});
+		});
 
 		const result = await app.register.handle({
 			event: context.event,
@@ -134,11 +135,11 @@ describe('createApp', () => {
 		initializeRequestContext(() => context as never);
 
 		let calls = 0;
-		const app = createApp((app) =>
+		const app = createApp((app) => {
 			app.useClient(() => {
 				calls += 1;
-			})
-		);
+			});
+		});
 
 		app.register();
 		expect(calls).toBe(0);
@@ -149,12 +150,12 @@ describe('createApp', () => {
 		initializeRequestContext(() => context as never);
 
 		const calls: string[] = [];
-		const app = createApp((app) =>
+		const app = createApp((app) => {
 			app.useServer(async () => {
 				await Promise.resolve();
 				calls.push('server');
-			})
-		);
+			});
+		});
 
 		await app.register.handle({
 			event: context.event,
@@ -169,7 +170,9 @@ describe('createApp', () => {
 
 	it('runs server init only once per app instance', async () => {
 		const callback = vi.fn();
-		const app = createApp((app) => app.useServerInit(callback));
+		const app = createApp((app) => {
+			app.useServerInit(callback);
+		});
 
 		await Promise.all([app.register.serverInit(), app.register.serverInit()]);
 
@@ -183,7 +186,9 @@ describe('createApp', () => {
 			release = resolve;
 		});
 		const callback = vi.fn(() => pending);
-		const app = createApp((app) => app.useServerInit(callback));
+		const app = createApp((app) => {
+			app.useServerInit(callback);
+		});
 
 		const first = app.register.serverInit();
 		const second = app.register.serverInit();
@@ -200,7 +205,9 @@ describe('createApp', () => {
 		initializeRequestContext(() => context as never);
 
 		const callback = vi.fn();
-		const app = createApp((app) => app.useServerError(callback));
+		const app = createApp((app) => {
+			app.useServerError(callback);
+		});
 		const error = new Error('boom');
 
 		app.register.serverError({
@@ -213,8 +220,7 @@ describe('createApp', () => {
 			requestContext: context,
 			error,
 			event: context.event,
-			kind: 'unknown',
-			useLogger
+			kind: 'unknown'
 		});
 	});
 
@@ -224,15 +230,15 @@ describe('createApp', () => {
 
 		const upstream = vi.fn(() => Promise.resolve(new Response('upstream')));
 		const request = new Request('https://api.example.com/items');
-		const app = createApp((app) =>
+		const app = createApp((app) => {
 			app.useServerFetch(({ requestContext, event, request: receivedRequest, fetch: receivedFetch }) => {
 				expect(requestContext).toBe(context);
 				expect(event).toBe(context.event);
 				expect(receivedRequest).toBe(request);
 				expect(receivedFetch).toBe(upstream);
 				return new Response('intercepted');
-			})
-		);
+			});
+		});
 
 		const response = await app.register.serverFetch({ event: context.event, request, fetch: upstream } as never);
 		expect(await response.text()).toBe('intercepted');
@@ -243,7 +249,7 @@ describe('createApp', () => {
 		const request = new Request('https://api.example.com/items');
 		const response = new Response('native');
 		const upstream = vi.fn(() => Promise.resolve(response));
-		const app = createApp((app) => app);
+		const app = createApp(() => {});
 
 		await expect(app.register.serverFetch({ event: createServerContext().event, request, fetch: upstream } as never)).resolves.toBe(response);
 		expect(upstream).toHaveBeenCalledWith(request);
@@ -253,7 +259,7 @@ describe('createApp', () => {
 		const context = createServerContext();
 		initializeRequestContext(() => context as never);
 		const issues = [{ message: 'Invalid value' }];
-		const app = createApp((app) =>
+		const app = createApp((app) => {
 			app.useServerError(({ requestContext, event, issues: receivedIssues, kind, error }) => {
 				expect(kind).toBe('validation');
 				if (kind !== 'validation') throw new Error('Expected validation');
@@ -262,8 +268,8 @@ describe('createApp', () => {
 				expect(event).toBe(context.event);
 				expect(receivedIssues).toBe(issues);
 				return { message: 'Custom validation error' };
-			})
-		);
+			});
+		});
 
 		await expect(
 			Promise.resolve(
@@ -277,7 +283,7 @@ describe('createApp', () => {
 	it('leaves validation fallback to SvelteKit without a handler', () => {
 		const context = createServerContext();
 		initializeRequestContext(() => context as never);
-		const app = createApp((app) => app);
+		const app = createApp(() => {});
 		expect(
 			app.register.serverError({ event: context.event, kind: 'validation', error: { status: 400, message: 'Bad Request' }, issues: [] } as never)
 		).toBeUndefined();
@@ -291,7 +297,10 @@ describe('createApp', () => {
 			}
 		};
 		const reroute = vi.fn(({ url }: { url: URL }) => (url.pathname === '/old' ? '/new' : undefined));
-		const app = createApp((app) => app.useReroute(reroute).useTransport(transport));
+		const app = createApp((app) => {
+			app.useReroute(reroute);
+			app.useTransport(transport);
+		});
 
 		await expect(Promise.resolve(app.register.reroute({ url: new URL('https://example.com/old'), fetch }))).resolves.toBe('/new');
 		expect(app.register.transport).toBe(transport);
@@ -304,7 +313,6 @@ describe('createApp', () => {
 				const value = method === 'useTransport' ? {} : callback;
 				(app[method] as (input: never) => unknown)(value as never);
 				(app as unknown as Record<typeof method, (input: never) => unknown>)[method](value as never);
-				return app;
 			})
 		).toThrow(`[createApp] '${method}' can be registered only once.`);
 	});
@@ -324,7 +332,7 @@ describe('createApp', () => {
 		const onError = vi.fn();
 		const error = new AzureNetKitInternalError('boom');
 
-		const task = useLogger(error, {
+		const task = RemoteLogger.log(error, {
 			includeOnly: [LoggerErrors.AzureNetKitInternal],
 			collector: {
 				request: () => new Request('https://example.com/loki', { method: 'POST' }),
@@ -347,7 +355,7 @@ describe('createApp', () => {
 		const onError = vi.fn();
 		const collectorError = new Error('collector failed');
 
-		const task = useLogger(new Error('boom'), {
+		const task = RemoteLogger.log(new Error('boom'), {
 			collector: {
 				request: () => {
 					throw collectorError;
@@ -369,7 +377,7 @@ describe('createApp', () => {
 		const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 		const waitUntil = vi.fn<(promise: Promise<unknown>) => void>();
 
-		const task = useLogger(new Error('boom'), {
+		const task = RemoteLogger.log(new Error('boom'), {
 			collector: {
 				request: () => new Request('https://example.com/loki', { method: 'POST' })
 			}
@@ -382,12 +390,55 @@ describe('createApp', () => {
 		log.mockRestore();
 	});
 
+	it('RemoteLogger resolves fetch per concurrent SSR request without retaining a context', async () => {
+		const storage = new AsyncLocalStorage<ReturnType<typeof createServerContext>>();
+		initializeRequestContext(() => storage.getStore() as never);
+		const first = createServerContext();
+		const second = createServerContext();
+		first.event.fetch = vi.fn(async () => new Response('first'));
+		second.event.fetch = vi.fn(async () => new Response('second'));
+		const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+		const { log } = RemoteLogger;
+		try {
+			await Promise.all(
+				[first, second].map((context, index) =>
+					storage.run(context, async () => {
+						await Promise.resolve();
+						await log(new Error(String(index)), {
+							collector: { request: () => new Request(`https://example.com/log/${index}`) }
+						});
+					})
+				)
+			);
+			expect(first.event.fetch).toHaveBeenCalledTimes(1);
+			expect(second.event.fetch).toHaveBeenCalledTimes(1);
+			expect(vi.mocked(first.event.fetch).mock.calls[0][0]).toHaveProperty('url', 'https://example.com/log/0');
+			expect(vi.mocked(second.event.fetch).mock.calls[0][0]).toHaveProperty('url', 'https://example.com/log/1');
+		} finally {
+			consoleLog.mockRestore();
+			storage.disable();
+			initializeRequestContext(() => createServerContext() as never);
+		}
+	});
+
+	it('RemoteLogger filtering suppresses both console output and collection', async () => {
+		const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+		const request = vi.fn(() => new Request('https://example.com/log'));
+		try {
+			await RemoteLogger.log(new Error('filtered'), { filterLog: () => true, collector: { request } });
+			await RemoteLogger.log(new Error('excluded'), { includeOnly: [], collector: { request } });
+			expect(consoleLog).not.toHaveBeenCalled();
+			expect(request).not.toHaveBeenCalled();
+		} finally {
+			consoleLog.mockRestore();
+		}
+	});
+
 	it('throws when the same lifecycle callback is registered twice at runtime', () => {
 		expect(() =>
 			createApp((app) => {
 				app.useServer(() => undefined);
 				(app as never as { useServer: typeof app.useServer }).useServer(() => undefined);
-				return app;
 			})
 		).toThrow("[createApp] 'useServer' can be registered only once.");
 	});
@@ -407,7 +458,7 @@ describe('createApp', () => {
 			next();
 		};
 
-		const app = createApp((app) =>
+		const app = createApp((app) => {
 			app.useServer(async () => {
 				await new ServerMiddlewareManager([
 					class {
@@ -417,8 +468,8 @@ describe('createApp', () => {
 						execute = second;
 					}
 				]).execute();
-			})
-		);
+			});
+		});
 
 		await app.register.handle({
 			event: context.event,
@@ -432,15 +483,15 @@ describe('createApp', () => {
 		const context = createServerContext();
 		initializeRequestContext(() => context as never);
 
-		const app = createApp((app) =>
+		const app = createApp((app) => {
 			app.useServer(async () => {
 				await new ServerMiddlewareManager([
 					class {
 						execute() {}
 					}
 				]).execute();
-			})
-		);
+			});
+		});
 
 		await expect(
 			app.register.handle({
@@ -455,15 +506,15 @@ describe('createApp', () => {
 		initializeRequestContext(() => context as never);
 
 		const resolve = vi.fn(() => new Response('ok'));
-		const app = createApp((app) =>
+		const app = createApp((app) => {
 			app.useServer(async () => {
 				await new ServerMiddlewareManager([
 					class {
 						execute() {}
 					}
 				]).execute();
-			})
-		);
+			});
+		});
 
 		await expect(
 			app.register.handle({
@@ -480,7 +531,9 @@ describe('createApp', () => {
 
 		const server = vi.fn();
 		const resolve = vi.fn(() => new Response('ok'));
-		const app = createApp((app) => app.useServer(server));
+		const app = createApp((app) => {
+			app.useServer(server);
+		});
 
 		await app.register.handle({ event: context.event, resolve } as never);
 		await app.register.handle({ event: context.event, resolve } as never);
@@ -495,7 +548,9 @@ describe('Kit 3 server error contract', () => {
 		const context = createServerContext();
 		initializeRequestContext(() => context as never);
 		const callback = vi.fn(() => ({ status: 503, message: 'Try later' }));
-		const app = createApp((builder) => builder.useServerError(callback));
+		const app = createApp((builder) => {
+			builder.useServerError(callback);
+		});
 		for (const error of [
 			{ kind: 'unknown', error: new Error('secret') },
 			{ kind: 'app', error: { status: 401, message: 'Login' } },
@@ -505,7 +560,8 @@ describe('Kit 3 server error contract', () => {
 			const input = { ...error, event: context.event };
 			expect(await app.register.serverError(input as never)).toEqual({ status: 503, message: 'Try later' });
 			const received = callback.mock.calls.at(-1)! as unknown as [Record<string, unknown>];
-			expect(received[0]).toEqual({ ...input, requestContext: context, useLogger });
+			expect(received[0]).toEqual({ ...input, requestContext: context });
+			expect(received[0]).not.toHaveProperty('useLogger');
 			expect(received[0]).not.toHaveProperty('status');
 			expect(received[0]).not.toHaveProperty('message');
 		}

@@ -64,29 +64,31 @@ const getFetcher = (): typeof fetch => {
 	}
 };
 
-export const useLogger = (error: unknown, settings: ILoggerSettings): BackgroundTask<void> => {
-	const preparedError = prepareError(error);
-	if (settings.filterLog && settings.filterLog(preparedError)) {
-		return BackgroundTask.run(() => undefined);
-	}
-	if (settings.includeOnly && !settings.includeOnly.includes(preparedError.type)) {
-		return BackgroundTask.run(() => undefined);
-	}
-	const prefix = settings?.prefix ?? '[Logger]';
-	const errorMessage = prefix + preparedError.message + (settings?.joinToLog ? settings.joinToLog(preparedError) : '');
-	console.log(errorMessage);
-	if (!settings.collector) return BackgroundTask.run(() => undefined);
-
-	const { collector } = settings;
-	return BackgroundTask.run(async () => {
-		try {
-			await getFetcher()(collector.request(preparedError));
-		} catch (err) {
-			try {
-				collector.onError?.(err);
-			} catch {
-				return;
-			}
+export class RemoteLogger {
+	static log(error: unknown, settings: ILoggerSettings): BackgroundTask<void> {
+		const preparedError = prepareError(error);
+		if (settings.filterLog && settings.filterLog(preparedError)) {
+			return BackgroundTask.run(() => undefined);
 		}
-	});
-};
+		if (settings.includeOnly && !settings.includeOnly.includes(preparedError.type)) {
+			return BackgroundTask.run(() => undefined);
+		}
+		const prefix = settings?.prefix ?? '[Logger]';
+		const errorMessage = prefix + preparedError.message + (settings?.joinToLog ? settings.joinToLog(preparedError) : '');
+		console.log(errorMessage);
+		if (!settings.collector) return BackgroundTask.run(() => undefined);
+
+		const { collector } = settings;
+		return BackgroundTask.run(async () => {
+			try {
+				await getFetcher()(collector.request(preparedError));
+			} catch (err) {
+				try {
+					collector.onError?.(err);
+				} catch {
+					return;
+				}
+			}
+		});
+	}
+}

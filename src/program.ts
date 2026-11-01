@@ -20,27 +20,26 @@ class ClientNavigation implements IClientMiddleware {
 const serverMiddlewares = new ServerMiddlewareManager([ServerAuth]);
 const clientMiddlewares = new ClientMiddlewareManager([ClientNavigation]);
 
-export const { register } = createApp((app) =>
-	app
-		.useTranslations(TranslationManager)
-		.useBoot(({ state }) => {
-			PublicStore().store.value = state.demoMessage ?? 'csr';
-		})
-		.useServer(async ({ resolve, event }) => {
-			RequestContext.current().state.demoMessage = 'from-server';
-			await serverMiddlewares.execute();
-			return resolve(event);
-		})
-		.useServerError(({ error, kind }) => {
-			console.error(kind, error);
-		})
-		.useClient(() => {
-			beforeNavigate((navigation) => clientMiddlewares.execute(navigation));
-		})
-		.useClientInit(() => {
-			console.log('init');
-		})
-		.useClientError(({ error, event, kind }) => {
-			console.error(kind, error, event);
-		})
-);
+export const { register } = createApp((app) => {
+	app.useTranslations(TranslationManager);
+	app.useBoot(({ state }) => {
+		PublicStore().store.value = state.demoMessage ?? 'csr';
+	});
+	app.useServer(async ({ resolve, event }) => {
+		RequestContext.current().state.demoMessage = 'from-server';
+		await serverMiddlewares.execute();
+		return resolve(event);
+	});
+	app.useServerError(({ error, kind }) => {
+		console.error(kind, error);
+	});
+	app.useClient(() => {
+		beforeNavigate((navigation) => clientMiddlewares.execute(navigation));
+	});
+	app.useClientInit(() => {
+		console.log('init');
+	});
+	app.useClientError(({ error, event, kind }) => {
+		console.error(kind, error, event);
+	});
+});

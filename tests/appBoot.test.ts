@@ -34,12 +34,13 @@ describe('useBoot', () => {
 		const boot = vi.fn(({ state }: { state: App.RequestContextState }): undefined => {
 			expect(state.testId).toBe('ready');
 		});
-		const app = createApp((app) =>
-			app.useBoot(boot).useServer(async () => {
+		const app = createApp((app) => {
+			app.useBoot(boot);
+			app.useServer(async () => {
 				await Promise.resolve();
 				context.state.testId = 'ready';
-			})
-		);
+			});
+		});
 		const resolve = () => {
 			app.register();
 			app.register();
@@ -60,15 +61,14 @@ describe('useBoot', () => {
 		});
 		initializeRequestContext(getter);
 		const order: string[] = [];
-		const app = createApp((app) =>
-			app
-				.useBoot(({ state }) => {
-					order.push(state.testId!);
-				})
-				.useClient(() => {
-					order.push('client');
-				})
-		);
+		const app = createApp((app) => {
+			app.useBoot(({ state }) => {
+				order.push(state.testId!);
+			});
+			app.useClient(() => {
+				order.push('client');
+			});
+		});
 		app.register();
 		app.register();
 		expect(order).toEqual(['ssr', 'client']);
@@ -78,7 +78,9 @@ describe('useBoot', () => {
 	it('uses an empty state for CSR and never boots in clientInit', async () => {
 		runtime.browser = true;
 		const boot = vi.fn();
-		const app = createApp((app) => app.useBoot(boot));
+		const app = createApp((app) => {
+			app.useBoot(boot);
+		});
 		await app.register.clientInit();
 		expect(boot).not.toHaveBeenCalled();
 		app.register();
@@ -86,7 +88,9 @@ describe('useBoot', () => {
 	});
 	it('rejects async boot and duplicate registrations', () => {
 		runtime.browser = true;
-		const app = createApp((app) => app.useBoot((async () => {}) as never));
+		const app = createApp((app) => {
+			app.useBoot((async () => {}) as never);
+		});
 		expect(() => app.register()).toThrow('useBoot must be synchronous');
 		expect(() =>
 			createApp((app) => {

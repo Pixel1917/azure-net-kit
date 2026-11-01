@@ -1,7 +1,7 @@
 import { createApp } from '../src/lib/shared/app/index.js';
 import { createAsyncAction as asyncAction } from '../src/lib/delivery/injectable-dependencies/AsyncHelpers.js';
 
-const app = createApp((builder) => builder);
+const app = createApp(() => {});
 
 void app;
 
@@ -12,7 +12,7 @@ createApp((builder) => {
 	void builder.dependencies;
 	// @ts-expect-error Universal lifecycle hook has been removed.
 	void builder.use;
-	return builder.useServer((context) => {
+	builder.useServer((context) => {
 		// @ts-expect-error Lifecycle contexts no longer contain a DI container.
 		void context.Container;
 	});
@@ -36,6 +36,6 @@ createApp((builder) => {
 	const configured = builder.useBoot(({ state }) => {
 		void state;
 	});
-	// @ts-expect-error Boot can be configured once.
+	// @ts-expect-error Configuration methods return void and cannot be chained.
 	configured.useBoot(() => {});
 });

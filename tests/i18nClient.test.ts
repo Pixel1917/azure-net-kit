@@ -178,19 +178,18 @@ describe('automatic client translation lifecycle', () => {
 		const loadRu = vi.fn(async () => ({ title: 'Russian' }));
 		const manager = createTranslations({ messages: { en: loadEn, ru: loadRu }, initLang: 'en' });
 		const order: string[] = [];
-		const { register } = createApp((app) =>
-			app
-				.useTranslations(manager)
-				.useClientInit(() => {
-					order.push(manager().t('title'));
-				})
-				.useBoot(() => {
-					order.push(manager().locale);
-				})
-				.useClient(() => {
-					order.push('client');
-				})
-		);
+		const { register } = createApp((app) => {
+			app.useTranslations(manager);
+			app.useClientInit(() => {
+				order.push(manager().t('title'));
+			});
+			app.useBoot(() => {
+				order.push(manager().locale);
+			});
+			app.useClient(() => {
+				order.push('client');
+			});
+		});
 		await register.clientInit();
 		expect(order).toEqual(['Russian']);
 		register();
@@ -205,7 +204,9 @@ describe('automatic client translation lifecycle', () => {
 	it('initializes CSR without user callbacks', async () => {
 		const load = vi.fn(async () => ({ title: 'CSR' }));
 		const manager = createTranslations({ messages: { en: load }, initLang: 'en' });
-		const { register } = createApp((app) => app.useTranslations(manager));
+		const { register } = createApp((app) => {
+			app.useTranslations(manager);
+		});
 		await register.clientInit();
 		register();
 		expect(manager().t('title')).toBe('CSR');
@@ -226,7 +227,10 @@ it('shares in-flight app initialization and retries failed dictionary loads befo
 		initLang: 'en'
 	});
 	const userInit = vi.fn();
-	const { register } = createApp((app) => app.useTranslations(manager).useClientInit(userInit));
+	const { register } = createApp((app) => {
+		app.useTranslations(manager);
+		app.useClientInit(userInit);
+	});
 	await expect(register.clientInit()).rejects.toThrow('offline');
 	expect(userInit).not.toHaveBeenCalled();
 	const first = register.clientInit();

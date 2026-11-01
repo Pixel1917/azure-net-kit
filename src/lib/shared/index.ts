@@ -4,4 +4,4 @@ export { ClassMirror } from './class-mirror/index.js';
 export { CreateServiceContainer, cleanupProvider, type ProviderSettings, type ProviderKey } from './boundary-provider/index.js';
 export { CompositionRoot, type CompositionRootSettings } from './boundary-provider/index.js';
 export * from './app/index.js';
-export { useLogger, LoggerErrors, type ILoggerError, type ILoggerSettings } from './logger/index.js';
+export { RemoteLogger, LoggerErrors, type ILoggerError, type ILoggerSettings } from './logger/index.js';

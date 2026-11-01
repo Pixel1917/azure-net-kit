@@ -41,7 +41,7 @@ const measureAsync = async (label: string, iterations: number, callback: () => P
 describe('createApp performance', () => {
 	it('creates empty app instances with tiny overhead', () => {
 		const result = measure('create empty app', 20_000, () => {
-			createApp((app) => app);
+			createApp(() => {});
 		});
 
 		expect(result.avg).toBeLessThan(0.05);
@@ -51,7 +51,7 @@ describe('createApp performance', () => {
 		let context = createServerContext();
 		initializeRequestContext(() => context as never);
 
-		const baseline = createApp((app) => app);
+		const baseline = createApp(() => {});
 		const resolve = () => new Response('ok');
 
 		const baselineResult = await measureAsync('handle baseline', 5_000, async () => {
@@ -59,7 +59,9 @@ describe('createApp performance', () => {
 			await baseline.register.handle({ event: context.event, resolve } as never);
 		});
 
-		const lifecycle = createApp((app) => app.useServer(() => undefined));
+		const lifecycle = createApp((app) => {
+			app.useServer(() => undefined);
+		});
 
 		const lifecycleResult = await measureAsync('handle with universal + server callbacks', 5_000, async () => {
 			context = createServerContext();
@@ -79,11 +81,11 @@ describe('createApp performance', () => {
 			execute = middleware;
 		}
 		const middlewares = [Pass, Pass, Pass, Pass, Pass];
-		const app = createApp((app) =>
+		const app = createApp((app) => {
 			app.useServer(async () => {
 				await new ServerMiddlewareManager(middlewares).execute();
-			})
-		);
+			});
+		});
 
 		const result = await measureAsync('handle with 5 server middlewares', 3_000, async () => {
 			context = createServerContext();

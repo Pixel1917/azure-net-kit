@@ -7,6 +7,7 @@ export {
 	type AppClientLifecycleCallback,
 	type AppClientLifecycleContext,
 	type AppRegistrar,
+	type AppConfiguration,
 	type AppServerErrorCallback,
 	type AppServerErrorContext,
 	type AppServerFetchCallback,

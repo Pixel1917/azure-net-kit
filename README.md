@@ -79,8 +79,8 @@ export const useOrdersPresenter = RegisterProvider(
 		const { Orders } = ApplicationProvider();
 		return new OrdersPresenter(Orders);
 	},
-	{ lifecycle: 'scoped', bindMethods: true }
-);
+	{ lifecycle: 'scoped', bindMethods: true };
+});
 ```
 
 Call `useOrdersPresenter()` during component initialization, not at module scope.
@@ -192,17 +192,22 @@ export {};
 import { createApp, ServerMiddlewareManager } from '@azure-net/kit';
 import { RequestContext } from '@azure-net/kit/server-context';
 
-export const { register } = createApp((app) =>
-	app
-		.useServer(async ({ event, resolve }) => {
+export const { register } = createApp((app) => {
+ app.useServer(async ({ event, resolve }) => {
 			await new ServerMiddlewareManager([ServerAuth]).execute();
 			return resolve(event);
-		})
-		.useBoot(({ state }) => {
+		});
+ app.useBoot(({ state }) => {
 			useCurrentUser().setUser(state.currentUser ?? null);
 		})
 );
 ```
+
+The configuration callback is synchronous. Each `app.useX(...)` returns `void`;
+register hooks with separate statements, without chaining or `return app`.
+Duplicate registrations and registrations after the callback completes throw.
+Hook execution still follows the framework lifecycle, not registration order.
+Hooks that support async work keep their existing async contracts.
 
 In the root layout call `register()` before resolving presenters or state classes.
 `useBoot` is synchronous and runs once per server request render and once per
@@ -285,9 +290,11 @@ to override the public response, or return nothing to retain SvelteKit defaults.
 The removed `handleValidationError` hook is not generated.
 
 ```ts
-app.useServerError(({ kind, error, useLogger }) => {
+import { RemoteLogger } from '@azure-net/kit';
+
+app.useServerError(({ kind, error }) => {
 	if (kind === 'unknown') {
-		useLogger(error, {});
+		RemoteLogger.log(error, {});
 		return { status: 500, message: 'Internal Error' };
 	}
 	return error;

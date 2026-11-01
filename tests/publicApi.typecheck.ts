@@ -30,14 +30,13 @@ class ClientGuard implements IClientMiddleware {
 		return next('/login', { replace: true, reset: false });
 	}
 }
-createApp((app) =>
-	app
-		.useTranslations(translations)
-		.useServer(async () => {
-			await new ServerMiddlewareManager([ServerGuard]).execute();
-		})
-		.useClient(() => beforeNavigate((navigation) => new ClientMiddlewareManager([ClientGuard]).execute(navigation)))
-);
+createApp((app) => {
+	app.useTranslations(translations);
+	app.useServer(async () => {
+		await new ServerMiddlewareManager([ServerGuard]).execute();
+	});
+	app.useClient(() => beforeNavigate((navigation) => new ClientMiddlewareManager([ClientGuard]).execute(navigation)));
+});
 function consumerTypes() {
 	expectTypeOf(context.resolve().user.id).toEqualTypeOf<number>();
 	expectTypeOf(translations.locale).toEqualTypeOf<'en' | 'ru'>();

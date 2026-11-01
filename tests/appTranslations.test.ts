@@ -11,7 +11,9 @@ const messages = { en: async () => ({ title: 'English' }), ru: async () => ({ ti
 describe('useTranslations integration', () => {
 	it('preloads even without hooks and serializes only locale', async () => {
 		const manager = createTranslations({ messages, initLang: 'en', initLangFromAcceptLanguage: true });
-		const { register } = createApp((app) => app.useTranslations(manager));
+		const { register } = createApp((app) => {
+			app.useTranslations(manager);
+		});
 		const request = event();
 		await runRequest(request, async () => {
 			const response = await register.handle({
@@ -30,20 +32,19 @@ describe('useTranslations integration', () => {
 	it('prepares translations before server/boot and preserves resolve options', async () => {
 		const manager = createTranslations({ messages, initLang: 'en', initLangFromAcceptLanguage: true });
 		const order: string[] = [];
-		const { register } = createApp((app) =>
-			app
-				.useTranslations(manager)
-				.useServer(({ event, resolve }) => {
-					order.push(manager().t('title'));
-					order.push('server');
-					return resolve(event, { preload: () => false, transformPageChunk: () => undefined });
-				})
-				.useBoot(({ state }) => {
-					expect(state.currLocale).toBe('ru');
-					expect(manager().t('title')).toBe('Russian');
-					order.push('boot');
-				})
-		);
+		const { register } = createApp((app) => {
+			app.useTranslations(manager);
+			app.useServer(({ event, resolve }) => {
+				order.push(manager().t('title'));
+				order.push('server');
+				return resolve(event, { preload: () => false, transformPageChunk: () => undefined });
+			});
+			app.useBoot(({ state }) => {
+				expect(state.currLocale).toBe('ru');
+				expect(manager().t('title')).toBe('Russian');
+				order.push('boot');
+			});
+		});
 		const request = event();
 		await runRequest(request, () =>
 			register.handle({
@@ -63,7 +64,7 @@ describe('useTranslations integration', () => {
 	it('does nothing unless opted in and rejects duplicate registration', async () => {
 		const load = vi.fn(messages.en);
 		const manager = createTranslations({ messages: { en: load }, initLang: 'en' });
-		const { register } = createApp((app) => app);
+		const { register } = createApp(() => {});
 		const request = event();
 		await runRequest(request, () => register.handle({ event: request, resolve: () => new Response('ok') } as never));
 		expect(load).not.toHaveBeenCalled();
@@ -76,7 +77,9 @@ describe('useTranslations integration', () => {
 	});
 	it('isolates locales across concurrent app handles', async () => {
 		const manager = createTranslations({ messages, initLang: 'en', initLangFromAcceptLanguage: true });
-		const { register } = createApp((app) => app.useTranslations(manager));
+		const { register } = createApp((app) => {
+			app.useTranslations(manager);
+		});
 		await Promise.all(
 			Array.from({ length: 40 }, (_, index) => {
 				const locale = index % 2 ? 'ru' : 'en';
